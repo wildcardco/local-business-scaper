@@ -1,0 +1,134 @@
+import { db, generateId } from '~~/server/utils/db'
+import { sendEmail, renderTemplate, renderIssuesList } from '~~/server/utils/mailgun'
+
+export default defineEventHandler(async (event) => {
+  const user = event.context.user
+  const body = await readBody(event)
+  const { businessId, templateId } = body
+
+  if (!businessId || !templateId) {
+    throw createError({
+      statusCode: 400,
+      message: 'businessId and templateId are required'
+    })
+  }
+
+  try {
+    // Fetch business with audit
+    const businessResult = await db.execute({
+      sql: `
+        SELECT b.*, a.performance_score, a.seo_score, a.accessibility_score
+        FROM businesses b
+        LEFT JOIN audits a ON b.id = a.business_id
+        WHERE b.id = ? AND b.user_id = ?
+      `,
+      args: [businessId, user.id]
+    })
+
+    if (businessResult.rows.length === 0) {
+      throw createError({
+        statusCode: 404,
+        message: 'Business not found'
+      })
+    }
+
+    const business = businessResult.rows[0]
+
+    if (!business.email) {
+      throw createError({
+        statusCode: 400,
+        message: 'Business does not have an email address'
+      })
+    }
+
+    if (business.status !== 'approved') {
+      throw createError({
+        statusCode: 400,
+        message: 'Business must be approved before sending outreach'
+      })
+    }
+
+    // Fetch template
+    const templateResult = await db.execute({
+      sql: 'SELECT * FROM email_templates WHERE id = ?',
+      args: [templateId]
+    })
+
+    if (templateResult.rows.length === 0) {
+      throw createError({
+        statusCode: 404,
+        message: 'Template not found'
+      })
+    }
+
+    const template = templateResult.rows[0]
+
+    // Build issues list
+    const issues: string[] = []
+    if (!business.website) {
+      issues.push('No website')
+    } else {
+      if (business.performance_score !== null && Number(business.performance_score) < 50) {
+        issues.push(`Performance score: ${business.performance_score}/100`)
+      }
+      if (business.seo_score !== null && Number(business.seo_score) < 50) {
+        issues.push(`SEO score: ${business.seo_score}/100`)
+      }
+      if (business.accessibility_score !== null && Number(business.accessibility_score) < 50) {
+        issues.push(`Accessibility score: ${business.accessibility_score}/100`)
+      }
+    }
+
+    // Build variables
+    const variables: Record<string, string> = {
+      businessName: business.name as string,
+      category: (business.category as string) || 'local',
+      city: (business.city as string) || '',
+      state: (business.state as string) || '',
+      performanceScore: String(business.performance_score || 0),
+      seoScore: String(business.seo_score || 0),
+      accessibilityScore: String(business.accessibility_score || 0)
+    }
+
+    // Render template
+    let emailBody = renderTemplate(template.body as string, variables)
+    emailBody = renderIssuesList(emailBody, issues)
+    const emailSubject = renderTemplate(template.subject as string, variables)
+
+    // Send email
+    const result = await sendEmail({
+      to: business.email as string,
+      subject: emailSubject,
+      html: emailBody.replace(/\n/g, '<br>')
+    })
+
+    // Log outreach
+    const logId = generateId()
+    await db.execute({
+      sql: `INSERT INTO outreach_logs (id, user_id, business_id, template_id, email_to, subject, status, message_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'sent', ?)`,
+      args: [logId, user.id, businessId, templateId, business.email, emailSubject, result.id]
+    })
+
+    // Update business status
+    await db.execute({
+      sql: `UPDATE businesses SET status = 'sent', sent_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+      args: [businessId]
+    })
+
+    return {
+      success: true,
+      message: 'Email sent successfully',
+      messageId: result.id
+    }
+  } catch (error: unknown) {
+    if ((error as { statusCode?: number }).statusCode) {
+      throw error
+    }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    throw createError({
+      statusCode: 500,
+      message: `Failed to send email: ${errorMessage}`
+    })
+  }
+})

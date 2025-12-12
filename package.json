@@ -1,0 +1,28 @@
+{
+  "name": "local-business-scraper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "db:init": "node -e \"import('./server/utils/schema.js').then(m => m.initializeSchema())\""
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.74",
+    "@iconify-json/simple-icons": "^1.2.59",
+    "@libsql/client": "^0.14.0",
+    "@nuxt/ui": "^4.2.1",
+    "nuxt": "^4.2.2",
+    "nuxt-auth-utils": "^0.5.26"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.10.0",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.8"
+  }
+}
