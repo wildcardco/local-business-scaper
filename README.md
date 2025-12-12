@@ -4,69 +4,86 @@ A lead generation and website auditing application for Wild Card Creative Co. Fi
 
 ## Features
 
-- **Business Search**: Search local businesses via RapidAPI's Local Business Data
-- **Website Auditing**: Audit websites using Google PageSpeed Insights
-- **Lead Scoring**: Automatically score and categorize leads (Hot/Warm/Cold/Skip)
-- **Approval Queue**: Review and approve leads before outreach
-- **Email Templates**: Customizable email templates with variable support
-- **Export**: Export to CSV, JSON, or send directly to n8n webhooks
-- **Outreach**: Send emails via Mailgun integration
+- **🔐 Authentication**: Secure user registration and login with session management
+- **🔍 Business Search**: Search local businesses via RapidAPI's Local Business Data
+- **📊 Website Auditing**: Comprehensive audits using Google PageSpeed Insights
+- **🎯 Lead Scoring**: Automatically score and categorize leads (Hot/Warm/Cold/Skip)
+- **✅ Approval Queue**: Review and approve leads before outreach
+- **📧 AI Email Generation**: Generate personalized outreach emails with Groq AI
+- **📝 Email Templates**: Customizable templates with variable support
+- **📤 Email Outreach**: Send emails via Resend with reply tracking
+- **💬 Inbox Management**: Track email threads and replies
+- **🎨 Branding Settings**: Customize company info, logos, and email appearance
+- **📥 Export**: Export to CSV, JSON, or send to n8n webhooks
+- **🔑 Password Management**: Change password in settings
+- **☁️ Cloud Database**: Turso (LibSQL) for edge-hosted, globally distributed data
 
 ## Tech Stack
 
 - **Framework**: Nuxt 4 (Vue 3 + Nitro)
-- **UI**: Nuxt UI v3 (Tailwind CSS)
-- **Database**: SQLite + Prisma ORM
-- **APIs**: RapidAPI (Local Business Data), Google PageSpeed Insights
-- **Email**: Mailgun
+- **UI**: Nuxt UI v4 (Tailwind CSS)
+- **Database**: Turso (LibSQL) - Edge-hosted SQLite
+- **APIs**: RapidAPI (Local Business Data), Google PageSpeed Insights, Groq AI
+- **Email**: Resend
+- **Authentication**: nuxt-auth-utils
+- **Image Upload**: ImageKit
 - **Automation**: n8n webhook integration
 
 ## Setup
 
+### Local Development
+
 1. **Clone and install dependencies**:
 
 ```bash
-cd wildcard-leadgen
+git clone <your-repo>
+cd local-business-scraper
 npm install
 ```
 
 2. **Configure environment variables**:
 
-Copy `.env.example` to `.env` and fill in your API keys:
+Create a `.env` file in the root directory:
 
 ```bash
-# RapidAPI - Local Business Data
-RAPIDAPI_KEY=your_rapidapi_key_here
-RAPIDAPI_HOST=local-business-data.p.rapidapi.com
+# Local development database (uses this automatically)
+DATABASE_URL=file:dev.db
 
-# Google PageSpeed Insights (optional - works without key but has rate limits)
-GOOGLE_PAGESPEED_API_KEY=optional_key_here
+# Production database (Vercel uses these)
+# Get from: turso db create local-business-scraper
+TURSO_DB_URL=libsql://your-db.turso.io
+TURSO_KEY=your-turso-auth-token
 
-# Mailgun (for email integration)
-MAILGUN_API_KEY=your_mailgun_key
-MAILGUN_DOMAIN=outreach.wildcardcreativeco.com
+# Session password (required)
+# Generate with: openssl rand -base64 32
+NUXT_SESSION_PASSWORD=your-random-32-char-string
 
-# n8n Webhook
-N8N_WEBHOOK_URL=your_n8n_webhook_url
-
-# Database
-DATABASE_URL="file:./dev.db"
+# API keys (required for features)
+RAPIDAPI_KEY=your_rapidapi_key
+RESEND_API_KEY=your_resend_key
+GROQ_API=your_groq_key
+GOOGLE_PAGESPEED_API_KEY=your_google_key
 ```
 
-3. **Initialize the database**:
+**Note**: The app automatically uses local SQLite (`dev.db`) in development and Turso in production.
 
-```bash
-npx prisma db push
-npx prisma generate
-```
-
-4. **Start the development server**:
+3. **Start the development server**:
 
 ```bash
 npm run dev
 ```
 
-5. **Open the app** at [http://localhost:3000](http://localhost:3000)
+The database will be automatically initialized on startup.
+
+4. **Create your first user**:
+
+- Open [http://localhost:3000](http://localhost:3000)
+- Go to `/register` and create an account
+- Start searching for businesses!
+
+### Production Deployment
+
+For deploying to Vercel with Turso database, see the comprehensive **[DEPLOYMENT.md](./DEPLOYMENT.md)** guide.
 
 ## Usage
 
@@ -122,36 +139,93 @@ npm run dev
 ## Project Structure
 
 ```
-wildcard-leadgen/
+local-business-scraper/
 ├── app/
 │   ├── components/          # Vue components
+│   ├── composables/         # Vue composables
 │   ├── pages/               # Route pages
+│   ├── layouts/             # Page layouts
+│   ├── middleware/          # Route middleware
 │   └── assets/css/          # Styles
 ├── server/
 │   ├── api/                 # API endpoints
-│   └── utils/               # Server utilities
-├── prisma/
-│   └── schema.prisma        # Database schema
-└── shared/
-    └── types/               # Shared TypeScript types
+│   │   ├── auth/           # Authentication
+│   │   ├── businesses/     # Business CRUD
+│   │   ├── audit/          # Website audits
+│   │   ├── emails/         # Email generation
+│   │   ├── outreach/       # Email sending
+│   │   ├── templates/      # Email templates
+│   │   └── export/         # Data export
+│   ├── middleware/         # Server middleware
+│   ├── plugins/            # Server plugins
+│   └── utils/              # Server utilities
+│       ├── db.ts           # Database connection
+│       ├── schema.ts       # Database schema
+│       ├── auth.ts         # Auth helpers
+│       └── ...             # Other utilities
+├── shared/
+│   └── types/              # Shared TypeScript types
+├── public/
+│   └── brand-assets/       # Company branding
+├── DEPLOYMENT.md           # Deployment guide
+└── .env.example            # Environment variables template
 ```
 
 ## API Endpoints
 
+### Authentication
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/register` | POST | Register new user |
+| `/api/auth/login` | POST | Login user |
+| `/api/auth/logout` | POST | Logout user |
+| `/api/auth/session` | GET | Get current session |
+| `/api/auth/change-password` | POST | Change password |
+
+### Businesses
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/search` | POST | Search for businesses |
 | `/api/businesses` | GET | List all businesses |
 | `/api/businesses/[id]` | GET/PATCH | Get/update business |
 | `/api/businesses/[id]/audit` | POST | Run website audit |
+| `/api/businesses/[id]/scrape-contacts` | POST | Scrape contact info |
+| `/api/businesses/delete` | POST | Delete businesses (batch) |
 | `/api/audit/batch` | POST | Batch audit multiple businesses |
+
+### Email & Outreach
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/templates` | GET/POST | List/create email templates |
 | `/api/templates/[id]` | PATCH/DELETE | Update/delete template |
+| `/api/templates/seed` | POST | Seed default templates |
+| `/api/emails/generate` | POST | Generate AI email |
+| `/api/emails/webhook` | POST | Handle email webhooks |
+| `/api/drafts` | GET/POST | List/create email drafts |
+| `/api/drafts/[id]` | GET/DELETE | Get/delete draft |
+| `/api/outreach/send` | POST | Send single email |
+| `/api/outreach/bulk` | POST | Send bulk emails |
+| `/api/outreach/logs` | GET | Get outreach logs |
+| `/api/inbox/threads` | GET | Get email threads |
+| `/api/inbox/[id]` | GET | Get thread details |
+
+### Export & Reports
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/api/export/csv` | GET | Export to CSV |
 | `/api/export/json` | GET | Export to JSON |
 | `/api/export/n8n` | POST | Send to n8n webhook |
-| `/api/outreach/send` | POST | Send single email |
-| `/api/outreach/bulk` | POST | Send bulk emails |
+| `/api/report/[id]` | GET | Get audit report |
+| `/api/report/batch` | POST | Batch generate reports |
+| `/api/report/email` | POST | Email report |
+| `/api/report/n8n` | POST | Send report to n8n |
+
+### Settings
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/branding` | GET/POST | Get/update branding |
+| `/api/imagekit/auth` | GET | Get ImageKit auth |
+| `/api/autocomplete` | GET | Search autocomplete |
 
 ## Company
 

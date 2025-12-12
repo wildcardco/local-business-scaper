@@ -1,2 +1,7 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Ensure database files are never committed even if somehow added
+*.db filter=lfs diff=lfs merge=lfs -text
+*.db-shm binary
+*.db-wal binary
+
+# Never commit environment files
+.env filter=lfs diff=lfs merge=lfs -text

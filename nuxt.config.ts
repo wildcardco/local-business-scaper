@@ -27,9 +27,19 @@ export default defineNuxtConfig({
     rapidApiKey: process.env.RAPIDAPI_KEY,
     rapidApiHost: process.env.RAPIDAPI_HOST || 'local-business-data.p.rapidapi.com',
     googlePageSpeedApiKey: process.env.GOOGLE_PAGESPEED_API_KEY,
-    mailgunApiKey: process.env.MAILGUN_API_KEY,
-    mailgunDomain: process.env.MAILGUN_DOMAIN,
+    resendApiKey: process.env.RESEND_API_KEY,
+    groqApiKey: process.env.GROQ_API,
     n8nWebhookUrl: process.env.N8N_WEBHOOK_URL,
+    
+    // ImageKit
+    imageKitUrl: process.env.IMAGE_KIT_URL,
+    imageKitPublicKey: process.env.IMAGE_KIT_PUBLIC_KEY,
+    imageKitPrivateKey: process.env.IMAGE_KIT_PRIVATE_KEY,
+    
+    public: {
+      imageKitUrl: process.env.IMAGE_KIT_URL,
+      imageKitPublicKey: process.env.IMAGE_KIT_PUBLIC_KEY
+    },
 
     // Auth session (nuxt-auth-utils)
     // NUXT_SESSION_PASSWORD auto-generated in dev, required in production

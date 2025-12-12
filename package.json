@@ -9,19 +9,27 @@
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
-    "db:init": "node -e \"import('./server/utils/schema.js').then(m => m.initializeSchema())\""
+    "db:init": "node -e \"import('./server/utils/schema.js').then(m => m.initializeSchema())\"",
+    "migrate-to-turso": "tsx scripts/migrate-to-turso.ts"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.74",
     "@iconify-json/simple-icons": "^1.2.59",
+    "@imagekit/vue": "^4.0.0",
     "@libsql/client": "^0.14.0",
     "@nuxt/ui": "^4.2.1",
+    "groq-sdk": "^0.37.0",
+    "imagekit": "^6.0.0",
     "nuxt": "^4.2.2",
-    "nuxt-auth-utils": "^0.5.26"
+    "nuxt-auth-utils": "^0.5.26",
+    "resend": "^6.6.0"
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.10.0",
+    "@types/node": "^22.10.2",
+    "dotenv": "^16.4.7",
     "eslint": "^9.39.1",
+    "tsx": "^4.19.2",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.1.8"
   }

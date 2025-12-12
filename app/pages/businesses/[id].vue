@@ -9,6 +9,10 @@ const { data, pending, refresh } = await useFetch(`/api/businesses/${id}`)
 const business = computed(() => data.value?.business)
 
 const isAuditing = ref(false)
+const isScrapingContacts = ref(false)
+const showEmailComposer = ref(false)
+const emailMode = ref<'ai' | 'template'>('ai')
+const selectedTemplateId = ref<string | undefined>()
 
 async function runAudit() {
   if (!business.value?.website) {
@@ -57,6 +61,73 @@ async function updateStatus(status: string) {
       color: 'error'
     })
   }
+}
+
+function openAIEmailComposer() {
+  if (!business.value?.email) {
+    toast.add({
+      title: 'Cannot send email',
+      description: 'This business has no email address',
+      color: 'warning'
+    })
+    return
+  }
+
+  if (business.value.status !== 'approved') {
+    toast.add({
+      title: 'Cannot send email',
+      description: 'Business must be approved first',
+      color: 'warning'
+    })
+    return
+  }
+
+  emailMode.value = 'ai'
+  selectedTemplateId.value = undefined
+  showEmailComposer.value = true
+}
+
+function handleEmailSent() {
+  showEmailComposer.value = false
+  refresh()
+}
+
+async function scrapeContacts() {
+  isScrapingContacts.value = true
+  try {
+    const result = await $fetch(`/api/businesses/${id}/scrape-contacts`, { 
+      method: 'POST' 
+    })
+    
+    toast.add({
+      title: 'Contacts Updated',
+      description: result.message,
+      color: 'success'
+    })
+    
+    await refresh()
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to scrape contacts'
+    toast.add({
+      title: 'Scrape Failed',
+      description: errorMessage,
+      color: 'error'
+    })
+  } finally {
+    isScrapingContacts.value = false
+  }
+}
+
+function hasSocialMedia(contactsData: any): boolean {
+  return !!(
+    contactsData.facebook ||
+    contactsData.instagram ||
+    contactsData.twitter ||
+    contactsData.linkedin ||
+    contactsData.yelp ||
+    contactsData.tiktok ||
+    contactsData.youtube
+  )
 }
 </script>
 
@@ -202,6 +273,31 @@ async function updateStatus(status: string) {
                 :has-website="!!business.website"
               />
 
+              <!-- Scrape Contacts Button -->
+              <UButton
+                v-if="!business.email"
+                icon="i-lucide-mail-search"
+                variant="outline"
+                :loading="isScrapingContacts"
+                @click="scrapeContacts"
+              >
+                Find Email
+              </UButton>
+
+              <!-- AI Email Generation Button -->
+              <UTooltip
+                :text="!business.email ? 'Business has no email address' : business.status !== 'approved' ? 'Business must be approved first' : 'Generate personalized email with AI'"
+              >
+                <UButton
+                  icon="i-lucide-sparkles"
+                  color="primary"
+                  :disabled="business.status !== 'approved' || !business.email"
+                  @click="openAIEmailComposer"
+                >
+                  Generate AI Email
+                </UButton>
+              </UTooltip>
+
               <UButton
                 v-if="business.status === 'new'"
                 icon="i-lucide-check"
@@ -291,6 +387,120 @@ async function updateStatus(status: string) {
         </UCard>
       </div>
 
+      <!-- Contact Information Card (if contacts data exists) -->
+      <UCard v-if="business.contactsData" class="lg:col-span-3">
+        <template #header>
+          <h3 class="font-semibold flex items-center gap-2">
+            <UIcon name="i-lucide-contact" />
+            Contact Information
+          </h3>
+        </template>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Emails -->
+          <div v-if="business.contactsData.emails && business.contactsData.emails.length > 0">
+            <h4 class="text-sm font-medium text-muted mb-2">Email Addresses</h4>
+            <div class="space-y-2">
+              <a
+                v-for="(email, index) in business.contactsData.emails"
+                :key="index"
+                :href="`mailto:${email}`"
+                class="flex items-center gap-2 text-sm text-primary hover:underline"
+              >
+                <UIcon name="i-lucide-mail" class="text-xs" />
+                {{ email }}
+              </a>
+            </div>
+          </div>
+
+          <!-- Phone Numbers -->
+          <div v-if="business.contactsData.phone_numbers && business.contactsData.phone_numbers.length > 0">
+            <h4 class="text-sm font-medium text-muted mb-2">Phone Numbers</h4>
+            <div class="space-y-2">
+              <a
+                v-for="(phone, index) in business.contactsData.phone_numbers"
+                :key="index"
+                :href="`tel:${phone}`"
+                class="flex items-center gap-2 text-sm text-primary hover:underline"
+              >
+                <UIcon name="i-lucide-phone" class="text-xs" />
+                {{ phone }}
+              </a>
+            </div>
+          </div>
+
+          <!-- Social Media -->
+          <div v-if="hasSocialMedia(business.contactsData)" class="md:col-span-2">
+            <h4 class="text-sm font-medium text-muted mb-3">Social Media</h4>
+            <div class="flex flex-wrap gap-3">
+              <a
+                v-if="business.contactsData.facebook"
+                :href="business.contactsData.facebook"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-facebook" class="text-blue-500" />
+                <span class="text-sm">Facebook</span>
+              </a>
+              <a
+                v-if="business.contactsData.instagram"
+                :href="business.contactsData.instagram"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-instagram" class="text-pink-500" />
+                <span class="text-sm">Instagram</span>
+              </a>
+              <a
+                v-if="business.contactsData.twitter"
+                :href="business.contactsData.twitter"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-x" class="text-default" />
+                <span class="text-sm">Twitter/X</span>
+              </a>
+              <a
+                v-if="business.contactsData.linkedin"
+                :href="business.contactsData.linkedin"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-linkedin" class="text-blue-600" />
+                <span class="text-sm">LinkedIn</span>
+              </a>
+              <a
+                v-if="business.contactsData.yelp"
+                :href="business.contactsData.yelp"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-yelp" class="text-red-500" />
+                <span class="text-sm">Yelp</span>
+              </a>
+              <a
+                v-if="business.contactsData.tiktok"
+                :href="business.contactsData.tiktok"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-tiktok" class="text-default" />
+                <span class="text-sm">TikTok</span>
+              </a>
+              <a
+                v-if="business.contactsData.youtube"
+                :href="business.contactsData.youtube"
+                target="_blank"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+              >
+                <UIcon name="i-simple-icons-youtube" class="text-red-600" />
+                <span class="text-sm">YouTube</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </UCard>
+
       <!-- Audit Report -->
       <AuditReport
         :audit="business.audit"
@@ -308,5 +518,35 @@ async function updateStatus(status: string) {
         Back to Businesses
       </UButton>
     </div>
+
+    <!-- Email Composer Modal -->
+    <UModal v-model:open="showEmailComposer" :ui="{ width: 'max-w-4xl' }">
+      <template #content>
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-semibold flex items-center gap-2">
+                <UIcon name="i-lucide-sparkles" class="text-primary" />
+                Generate Personalized Email
+              </h2>
+              <UButton
+                icon="i-lucide-x"
+                variant="ghost"
+                size="sm"
+                @click="showEmailComposer = false"
+              />
+            </div>
+          </template>
+
+          <EmailComposer
+            :business-id="id"
+            :template-id="selectedTemplateId"
+            :mode="emailMode"
+            @close="showEmailComposer = false"
+            @sent="handleEmailSent"
+          />
+        </UCard>
+      </template>
+    </UModal>
   </div>
 </template>

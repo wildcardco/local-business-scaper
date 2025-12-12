@@ -47,6 +47,11 @@ const navigation: NavigationMenuItem[][] = [[
     icon: 'i-lucide-check-square'
   },
   {
+    label: 'Inbox',
+    to: '/inbox',
+    icon: 'i-lucide-inbox'
+  },
+  {
     label: 'Templates',
     to: '/templates',
     icon: 'i-lucide-mail'

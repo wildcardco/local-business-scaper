@@ -1,11 +1,7 @@
 {
-  "build": {
-    "env": {
-      "NUXT_SESSION_PASSWORD": "@nuxt_session_password",
-      "TURSO_DB_URL": "@turso_db_url",
-      "TURSO_KEY": "@turso_key"
-    }
-  }
+  "buildCommand": "npm run build",
+  "framework": "nuxtjs",
+  "installCommand": "npm install"
 }
 
 

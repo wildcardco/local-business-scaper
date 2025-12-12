@@ -1,5 +1,24 @@
 import { db, generateId } from '~~/server/utils/db'
-import { sendEmail, renderTemplate, renderIssuesList } from '~~/server/utils/mailgun'
+import { sendEmail, generateEmailHTML } from '~~/server/utils/resend'
+import { getEmailLogoUrl } from '~~/server/utils/brand-assets'
+
+// Keep legacy template rendering functions for template-based emails
+function renderTemplate(template: string, variables: Record<string, string>): string {
+  let result = template
+  for (const [key, value] of Object.entries(variables)) {
+    result = result.replace(new RegExp(`{{${key}}}`, 'g'), value)
+  }
+  return result
+}
+
+function renderIssuesList(template: string, issues: string[]): string {
+  const issuesRegex = /{{#issues}}([\s\S]*?){{\/issues}}/g
+  const issueItemRegex = /{{\.}}/g
+
+  return template.replace(issuesRegex, (_, itemTemplate) => {
+    return issues.map(issue => itemTemplate.replace(issueItemRegex, issue)).join('')
+  })
+}
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -124,17 +143,27 @@ export default defineEventHandler(async (event) => {
         emailBody = renderIssuesList(emailBody, issues)
         const emailSubject = renderTemplate(template.subject as string, variables)
 
+        // Wrap in branded HTML
+        const logoUrl = getEmailLogoUrl()
+        const emailHtml = generateEmailHTML({
+          businessName: business.name as string,
+          body: emailBody.replace(/\n/g, '<br>'),
+          logoUrl
+        })
+
         const result = await sendEmail({
           to: business.email as string,
           subject: emailSubject,
-          html: emailBody.replace(/\n/g, '<br>')
+          html: emailHtml,
+          replyTo: 'dev@wildcardcreativeco.com'
         })
 
         // Log outreach
         const logId = generateId()
         await db.execute({
-          sql: `INSERT INTO outreach_logs (id, user_id, business_id, template_id, email_to, subject, status, message_id)
-                VALUES (?, ?, ?, ?, ?, ?, 'sent', ?)`,
+          sql: `INSERT INTO outreach_logs 
+                (id, user_id, business_id, template_id, email_to, subject, status, message_id, ai_generated)
+                VALUES (?, ?, ?, ?, ?, ?, 'sent', ?, 0)`,
           args: [logId, user.id, businessId, templateId, business.email, emailSubject, result.id]
         })
 

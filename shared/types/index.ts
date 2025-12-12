@@ -23,6 +23,20 @@ export interface OpenWebBusiness {
   review_count: number
   price_level: string
   types: string[]
+  emails_and_contacts?: {
+    emails?: string[]
+    phone_numbers?: string[]
+    facebook?: string | null
+    instagram?: string | null
+    yelp?: string | null
+    tiktok?: string | null
+    snapchat?: string | null
+    twitter?: string | null
+    linkedin?: string | null
+    github?: string | null
+    youtube?: string | null
+    pinterest?: string | null
+  }
 }
 
 export interface PageSpeedResult {

@@ -52,6 +52,16 @@ export default defineEventHandler(async (event) => {
 
     const row = result.rows[0]
 
+    // Parse contacts data if available
+    let contactsData = null
+    if (row.contacts_data) {
+      try {
+        contactsData = JSON.parse(row.contacts_data as string)
+      } catch (e) {
+        console.error('Failed to parse contacts_data:', e)
+      }
+    }
+
     const business = {
       id: row.id,
       userId: row.user_id,
@@ -77,6 +87,14 @@ export default defineEventHandler(async (event) => {
       sentAt: row.sent_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      contactsData,
+      facebook: row.facebook,
+      instagram: row.instagram,
+      twitter: row.twitter,
+      linkedin: row.linkedin,
+      youtube: row.youtube,
+      tiktok: row.tiktok,
+      yelp: row.yelp,
       audit: row.audit_id ? {
         id: row.audit_id,
         performanceScore: row.performance_score,

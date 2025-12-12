@@ -23,4 +23,11 @@ logs
 .env.*
 !.env.example
 
+# Database files (never commit these!)
+*.db
+*.db-shm
+*.db-wal
+dev.db
+local.db
+
 /app/generated/prisma

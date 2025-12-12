@@ -12,7 +12,8 @@ export async function searchBusinesses(params: BusinessSearchParams): Promise<Op
     query: `${params.query} in ${params.location}`,
     limit: String(params.limit || 20),
     language: 'en',
-    region: 'us'
+    region: 'us',
+    extract_emails_and_contacts: 'true'
   }
 
   // Add coordinates if available for precise location filtering
@@ -47,6 +48,9 @@ export async function searchBusinesses(params: BusinessSearchParams): Promise<Op
 
 // Transform API response to our database model format
 export function transformBusinessData(business: OpenWebBusiness, searchId: string) {
+  // Extract first email from emails_and_contacts if available
+  const email = business.emails_and_contacts?.emails?.[0] || null
+  
   return {
     searchId,
     name: business.name || 'Unknown Business',
@@ -55,6 +59,7 @@ export function transformBusinessData(business: OpenWebBusiness, searchId: strin
     state: business.state || null,
     zipCode: business.postal_code || null,
     phone: business.phone_number || null,
+    email,
     website: business.website || null,
     googleMapsUrl: business.google_maps_url || null,
     placeId: business.place_id || null,

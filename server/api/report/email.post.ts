@@ -1,6 +1,6 @@
 import { db, generateId } from '~~/server/utils/db'
 import { buildReportData, generateHtmlReport, generateSummary } from '~~/server/utils/report-generator'
-import { sendEmail } from '~~/server/utils/mailgun'
+import { sendEmail } from '~~/server/utils/resend'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
