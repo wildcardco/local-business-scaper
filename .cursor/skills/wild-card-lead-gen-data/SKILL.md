@@ -20,6 +20,12 @@ generateId() // `${Date.now().toString(36)}_${Math.random().toString(36).slice(2
 
 Schema: `initializeSchema()` on Nitro start. `CREATE TABLE IF NOT EXISTS` + try/catch `ALTER TABLE`.
 
+## Local database (dev.db)
+
+`dev.db` is **not tracked in git** (removed Aug 2026; gitignored via `*.db`). Fresh clones start with no database — `initializeSchema()` creates an empty one automatically on first `npm run dev`, then register a user through the app at `/register`.
+
+Local `dev.db` and production Turso are **separate databases with separate accounts**. Production credentials will not log in locally and vice versa. Never commit `dev.db` or seed it into the repo.
+
 ## Tables
 
 | Table | Scope | Notes |
