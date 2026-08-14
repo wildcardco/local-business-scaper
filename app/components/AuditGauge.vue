@@ -20,11 +20,11 @@ const scoreColor = computed(() => {
   if (props.score === null) return 'text-neutral-400'
   if (props.score >= 90) return 'text-emerald-500'
   if (props.score >= 50) return 'text-amber-500'
-  return 'text-red-500'
+  return 'text-error-400'
 })
 
 const ringColor = computed(() => {
-  if (props.score === null) return 'stroke-neutral-200 dark:stroke-neutral-700'
+  if (props.score === null) return 'stroke-wcNeutral-700'
   if (props.score >= 90) return 'stroke-emerald-500'
   if (props.score >= 50) return 'stroke-amber-500'
   return 'stroke-red-500'
@@ -48,7 +48,7 @@ const dashOffset = computed(() => {
           r="40"
           fill="none"
           stroke-width="8"
-          class="stroke-neutral-200 dark:stroke-neutral-700"
+          class="stroke-wcNeutral-700"
         />
         <!-- Score ring -->
         <circle

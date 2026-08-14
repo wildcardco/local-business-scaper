@@ -373,6 +373,7 @@ function handleSearch() {
             v-model="country"
             :items="countryOptions"
             size="lg"
+            class="w-full"
           />
         </UFormField>
 
@@ -382,6 +383,7 @@ function handleSearch() {
             v-model="state"
             :items="stateOptions"
             size="lg"
+            class="w-full"
           />
         </UFormField>
 
@@ -396,6 +398,7 @@ function handleSearch() {
             size="lg"
             :loading="isLoadingSuggestions"
             create-item
+            class="w-full"
             @update:search-term="onCitySearch"
           >
             <template #item-label="{ item }">
@@ -434,6 +437,7 @@ function handleSearch() {
             placeholder="e.g., 46402"
             icon="i-lucide-hash"
             size="lg"
+            class="w-full"
           />
         </UFormField>
       </div>
@@ -446,6 +450,7 @@ function handleSearch() {
             :items="limitOptions"
             value-key="value"
             size="lg"
+            class="w-full"
           />
         </UFormField>
 

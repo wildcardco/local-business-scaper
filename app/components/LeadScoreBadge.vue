@@ -9,19 +9,19 @@ const badgeConfig = computed(() => {
   switch (props.category) {
     case 'hot':
       return {
-        color: 'red' as const,
+        color: 'error' as const,
         icon: 'i-lucide-flame',
         label: 'Hot'
       }
     case 'warm':
       return {
-        color: 'amber' as const,
+        color: 'warning' as const,
         icon: 'i-lucide-sun',
         label: 'Warm'
       }
     case 'cold':
       return {
-        color: 'sky' as const,
+        color: 'info' as const,
         icon: 'i-lucide-snowflake',
         label: 'Cold'
       }

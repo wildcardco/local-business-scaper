@@ -7,16 +7,14 @@ const router = useRouter()
 
 useHead({
   meta: [
-    { name: 'viewport', content: 'width=device-width, initial-scale=1' }
+    { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }
   ],
   link: [
-    { rel: 'icon', href: '/favicon.ico' },
-    { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-    { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-    { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap' }
+    { rel: 'icon', href: '/favicon.ico' }
   ],
   htmlAttrs: {
-    lang: 'en'
+    lang: 'en',
+    class: 'dark'
   }
 })
 
@@ -92,15 +90,17 @@ onMounted(() => {
   <NuxtLayout>
     <UApp v-if="loggedIn">
       <UDashboardGroup>
-        <UDashboardSidebar collapsible resizable>
+        <UDashboardSidebar
+          collapsible
+          resizable
+          :menu="{ title: 'Navigation', description: 'Wild Card Lead Gen navigation' }"
+        >
           <template #header="{ collapsed }">
             <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white font-bold text-lg shrink-0">
-                W
-              </div>
+              <UIcon name="i-wc-mark" class="size-9 text-white shrink-0" />
               <div v-if="!collapsed" class="flex flex-col">
-                <span class="font-semibold text-sm">Wild Card</span>
-                <span class="text-xs text-muted">Lead Gen</span>
+                <span class="font-display font-semibold text-sm tracking-tight">Wild Card</span>
+                <span class="eyebrow mb-0! text-[0.6rem]">Lead Gen</span>
               </div>
             </div>
           </template>
@@ -129,10 +129,6 @@ onMounted(() => {
               </div>
 
               <div class="flex items-center" :class="collapsed ? 'justify-center' : 'gap-2 px-3'">
-                <UColorModeButton
-                  :variant="'ghost'"
-                  size="sm"
-                />
                 <UButton
                   v-if="!collapsed"
                   icon="i-lucide-log-out"

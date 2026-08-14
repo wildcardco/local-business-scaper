@@ -1,35 +1,225 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Custom theme configuration */
+/*
+  Wild Card Creative Co — locked brand palette (Aug 2026), ported from
+  wcco-official-website. Dark-only. Neutrals are true zero-hue.
+  Red is the single primary action. Gold is secondary / featured trim only.
+*/
 @theme static {
-  --font-sans: 'Outfit', system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  /* Wild Card brand colors - deep purple palette */
-  --color-wildcard-50: #f3f0ff;
-  --color-wildcard-100: #e8e0ff;
-  --color-wildcard-200: #d4c7ff;
-  --color-wildcard-300: #b49dff;
-  --color-wildcard-400: #9066ff;
-  --color-wildcard-500: #7135ff;
-  --color-wildcard-600: #6316f5;
-  --color-wildcard-700: #5509d6;
-  --color-wildcard-800: #470bad;
-  --color-wildcard-900: #3c0c8c;
-  --color-wildcard-950: #1f0457;
+  /* wcNeutral — background #1A1A1A → text #F2F2F0 */
+  --color-wcNeutral-50: #F2F2F0;
+  --color-wcNeutral-100: #E4E3E0;
+  --color-wcNeutral-200: #C8C6C4;
+  --color-wcNeutral-300: #B0AEB2;
+  --color-wcNeutral-400: #8F8C94;
+  --color-wcNeutral-500: #5C5A60;
+  --color-wcNeutral-600: #454149;
+  --color-wcNeutral-700: #34323A;
+  --color-wcNeutral-800: #28262D;
+  --color-wcNeutral-900: #201F25;
+  --color-wcNeutral-950: #1A1A1A;
+
+  /* wcRed — primary CTA #D6293E */
+  --color-wcRed-50: #FDECEE;
+  --color-wcRed-100: #FACDD3;
+  --color-wcRed-200: #F49AA6;
+  --color-wcRed-300: #EC6678;
+  --color-wcRed-400: #E23348;
+  --color-wcRed-500: #D6293E;
+  --color-wcRed-600: #B71F32;
+  --color-wcRed-700: #961928;
+  --color-wcRed-800: #72131E;
+  --color-wcRed-900: #4D0C14;
+  --color-wcRed-950: #2A070B;
+
+  /* wcGold — secondary / featured #C9A227 */
+  --color-wcGold-50: #FBF6E6;
+  --color-wcGold-100: #F5EBC3;
+  --color-wcGold-200: #EBD789;
+  --color-wcGold-300: #D8B02B;
+  --color-wcGold-400: #C9A227;
+  --color-wcGold-500: #AE8B1D;
+  --color-wcGold-600: #8F7218;
+  --color-wcGold-700: #6E5712;
+  --color-wcGold-800: #4D3C0C;
+  --color-wcGold-900: #2E2407;
+  --color-wcGold-950: #191500;
+
+  /* semantic scales */
+  --color-wcSuccess-50: #E7FBF1;
+  --color-wcSuccess-100: #C5F5DC;
+  --color-wcSuccess-200: #8AEBB9;
+  --color-wcSuccess-300: #4FDD95;
+  --color-wcSuccess-400: #24C97A;
+  --color-wcSuccess-500: #12B76A;
+  --color-wcSuccess-600: #0E9455;
+  --color-wcSuccess-700: #0B7141;
+  --color-wcSuccess-800: #084F2E;
+  --color-wcSuccess-900: #05331E;
+  --color-wcSuccess-950: #021C10;
+
+  --color-wcWarning-50: #FFF4EB;
+  --color-wcWarning-100: #FFE4CC;
+  --color-wcWarning-200: #FFC899;
+  --color-wcWarning-300: #FFA35C;
+  --color-wcWarning-400: #F97316;
+  --color-wcWarning-500: #EA580C;
+  --color-wcWarning-600: #C2410C;
+  --color-wcWarning-700: #9A3412;
+  --color-wcWarning-800: #7C2D12;
+  --color-wcWarning-900: #431407;
+  --color-wcWarning-950: #271008;
+
+  --color-wcError-50: #FEF2F2;
+  --color-wcError-100: #FEE2E2;
+  --color-wcError-200: #FECACA;
+  --color-wcError-300: #FCA5A5;
+  --color-wcError-400: #F87171;
+  --color-wcError-500: #EF4444;
+  --color-wcError-600: #DC2626;
+  --color-wcError-700: #B91C1C;
+  --color-wcError-800: #991B1B;
+  --color-wcError-900: #7F1D1D;
+  --color-wcError-950: #450A0A;
+
+  --color-wcInfo-50: #EFF6FF;
+  --color-wcInfo-100: #DBEAFE;
+  --color-wcInfo-200: #BFDBFE;
+  --color-wcInfo-300: #93C5FD;
+  --color-wcInfo-400: #60A5FA;
+  --color-wcInfo-500: #3B82F6;
+  --color-wcInfo-600: #2563EB;
+  --color-wcInfo-700: #1D4ED8;
+  --color-wcInfo-800: #1E40AF;
+  --color-wcInfo-900: #1E3A8A;
+  --color-wcInfo-950: #172554;
+
+  --radius-wc: 10px;
+  --radius-wc-lg: 16px;
 }
 
-/* CSS Variables */
+/* Semantic runtime aliases (official site) */
 :root {
-  --ui-primary: var(--color-wildcard-500);
-  --ui-radius: 0.75rem;
+  --wc-bg: #1A1A1A;
+  --wc-surface: #201F25;
+  --wc-surface-2: #26252C;
+  --wc-border: #34323A;
+  --wc-border-soft: #2B2A31;
+  --wc-text: #F2F0EE;
+  --wc-text-dim: #8F8C94;
+  --wc-red: #D6293E;
+  --wc-red-press: #B71F32;
+  --wc-gold: #C9A227;
+  --wc-gold-press: #AE8B1D;
+  --wc-success: #12B76A;
+  --wc-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --ui-radius: var(--radius-wc);
   --ui-container: var(--container-7xl);
   --ui-header-height: 4rem;
 }
 
-.dark {
-  --ui-primary: var(--color-wildcard-400);
-  --ui-bg: hsl(260, 30%, 8%);
+/*
+  Dark-only: the app forces the `dark` class. Map every Nuxt UI semantic
+  token onto the Wild Card charcoal system so bg-default/bg-elevated/
+  border-default/text-muted all resolve to brand values.
+*/
+:root, .dark {
+  --ui-primary: var(--color-wcRed-500);
+  --ui-secondary: var(--color-wcGold-400);
+
+  --ui-bg: var(--color-wcNeutral-950);            /* #1A1A1A page canvas */
+  --ui-bg-muted: var(--color-wcNeutral-900);      /* #201F25 surface */
+  --ui-bg-elevated: var(--color-wcNeutral-800);   /* #28262D popovers */
+  --ui-bg-accented: var(--color-wcNeutral-700);
+  --ui-bg-inverted: var(--color-wcNeutral-50);
+
+  --ui-border: var(--color-wcNeutral-700);        /* #34323A */
+  --ui-border-muted: var(--wc-border-soft);       /* #2B2A31 */
+  --ui-border-accented: var(--color-wcNeutral-600);
+  --ui-border-inverted: var(--color-wcNeutral-50);
+
+  --ui-text-dimmed: var(--color-wcNeutral-500);
+  --ui-text-muted: var(--color-wcNeutral-400);    /* #8F8C94 */
+  --ui-text-toned: var(--color-wcNeutral-300);    /* #B0AEB2 */
+  --ui-text: var(--color-wcNeutral-100);
+  --ui-text-highlighted: var(--color-wcNeutral-50); /* #F2F2F0 */
+  --ui-text-inverted: var(--color-wcNeutral-950);
+}
+
+html {
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+/*
+  Mobile: iOS Safari zooms the page when a focused input's font-size is
+  below 16px. Force 16px on touch-first small screens so forms stay put.
+*/
+@media (max-width: 640px) and (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+body {
+  background: var(--ui-bg);
+  color: var(--wc-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--wc-red);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--wc-red);
+  color: #fff;
+}
+
+/* Utility: typography */
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-wc {
+  font-family: var(--font-mono);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--wc-text-dim);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.dim {
+  color: var(--wc-text-dim);
+}
+
+.gold {
+  color: var(--wc-gold);
 }
 
 /* Custom scrollbar */
@@ -55,7 +245,7 @@
 /* Page transitions */
 .page-enter-active,
 .page-leave-active {
-  transition: all 0.2s ease;
+  transition: all 0.2s var(--wc-ease);
 }
 
 .page-enter-from,
@@ -78,7 +268,7 @@
   animation: pulse-soft 2s ease-in-out infinite;
 }
 
-/* Utility classes */
+/* Featured / accent border — gold hairline (brand trim), red retired from decoration */
 .gradient-border {
   position: relative;
 }
@@ -88,7 +278,7 @@
   position: absolute;
   inset: -1px;
   padding: 1px;
-  background: linear-gradient(135deg, var(--color-wildcard-500), var(--color-wildcard-700));
+  background: linear-gradient(135deg, rgba(201, 162, 39, 0.55), rgba(201, 162, 39, 0.15));
   border-radius: inherit;
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -96,7 +286,7 @@
   pointer-events: none;
 }
 
-/* Lead category colors */
+/* Lead category colors — semantic, not brand */
 .lead-hot {
   --lead-color: var(--color-red-500);
 }

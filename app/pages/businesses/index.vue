@@ -190,9 +190,9 @@ function clearSelection() {
 <template>
   <div class="space-y-6 pb-20">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold">All Businesses</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">All Businesses</h1>
         <p class="text-muted">View and manage all discovered business leads.</p>
       </div>
       <UButton
@@ -219,7 +219,7 @@ function clearSelection() {
       />
 
       <template #footer v-if="pagination.total > limit">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-muted">
             Showing {{ (page - 1) * limit + 1 }} to {{ Math.min(page * limit, pagination.total) }} of {{ pagination.total }}
           </p>
@@ -243,19 +243,19 @@ function clearSelection() {
     >
       <div
         v-if="selectedBusinessIds.length > 0"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100vw-2rem)] sm:w-auto"
       >
-        <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl px-6 py-4 flex items-center gap-4">
+        <div class="bg-muted border border-default rounded-2xl shadow-2xl px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           <!-- Selection count -->
-          <div class="flex items-center gap-2 pr-4 border-r border-gray-700">
-            <div class="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
+          <div class="flex items-center gap-2 pr-4 border-r border-default">
+            <div class="w-8 h-8 rounded-full bg-primary-500/15 flex items-center justify-center">
               <span class="text-sm font-bold text-primary-400">{{ selectedBusinessIds.length }}</span>
             </div>
-            <span class="text-sm text-gray-300">selected</span>
+            <span class="text-sm text-toned">selected</span>
           </div>
 
           <!-- Action buttons -->
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center justify-center gap-2">
             <UButton
               icon="i-lucide-check"
               color="success"
@@ -289,7 +289,7 @@ function clearSelection() {
           </div>
 
           <!-- Clear selection -->
-          <div class="pl-4 border-l border-gray-700">
+          <div class="pl-4 border-l border-default">
             <UButton
               icon="i-lucide-x"
               color="neutral"
@@ -305,44 +305,36 @@ function clearSelection() {
     </Transition>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model:open="showDeleteConfirm">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2 text-red-500">
-              <UIcon name="i-lucide-alert-triangle" class="text-xl" />
-              <h3 class="font-semibold">Confirm Delete</h3>
-            </div>
-          </template>
+    <UModal v-model:open="showDeleteConfirm" title="Confirm Delete">
+      <template #body>
+        <p class="text-muted">
+          Are you sure you want to permanently delete
+          <strong class="text-highlighted">{{ selectedBusinessIds.length }}</strong>
+          business{{ selectedBusinessIds.length === 1 ? '' : 'es' }}?
+        </p>
+        <p class="text-sm text-error-400 mt-2">
+          This action cannot be undone. All associated audits and outreach logs will also be deleted.
+        </p>
+      </template>
 
-          <p class="text-muted">
-            Are you sure you want to permanently delete
-            <strong class="text-foreground">{{ selectedBusinessIds.length }}</strong>
-            business{{ selectedBusinessIds.length === 1 ? '' : 'es' }}?
-          </p>
-          <p class="text-sm text-red-400 mt-2">
-            This action cannot be undone. All associated audits and outreach logs will also be deleted.
-          </p>
-
-          <template #footer>
-            <div class="flex justify-end gap-2">
-              <UButton
-                variant="ghost"
-                @click="showDeleteConfirm = false"
-              >
-                Cancel
-              </UButton>
-              <UButton
-                color="error"
-                icon="i-lucide-trash-2"
-                :loading="isDeleting"
-                @click="handleDeleteSelected"
-              >
-                Delete Forever
-              </UButton>
-            </div>
-          </template>
-        </UCard>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            @click="showDeleteConfirm = false"
+          >
+            Cancel
+          </UButton>
+          <UButton
+            color="error"
+            icon="i-lucide-trash-2"
+            :loading="isDeleting"
+            @click="handleDeleteSelected"
+          >
+            Delete Forever
+          </UButton>
+        </div>
       </template>
     </UModal>
 

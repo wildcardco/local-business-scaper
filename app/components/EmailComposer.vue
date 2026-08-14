@@ -317,7 +317,7 @@ async function saveAsDraft() {
 }
 
 .email-preview :deep(a) {
-  color: rgb(var(--color-primary-500));
+  color: var(--ui-primary);
 }
 </style>
 

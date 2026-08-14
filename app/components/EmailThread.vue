@@ -151,7 +151,7 @@ function getStatusColor(status: string): string {
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-surface border-2 border-default flex items-center justify-center font-semibold text-sm">
+              <div class="w-10 h-10 rounded-full bg-elevated border-2 border-default flex items-center justify-center font-semibold text-sm">
                 {{ reply.fromEmail.charAt(0).toUpperCase() }}
               </div>
               <div>

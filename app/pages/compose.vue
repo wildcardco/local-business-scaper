@@ -337,11 +337,11 @@ async function deleteDraft() {
 </script>
 
 <template>
-  <div class="h-screen flex flex-col overflow-hidden">
+  <div class="h-full min-h-0 flex flex-col overflow-hidden">
     <!-- Header -->
-    <div class="border-b border-default bg-surface px-6 py-4 flex-shrink-0">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
+    <div class="border-b border-default bg-muted px-4 sm:px-6 py-4 flex-shrink-0">
+      <div class="flex flex-wrap items-center justify-between gap-y-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-4">
           <UButton
             icon="i-lucide-arrow-left"
             variant="ghost"
@@ -350,9 +350,9 @@ async function deleteDraft() {
             Back to Inbox
           </UButton>
           
-          <div class="h-6 w-px bg-default" />
+          <div class="hidden sm:block h-6 w-px bg-default" />
           
-          <h1 class="text-xl font-semibold">
+          <h1 class="font-display text-xl font-semibold tracking-tight">
             {{ draftId ? 'Edit Draft' : 'Compose Email' }}
           </h1>
           
@@ -366,7 +366,7 @@ async function deleteDraft() {
           </UBadge>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <UButton
             v-if="draftId"
             icon="i-lucide-trash-2"
@@ -411,8 +411,8 @@ async function deleteDraft() {
     </div>
 
     <!-- Editor Body -->
-    <div class="flex-1 overflow-y-auto bg-surface-muted">
-      <div class="max-w-6xl mx-auto py-8 px-6 space-y-6">
+    <div class="flex-1 overflow-y-auto bg-default">
+      <div class="max-w-6xl mx-auto py-6 px-4 sm:py-8 sm:px-6 space-y-6">
         <!-- AI Generation Section -->
         <UCard v-if="businessId && !bodyHtml">
           <template #header>
@@ -453,7 +453,6 @@ async function deleteDraft() {
                 @click="generateWithAI"
                 :loading="isGenerating"
                 :disabled="isSending"
-                class="flex-1"
               >
                 {{ subject || bodyText ? 'Regenerate with AI' : 'Generate Personalized Email' }}
               </UButton>
@@ -464,18 +463,18 @@ async function deleteDraft() {
         <!-- Email Editor -->
         <UCard v-if="bodyHtml || editedBody">
           <template #header>
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center justify-between gap-y-2">
+              <div class="flex flex-wrap items-center gap-2 sm:gap-4">
                 <h3 class="font-semibold">Email Editor</h3>
                 
                 <!-- Tab Switcher -->
-                <div class="flex gap-1 bg-surface-muted p-1 rounded-lg">
+                <div class="flex gap-1 bg-elevated p-1 rounded-lg">
                   <button
                     @click="activeTab = 'preview'"
                     :class="[
                       'px-3 py-1.5 text-sm font-medium rounded transition-colors',
                       activeTab === 'preview'
-                        ? 'bg-surface text-primary'
+                        ? 'bg-accented text-primary'
                         : 'text-muted hover:text-default'
                     ]"
                   >
@@ -487,7 +486,7 @@ async function deleteDraft() {
                     :class="[
                       'px-3 py-1.5 text-sm font-medium rounded transition-colors',
                       activeTab === 'edit'
-                        ? 'bg-surface text-primary'
+                        ? 'bg-accented text-primary'
                         : 'text-muted hover:text-default'
                     ]"
                   >
@@ -534,23 +533,26 @@ async function deleteDraft() {
               </div>
             </div>
 
-            <!-- Email Preview (with branded template) -->
-            <div class="rounded-lg border border-default overflow-hidden bg-white">
-              <iframe
-                ref="previewFrame"
-                class="w-full border-0"
-                style="min-height: 600px;"
-                sandbox="allow-same-origin"
-              />
+            <!-- Email Preview (white document inside dark chrome) -->
+            <div class="rounded-lg bg-elevated p-3">
+              <p class="eyebrow mb-2">Email Preview</p>
+              <div class="rounded-md overflow-hidden bg-white shadow-inner ring-1 ring-default">
+                <iframe
+                  ref="previewFrame"
+                  class="w-full border-0"
+                  style="min-height: 600px;"
+                  sandbox="allow-same-origin"
+                />
+              </div>
             </div>
 
             <!-- Audit Summary (if available) -->
-            <div v-if="auditData" class="p-4 bg-surface-muted rounded-lg">
+            <div v-if="auditData" class="p-4 bg-elevated rounded-lg">
               <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
                 <UIcon name="i-lucide-gauge" />
                 Website Audit Scores Referenced
               </h4>
-              <div class="grid grid-cols-4 gap-4">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div class="text-center">
                   <div class="text-2xl font-bold" :class="auditData.performance_score >= 90 ? 'text-success' : auditData.performance_score >= 50 ? 'text-warning' : 'text-error'">
                     {{ auditData.performance_score }}

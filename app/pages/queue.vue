@@ -88,9 +88,9 @@ function handleView(id: string) {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold">Approval Queue</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">Approval Queue</h1>
         <p class="text-muted">Review and approve leads for outreach.</p>
       </div>
       <UButton
@@ -107,7 +107,7 @@ function handleView(id: string) {
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <UCard>
         <div class="flex items-center gap-3">
-          <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/20">
+          <div class="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/20">
             <UIcon name="i-lucide-inbox" class="text-primary" />
           </div>
           <div>
@@ -119,7 +119,7 @@ function handleView(id: string) {
 
       <UCard>
         <div class="flex items-center gap-3">
-          <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-red-500/20">
+          <div class="flex items-center justify-center w-12 h-12 rounded-xl bg-red-500/20">
             <UIcon name="i-lucide-flame" class="text-red-500" />
           </div>
           <div>
@@ -131,7 +131,7 @@ function handleView(id: string) {
 
       <UCard>
         <div class="flex items-center gap-3">
-          <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-amber-500/20">
+          <div class="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-500/20">
             <UIcon name="i-lucide-sun" class="text-amber-500" />
           </div>
           <div>
@@ -143,7 +143,7 @@ function handleView(id: string) {
 
       <UCard>
         <div class="flex items-center gap-3">
-          <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-sky-500/20">
+          <div class="flex items-center justify-center w-12 h-12 rounded-xl bg-sky-500/20">
             <UIcon name="i-lucide-snowflake" class="text-sky-500" />
           </div>
           <div>

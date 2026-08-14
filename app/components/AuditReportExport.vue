@@ -223,56 +223,48 @@ const exportItems = computed(() => [
     </UDropdownMenu>
 
     <!-- Email Modal -->
-    <UModal v-model:open="showEmailModal">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30">
-                <UIcon name="i-lucide-mail" class="text-primary-600 dark:text-primary-400 text-xl" />
-              </div>
-              <div>
-                <h3 class="font-semibold">Email Audit Report</h3>
-                <p class="text-sm text-muted">Send the report to an email address</p>
-              </div>
-            </div>
-          </template>
+    <UModal
+      v-model:open="showEmailModal"
+      title="Email Audit Report"
+      description="Send the report to an email address"
+    >
+      <template #body>
+        <div class="space-y-4">
+          <UFormField label="Recipient Email" required>
+            <UInput
+              v-model="emailAddress"
+              type="email"
+              placeholder="client@example.com"
+              icon="i-lucide-mail"
+              class="w-full"
+            />
+          </UFormField>
 
-          <div class="space-y-4">
-            <UFormField label="Recipient Email" required>
-              <UInput
-                v-model="emailAddress"
-                type="email"
-                placeholder="client@example.com"
-                icon="i-lucide-mail"
-              />
-            </UFormField>
-
-            <div class="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg">
-              <p class="text-sm text-muted">
-                The audit report for <strong>{{ businessName }}</strong> will be sent as a formatted HTML email.
-              </p>
-            </div>
+          <div class="p-3 bg-elevated rounded-lg">
+            <p class="text-sm text-muted">
+              The audit report for <strong>{{ businessName }}</strong> will be sent as a formatted HTML email.
+            </p>
           </div>
+        </div>
+      </template>
 
-          <template #footer>
-            <div class="flex justify-end gap-2">
-              <UButton
-                variant="ghost"
-                @click="showEmailModal = false"
-              >
-                Cancel
-              </UButton>
-              <UButton
-                icon="i-lucide-send"
-                :loading="isSendingEmail"
-                @click="sendEmail"
-              >
-                Send Report
-              </UButton>
-            </div>
-          </template>
-        </UCard>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            @click="showEmailModal = false"
+          >
+            Cancel
+          </UButton>
+          <UButton
+            icon="i-lucide-send"
+            :loading="isSendingEmail"
+            @click="sendEmail"
+          >
+            Send Report
+          </UButton>
+        </div>
       </template>
     </UModal>
   </div>

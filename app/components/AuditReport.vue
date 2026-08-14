@@ -121,7 +121,7 @@ const issues = computed(() => {
           <div
             v-for="vital in webVitals"
             :key="vital.label"
-            class="flex items-center gap-3 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800"
+            class="flex items-center gap-3 p-3 rounded-lg bg-elevated"
           >
             <UIcon :name="vital.icon" class="text-lg text-primary-500" />
             <div>
@@ -136,8 +136,8 @@ const issues = computed(() => {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <UCard>
           <div class="flex items-center gap-3">
-            <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30">
-              <UIcon name="i-lucide-code" class="text-primary-600 dark:text-primary-400" />
+            <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-primary-500/15">
+              <UIcon name="i-lucide-code" class="text-primary-400" />
             </div>
             <div>
               <p class="text-sm text-muted">Detected Platform</p>
@@ -150,11 +150,11 @@ const issues = computed(() => {
           <div class="flex items-center gap-3">
             <div
               class="flex items-center justify-center w-10 h-10 rounded-lg"
-              :class="audit.hasSSL ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-red-100 dark:bg-red-900/30'"
+              :class="audit.hasSSL ? 'bg-success-500/15' : 'bg-error-500/15'"
             >
               <UIcon
                 :name="audit.hasSSL ? 'i-lucide-lock' : 'i-lucide-lock-open'"
-                :class="audit.hasSSL ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                :class="audit.hasSSL ? 'text-success-400' : 'text-error-400'"
               />
             </div>
             <div>

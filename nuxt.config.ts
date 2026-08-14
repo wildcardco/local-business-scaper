@@ -12,6 +12,27 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  // Dark-only — official Wild Card brand is dark-first with no light theme
+  colorMode: {
+    preference: 'dark',
+    fallback: 'dark',
+    classSuffix: ''
+  },
+
+  fonts: {
+    families: [
+      { name: 'Outfit', provider: 'google', weights: [300, 400, 500, 600, 700] },
+      { name: 'Inter', provider: 'google', weights: [400, 500, 600] },
+      { name: 'JetBrains Mono', provider: 'google', weights: [400, 500] }
+    ]
+  },
+
+  icon: {
+    customCollections: [
+      { prefix: 'wc', dir: './app/assets/icons/wc' }
+    ]
+  },
+
   routeRules: {
     '/': { prerender: false }
   },

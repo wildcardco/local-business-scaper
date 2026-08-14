@@ -71,6 +71,8 @@ watch(() => props.template, (newTemplate) => {
       <UInput
         v-model="form.name"
         placeholder="e.g., no_website, poor_performance"
+        size="lg"
+        class="w-full"
       />
     </UFormField>
 
@@ -78,6 +80,8 @@ watch(() => props.template, (newTemplate) => {
       <UInput
         v-model="form.subject"
         placeholder="Email subject with {{variables}}"
+        size="lg"
+        class="w-full"
       />
     </UFormField>
 
@@ -86,7 +90,8 @@ watch(() => props.template, (newTemplate) => {
         v-model="form.body"
         placeholder="Write your email template here. Use {{variableName}} for dynamic content."
         rows="12"
-        class="font-mono text-sm"
+        size="lg"
+        class="font-mono text-sm w-full"
       />
     </UFormField>
 

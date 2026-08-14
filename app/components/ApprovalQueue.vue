@@ -163,7 +163,7 @@ function getIssues(business: Business): string[] {
             <div class="flex items-center gap-2 text-muted">
               <UIcon name="i-lucide-globe" />
               <span v-if="business.website" class="truncate">{{ business.website }}</span>
-              <UBadge v-else color="red" variant="soft" size="xs">No Website</UBadge>
+              <UBadge v-else color="error" variant="soft" size="xs">No Website</UBadge>
             </div>
             <div v-if="business.rating" class="flex items-center gap-2">
               <UIcon name="i-lucide-star" class="text-amber-500" />
@@ -191,7 +191,7 @@ function getIssues(business: Business): string[] {
               color="success"
               variant="soft"
               size="sm"
-              class="flex-1"
+              class="flex-1 max-w-40"
               @click="emit('approve', business.id)"
             >
               Approve
@@ -201,7 +201,7 @@ function getIssues(business: Business): string[] {
               color="error"
               variant="soft"
               size="sm"
-              class="flex-1"
+              class="flex-1 max-w-40"
               @click="emit('reject', business.id)"
             >
               Reject

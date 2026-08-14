@@ -134,9 +134,9 @@ function hasSocialMedia(contactsData: any): boolean {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold">{{ business?.name || 'Loading...' }}</h1>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h1 class="font-display text-2xl font-semibold tracking-tight truncate">{{ business?.name || 'Loading...' }}</h1>
         <p class="text-muted">{{ business?.category || '' }}</p>
       </div>
       <UButton
@@ -157,9 +157,9 @@ function hasSocialMedia(contactsData: any): boolean {
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <UCard class="lg:col-span-2">
           <template #header>
-            <div class="flex items-center justify-between">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <h2 class="text-lg font-semibold">Business Details</h2>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <LeadScoreBadge
                   :score="business.leadScore"
                   :category="business.leadCategory"
@@ -219,7 +219,7 @@ function hasSocialMedia(contactsData: any): boolean {
                     v-if="business.website"
                     :href="business.website.startsWith('http') ? business.website : `https://${business.website}`"
                     target="_blank"
-                    class="text-primary hover:underline flex items-center gap-1"
+                    class="text-primary hover:underline flex items-center gap-1 break-all"
                   >
                     {{ business.website }}
                     <UIcon name="i-lucide-external-link" class="text-xs" />
@@ -437,7 +437,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.facebook"
                 :href="business.contactsData.facebook"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-facebook" class="text-blue-500" />
                 <span class="text-sm">Facebook</span>
@@ -446,7 +446,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.instagram"
                 :href="business.contactsData.instagram"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-instagram" class="text-pink-500" />
                 <span class="text-sm">Instagram</span>
@@ -455,7 +455,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.twitter"
                 :href="business.contactsData.twitter"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-x" class="text-default" />
                 <span class="text-sm">Twitter/X</span>
@@ -464,7 +464,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.linkedin"
                 :href="business.contactsData.linkedin"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-linkedin" class="text-blue-600" />
                 <span class="text-sm">LinkedIn</span>
@@ -473,7 +473,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.yelp"
                 :href="business.contactsData.yelp"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-yelp" class="text-red-500" />
                 <span class="text-sm">Yelp</span>
@@ -482,7 +482,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.tiktok"
                 :href="business.contactsData.tiktok"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-tiktok" class="text-default" />
                 <span class="text-sm">TikTok</span>
@@ -491,7 +491,7 @@ function hasSocialMedia(contactsData: any): boolean {
                 v-if="business.contactsData.youtube"
                 :href="business.contactsData.youtube"
                 target="_blank"
-                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface hover:bg-surface-hover border border-default transition-colors"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated hover:bg-accented border border-default transition-colors"
               >
                 <UIcon name="i-simple-icons-youtube" class="text-red-600" />
                 <span class="text-sm">YouTube</span>
@@ -520,32 +520,19 @@ function hasSocialMedia(contactsData: any): boolean {
     </div>
 
     <!-- Email Composer Modal -->
-    <UModal v-model:open="showEmailComposer" :ui="{ width: 'max-w-4xl' }">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center justify-between">
-              <h2 class="text-lg font-semibold flex items-center gap-2">
-                <UIcon name="i-lucide-sparkles" class="text-primary" />
-                Generate Personalized Email
-              </h2>
-              <UButton
-                icon="i-lucide-x"
-                variant="ghost"
-                size="sm"
-                @click="showEmailComposer = false"
-              />
-            </div>
-          </template>
-
-          <EmailComposer
-            :business-id="id"
-            :template-id="selectedTemplateId"
-            :mode="emailMode"
-            @close="showEmailComposer = false"
-            @sent="handleEmailSent"
-          />
-        </UCard>
+    <UModal
+      v-model:open="showEmailComposer"
+      title="Generate Personalized Email"
+      :ui="{ content: 'sm:max-w-4xl' }"
+    >
+      <template #body>
+        <EmailComposer
+          :business-id="id"
+          :template-id="selectedTemplateId"
+          :mode="emailMode"
+          @close="showEmailComposer = false"
+          @sent="handleEmailSent"
+        />
       </template>
     </UModal>
   </div>

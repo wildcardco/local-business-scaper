@@ -95,12 +95,12 @@ async function toggleActive(template: Template) {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold">Email Templates</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">Email Templates</h1>
         <p class="text-muted">Manage email templates for outreach campaigns.</p>
       </div>
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <UButton
           v-if="templates.length === 0"
           icon="i-lucide-wand-2"
@@ -119,22 +119,17 @@ async function toggleActive(template: Template) {
     </div>
 
     <!-- Editor Modal -->
-    <UModal v-model:open="showEditor">
-      <template #content>
-        <UCard>
-          <template #header>
-            <h2 class="text-lg font-semibold">
-              {{ editorMode === 'create' ? 'Create Template' : 'Edit Template' }}
-            </h2>
-          </template>
-
-          <EmailTemplateEditor
-            :template="selectedTemplate"
-            :mode="editorMode"
-            @save="handleSave"
-            @cancel="showEditor = false"
-          />
-        </UCard>
+    <UModal
+      v-model:open="showEditor"
+      :title="editorMode === 'create' ? 'Create Template' : 'Edit Template'"
+    >
+      <template #body>
+        <EmailTemplateEditor
+          :template="selectedTemplate"
+          :mode="editorMode"
+          @save="handleSave"
+          @cancel="showEditor = false"
+        />
       </template>
     </UModal>
 

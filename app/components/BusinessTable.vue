@@ -418,7 +418,8 @@ defineExpose({
         v-model="searchQuery"
         placeholder="Search name, category, location, phone..."
         icon="i-lucide-search"
-        class="w-80"
+        size="md"
+        class="w-full sm:w-80"
       />
 
       <UButton
@@ -475,7 +476,7 @@ defineExpose({
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 -translate-y-2"
     >
-      <div v-if="showFilters" class="bg-gray-800/50 rounded-xl p-4 space-y-3">
+      <div v-if="showFilters" class="bg-elevated/50 rounded-xl p-4 space-y-3">
         <div class="flex flex-wrap gap-3 items-center">
           <!-- Location Filter -->
           <div class="flex flex-col gap-1">
@@ -484,6 +485,7 @@ defineExpose({
               v-model="selectedLocation"
               :items="locationOptions"
               placeholder="All Locations"
+              size="md"
               class="w-48"
             />
           </div>
@@ -495,6 +497,7 @@ defineExpose({
               v-model="selectedWebsite"
               :items="websiteOptions"
               placeholder="All"
+              size="md"
               class="w-36"
             />
           </div>
@@ -506,6 +509,7 @@ defineExpose({
               v-model="selectedRating"
               :items="ratingOptions"
               placeholder="Any Rating"
+              size="md"
               class="w-32"
             />
           </div>
@@ -517,6 +521,7 @@ defineExpose({
               v-model="selectedAudited"
               :items="auditedOptions"
               placeholder="All"
+              size="md"
               class="w-32"
             />
           </div>
@@ -528,6 +533,7 @@ defineExpose({
               v-model="selectedCategory"
               :items="categoryOptions"
               placeholder="All Lead Types"
+              size="md"
               class="w-36"
             />
           </div>
@@ -539,11 +545,12 @@ defineExpose({
               v-model="selectedStatus"
               :items="statusOptions"
               placeholder="All Statuses"
+              size="md"
               class="w-36"
             />
           </div>
 
-          <div class="border-l border-gray-700 h-12 mx-2" />
+          <div class="border-l border-default h-12 mx-2" />
 
           <!-- Sort By -->
           <div class="flex flex-col gap-1">
@@ -552,6 +559,7 @@ defineExpose({
               <USelect
                 v-model="sortField"
                 :items="sortOptions"
+                size="md"
                 class="w-32"
               />
               <UButton
@@ -583,13 +591,13 @@ defineExpose({
       </span>
     </div>
 
-    <!-- Table -->
+    <!-- Table (scrolls horizontally on small screens) -->
     <div
-      class="relative select-none"
+      class="relative select-none overflow-x-auto"
       :class="{ 'cursor-crosshair': isDragging }"
     >
-      <table class="w-full text-left">
-        <thead class="border-b border-gray-700 sticky top-0 bg-gray-900 z-10">
+      <table class="w-full min-w-160 text-left">
+        <thead class="border-b border-default sticky top-0 bg-muted z-10">
           <tr>
             <th v-if="selectable" class="p-3 w-10">
               <UCheckbox
@@ -611,11 +619,11 @@ defineExpose({
           <tr
             v-for="(business, index) in paginatedBusinesses"
             :key="business.id"
-            class="border-b border-gray-800 transition-colors"
+            class="border-b border-default transition-colors"
             :class="{
               'bg-primary-500/10': selectedIds.includes(business.id),
               'bg-primary-500/20': isInDragRange(business.id) && !selectedIds.includes(business.id),
-              'hover:bg-gray-800/50': !selectedIds.includes(business.id) && !isInDragRange(business.id)
+              'hover:bg-elevated/50': !selectedIds.includes(business.id) && !isInDragRange(business.id)
             }"
             @mousedown="handleRowMouseDown(index, $event)"
             @mouseenter="handleRowMouseEnter(index)"
@@ -715,7 +723,7 @@ defineExpose({
       </table>
 
       <!-- Loading overlay -->
-      <div v-if="loading" class="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
+      <div v-if="loading" class="absolute inset-0 bg-muted/50 flex items-center justify-center">
         <UIcon name="i-lucide-loader-2" class="text-3xl animate-spin text-primary-500" />
       </div>
     </div>
@@ -736,7 +744,7 @@ defineExpose({
     </div>
 
     <!-- Pagination -->
-    <div v-if="filteredBusinesses.length > 0" class="flex items-center justify-between pt-4 border-t border-gray-800">
+    <div v-if="filteredBusinesses.length > 0" class="flex items-center justify-between pt-4 border-t border-default">
       <div class="flex items-center gap-4">
         <span class="text-sm text-muted">
           Showing {{ paginationInfo.start }} - {{ paginationInfo.end }} of {{ paginationInfo.total }}
@@ -744,6 +752,7 @@ defineExpose({
         <USelect
           v-model="itemsPerPage"
           :items="pageSizeOptions"
+          size="md"
           class="w-36"
         />
       </div>

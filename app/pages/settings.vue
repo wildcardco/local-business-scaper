@@ -229,7 +229,7 @@ onMounted(() => {
   <div class="space-y-6">
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold">Settings</h1>
+      <h1 class="font-display text-2xl font-semibold tracking-tight">Settings</h1>
       <p class="text-muted">Manage your branding and email appearance</p>
     </div>
 
@@ -247,38 +247,38 @@ onMounted(() => {
         </template>
 
         <div class="space-y-4">
-          <div>
-            <label class="text-sm font-medium mb-2 block">Current Password</label>
+          <UFormField label="Current Password">
             <UInput
               v-model="currentPassword"
               type="password"
               placeholder="Enter current password"
               size="lg"
               autocomplete="current-password"
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <div>
-            <label class="text-sm font-medium mb-2 block">New Password</label>
+          <UFormField label="New Password">
             <UInput
               v-model="newPassword"
               type="password"
               placeholder="Enter new password (min 8 characters)"
               size="lg"
               autocomplete="new-password"
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <div>
-            <label class="text-sm font-medium mb-2 block">Confirm New Password</label>
+          <UFormField label="Confirm New Password">
             <UInput
               v-model="confirmPassword"
               type="password"
               placeholder="Confirm new password"
               size="lg"
               autocomplete="new-password"
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
           <div class="flex justify-end">
             <UButton
@@ -299,23 +299,23 @@ onMounted(() => {
         </template>
 
         <div class="space-y-4">
-          <div>
-            <label class="text-sm font-medium mb-2 block">Company Name</label>
+          <UFormField label="Company Name">
             <UInput
               v-model="companyName"
               placeholder="Wild Card Creative Co."
               size="lg"
+              class="w-full"
             />
-          </div>
+          </UFormField>
 
-          <div>
-            <label class="text-sm font-medium mb-2 block">Tagline</label>
+          <UFormField label="Tagline">
             <UInput
               v-model="tagline"
               placeholder="Your Ace in Digital Success"
               size="lg"
+              class="w-full"
             />
-          </div>
+          </UFormField>
         </div>
       </UCard>
 
@@ -349,36 +349,26 @@ onMounted(() => {
             </ol>
           </div>
 
-          <div>
-            <label class="text-sm font-medium mb-2 block">
-              <UIcon name="i-lucide-user" class="inline mr-1" />
-              Sender Name
-            </label>
+          <UFormField label="Sender Name" help="This will appear as the sender name in recipient inboxes">
             <UInput
               v-model="senderName"
               placeholder="Wild Card Creative"
+              icon="i-lucide-user"
               size="lg"
+              class="w-full"
             />
-            <p class="text-xs text-muted mt-1">
-              This will appear as the sender name in recipient inboxes
-            </p>
-          </div>
+          </UFormField>
 
-          <div>
-            <label class="text-sm font-medium mb-2 block">
-              <UIcon name="i-lucide-mail" class="inline mr-1" />
-              Sender Email Address
-            </label>
+          <UFormField label="Sender Email Address" help="Must be verified in Resend dashboard. Format: name@yourdomain.com">
             <UInput
               v-model="senderEmail"
               type="email"
               placeholder="outreach@wildcardcreativeco.com"
+              icon="i-lucide-mail"
               size="lg"
+              class="w-full"
             />
-            <p class="text-xs text-muted mt-1">
-              Must be verified in Resend dashboard. Format: name@yourdomain.com
-            </p>
-          </div>
+          </UFormField>
         </div>
       </UCard>
 
@@ -390,7 +380,7 @@ onMounted(() => {
 
         <div class="space-y-4">
           <!-- Current Logo Preview -->
-          <div v-if="logoUrl" class="flex items-center gap-4 p-4 bg-surface-muted rounded-lg">
+          <div v-if="logoUrl" class="flex items-center gap-4 p-4 bg-elevated rounded-lg">
             <img
               :src="logoUrl"
               alt="Company Logo"
@@ -443,9 +433,8 @@ onMounted(() => {
           <h3 class="text-lg font-semibold">Color Scheme</h3>
         </template>
 
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="text-sm font-medium mb-2 block">Primary Color</label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <UFormField label="Primary Color" help="Used in outbound emails only — not the dashboard UI">
             <div class="flex gap-2">
               <input
                 v-model="primaryColor"
@@ -455,13 +444,13 @@ onMounted(() => {
               <UInput
                 v-model="primaryColor"
                 placeholder="#8b5cf6"
+                size="lg"
                 class="flex-1"
               />
             </div>
-          </div>
+          </UFormField>
 
-          <div>
-            <label class="text-sm font-medium mb-2 block">Secondary Color</label>
+          <UFormField label="Secondary Color" help="Email header and footer background">
             <div class="flex gap-2">
               <input
                 v-model="secondaryColor"
@@ -471,10 +460,11 @@ onMounted(() => {
               <UInput
                 v-model="secondaryColor"
                 placeholder="#3b1f5c"
+                size="lg"
                 class="flex-1"
               />
             </div>
-          </div>
+          </UFormField>
         </div>
       </UCard>
 
@@ -484,14 +474,14 @@ onMounted(() => {
           <h3 class="text-lg font-semibold">Typography</h3>
         </template>
 
-        <div>
-          <label class="text-sm font-medium mb-2 block">Font Family</label>
+        <UFormField label="Font Family">
           <USelect
             v-model="fontFamily"
-            :options="fontOptions"
+            :items="fontOptions"
             size="lg"
+            class="w-full"
           />
-        </div>
+        </UFormField>
       </UCard>
 
       <!-- Preview -->
@@ -500,7 +490,9 @@ onMounted(() => {
           <h3 class="text-lg font-semibold">Email Preview</h3>
         </template>
 
-        <div class="p-6 bg-white rounded-lg border border-default">
+        <div class="rounded-lg bg-elevated p-3">
+          <p class="eyebrow mb-2">How recipients see it</p>
+          <div class="p-6 bg-white rounded-md shadow-inner ring-1 ring-default">
           <div
             class="space-y-4"
             :style="{
@@ -541,6 +533,7 @@ onMounted(() => {
                 Sample Call-to-Action Link
               </a>
             </div>
+          </div>
           </div>
         </div>
       </UCard>

@@ -13,14 +13,14 @@
     "migrate-to-turso": "tsx scripts/migrate-to-turso.ts"
   },
   "dependencies": {
-    "@iconify-json/lucide": "^1.2.74",
+    "@iconify-json/lucide": "^1.2.123",
     "@iconify-json/simple-icons": "^1.2.59",
     "@imagekit/vue": "^4.0.0",
     "@libsql/client": "^0.14.0",
-    "@nuxt/ui": "^4.2.1",
+    "@nuxt/ui": "^4.10.0",
     "groq-sdk": "^0.37.0",
     "imagekit": "^6.0.0",
-    "nuxt": "^4.2.2",
+    "nuxt": "^4.5.2",
     "nuxt-auth-utils": "^0.5.26",
     "resend": "^6.6.0"
   },

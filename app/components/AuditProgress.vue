@@ -46,18 +46,25 @@ const getStepIcon = (status: string) => {
 
 const getStepColor = (status: string) => {
   switch (status) {
-    case 'complete': return 'text-green-500'
-    case 'active': return 'text-primary-500'
-    case 'error': return 'text-red-500'
-    default: return 'text-gray-500'
+    case 'complete': return 'text-success-400'
+    case 'active': return 'text-primary-400'
+    case 'error': return 'text-error-400'
+    default: return 'text-dimmed'
   }
 }
 
 const getScoreColor = (score: number) => {
-  if (score >= 90) return 'text-green-500'
-  if (score >= 50) return 'text-yellow-500'
-  return 'text-red-500'
+  if (score >= 90) return 'text-success-400'
+  if (score >= 50) return 'text-warning-400'
+  return 'text-error-400'
 }
+
+const isOpen = computed({
+  get: () => props.state.isAuditing || !!props.state.result || !!props.state.error,
+  set: (value: boolean) => {
+    if (!value && !props.state.isAuditing) emit('close')
+  }
+})
 
 const getCategoryColor = (category: string) => {
   switch (category) {
@@ -70,67 +77,58 @@ const getCategoryColor = (category: string) => {
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition
-      enter-active-class="transition-opacity duration-200"
-      enter-from-class="opacity-0"
-      enter-to-class="opacity-100"
-      leave-active-class="transition-opacity duration-150"
-      leave-from-class="opacity-100"
-      leave-to-class="opacity-0"
-    >
-      <div
-        v-if="state.isAuditing || state.result || state.error"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-        @click.self="!state.isAuditing && emit('close')"
-      >
-        <div
-          class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
-        >
-          <!-- Header -->
-          <div class="bg-gray-800 px-6 py-4 border-b border-gray-700">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div
-                  class="w-10 h-10 rounded-xl flex items-center justify-center"
-                  :class="state.error ? 'bg-red-500/20' : state.result ? 'bg-green-500/20' : 'bg-primary-500/20'"
-                >
-                  <UIcon
-                    :name="state.error ? 'i-lucide-alert-triangle' : state.result ? 'i-lucide-check-circle' : 'i-lucide-scan'"
-                    :class="state.error ? 'text-red-500' : state.result ? 'text-green-500' : 'text-primary-500'"
-                    class="text-xl"
-                  />
-                </div>
-                <div>
-                  <h3 class="font-semibold">
-                    {{ state.error ? 'Audit Failed' : state.result ? 'Audit Complete' : 'Running Audit' }}
-                  </h3>
-                  <p class="text-sm text-muted truncate max-w-[250px]" :title="state.businessName || ''">
-                    {{ state.businessName || 'Unknown Business' }}
-                  </p>
-                </div>
+  <UModal
+    v-model:open="isOpen"
+    :dismissible="!state.isAuditing"
+    :close="false"
+    :ui="{ content: 'max-w-md' }"
+  >
+    <template #content>
+      <div class="overflow-hidden">
+        <!-- Header -->
+        <div class="bg-elevated px-6 py-4 border-b border-default">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div
+                class="w-10 h-10 rounded-xl flex items-center justify-center"
+                :class="state.error ? 'bg-error-500/15' : state.result ? 'bg-success-500/15' : 'bg-primary-500/15'"
+              >
+                <UIcon
+                  :name="state.error ? 'i-lucide-alert-triangle' : state.result ? 'i-lucide-check-circle' : 'i-lucide-scan'"
+                  :class="state.error ? 'text-error-400' : state.result ? 'text-success-400' : 'text-primary-400'"
+                  class="text-xl"
+                />
               </div>
-              <UButton
-                v-if="!state.isAuditing"
-                icon="i-lucide-x"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                @click="emit('close')"
-              />
+              <div>
+                <h3 class="font-display font-semibold">
+                  {{ state.error ? 'Audit Failed' : state.result ? 'Audit Complete' : 'Running Audit' }}
+                </h3>
+                <p class="text-sm text-muted truncate max-w-[250px]" :title="state.businessName || ''">
+                  {{ state.businessName || 'Unknown Business' }}
+                </p>
+              </div>
             </div>
-          </div>
-
-          <!-- Progress Bar -->
-          <div v-if="state.isAuditing" class="h-1 bg-gray-800">
-            <div
-              class="h-full bg-primary-500 transition-all duration-500 ease-out"
-              :style="{ width: `${progressPercent}%` }"
+            <UButton
+              v-if="!state.isAuditing"
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              @click="emit('close')"
             />
           </div>
+        </div>
 
-          <!-- Content -->
-          <div class="p-6">
+        <!-- Progress Bar -->
+        <div v-if="state.isAuditing" class="h-1 bg-elevated">
+          <div
+            class="h-full bg-primary-500 transition-all duration-500 ease-out"
+            :style="{ width: `${progressPercent}%` }"
+          />
+        </div>
+
+        <!-- Content -->
+        <div class="p-6">
             <!-- Website being audited -->
             <div v-if="state.website && state.isAuditing" class="mb-4 text-center">
               <p class="text-sm text-muted">Analyzing</p>
@@ -157,7 +155,7 @@ const getCategoryColor = (category: string) => {
                 <div class="flex-1 min-w-0">
                   <p
                     class="text-sm font-medium"
-                    :class="step.status === 'pending' ? 'text-gray-500' : 'text-gray-200'"
+                    :class="step.status === 'pending' ? 'text-dimmed' : 'text-highlighted'"
                   >
                     {{ step.label }}
                   </p>
@@ -170,8 +168,8 @@ const getCategoryColor = (category: string) => {
 
             <!-- Error State -->
             <div v-else-if="state.error" class="text-center py-4">
-              <UIcon name="i-lucide-alert-triangle" class="text-4xl text-red-500 mb-3" />
-              <p class="text-red-400 mb-2">{{ state.error }}</p>
+              <UIcon name="i-lucide-alert-triangle" class="text-4xl text-error-400 mb-3" />
+              <p class="text-error-400 mb-2">{{ state.error }}</p>
               <p class="text-sm text-muted">Please try again or check the website URL.</p>
             </div>
 
@@ -179,7 +177,7 @@ const getCategoryColor = (category: string) => {
             <div v-else-if="state.result" class="space-y-6">
               <!-- Scores Grid -->
               <div class="grid grid-cols-2 gap-4">
-                <div class="bg-gray-800 rounded-xl p-4 text-center">
+                <div class="bg-elevated rounded-xl p-4 text-center">
                   <div
                     class="text-3xl font-bold mb-1"
                     :class="getScoreColor(state.result.performanceScore)"
@@ -188,7 +186,7 @@ const getCategoryColor = (category: string) => {
                   </div>
                   <div class="text-xs text-muted">Performance</div>
                 </div>
-                <div class="bg-gray-800 rounded-xl p-4 text-center">
+                <div class="bg-elevated rounded-xl p-4 text-center">
                   <div
                     class="text-3xl font-bold mb-1"
                     :class="getScoreColor(state.result.seoScore)"
@@ -197,7 +195,7 @@ const getCategoryColor = (category: string) => {
                   </div>
                   <div class="text-xs text-muted">SEO</div>
                 </div>
-                <div class="bg-gray-800 rounded-xl p-4 text-center">
+                <div class="bg-elevated rounded-xl p-4 text-center">
                   <div
                     class="text-3xl font-bold mb-1"
                     :class="getScoreColor(state.result.accessibilityScore)"
@@ -206,8 +204,8 @@ const getCategoryColor = (category: string) => {
                   </div>
                   <div class="text-xs text-muted">Accessibility</div>
                 </div>
-                <div class="bg-gray-800 rounded-xl p-4 text-center">
-                  <div class="text-3xl font-bold mb-1 text-primary-500">
+                <div class="bg-elevated rounded-xl p-4 text-center">
+                  <div class="text-3xl font-bold mb-1 text-primary-400">
                     {{ state.result.leadScore }}
                   </div>
                   <div class="text-xs text-muted">Lead Score</div>
@@ -230,7 +228,7 @@ const getCategoryColor = (category: string) => {
           </div>
 
           <!-- Footer -->
-          <div v-if="!state.isAuditing" class="px-6 py-4 border-t border-gray-700 bg-gray-800/50">
+          <div v-if="!state.isAuditing" class="px-6 py-4 border-t border-default bg-elevated/50">
             <UButton
               block
               :color="state.error ? 'error' : 'primary'"
@@ -239,10 +237,9 @@ const getCategoryColor = (category: string) => {
               {{ state.error ? 'Close' : 'Done' }}
             </UButton>
           </div>
-        </div>
       </div>
-    </Transition>
-  </Teleport>
+    </template>
+  </UModal>
 </template>
 
 

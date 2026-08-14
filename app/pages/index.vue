@@ -177,7 +177,7 @@ const statCards = computed(() => [
   <div class="space-y-6">
     <!-- Page Header -->
     <div>
-      <h1 class="text-2xl font-bold">Dashboard</h1>
+      <h1 class="text-2xl font-bold font-display">Dashboard</h1>
       <p class="text-muted">Search local businesses, audit their websites, and generate leads.</p>
     </div>
 
@@ -210,9 +210,9 @@ const statCards = computed(() => [
     <!-- Search Results -->
     <UCard v-if="searchResults">
       <template #header>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-semibold">Search Results</h3>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <UBadge color="primary" variant="soft">
               {{ searchResults.count }} found
             </UBadge>
@@ -241,9 +241,9 @@ const statCards = computed(() => [
     <!-- Recent Businesses -->
     <UCard v-else-if="recentBusinesses.length > 0 && !hideRecent">
       <template #header>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-semibold">Recent Leads</h3>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <UButton
               icon="i-lucide-eye-off"
               color="neutral"

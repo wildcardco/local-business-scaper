@@ -7,8 +7,8 @@ const activeTab = ref<'sent' | 'drafts'>('sent')
 
 // Filters
 const searchQuery = ref('')
-const statusFilter = ref<string>('')
-const repliesFilter = ref<string>('')
+const statusFilter = ref<string>('all')
+const repliesFilter = ref<string>('all')
 
 // Pagination
 const limit = ref(50)
@@ -25,11 +25,11 @@ const queryParams = computed(() => {
     params.search = searchQuery.value
   }
   
-  if (statusFilter.value) {
+  if (statusFilter.value && statusFilter.value !== 'all') {
     params.status = statusFilter.value
   }
   
-  if (repliesFilter.value) {
+  if (repliesFilter.value && repliesFilter.value !== 'all') {
     params.hasReplies = repliesFilter.value
   }
   
@@ -489,7 +489,7 @@ function prevPage() {
 
 // Status filter options
 const statusOptions = [
-  { value: '', label: 'All Status' },
+  { value: 'all', label: 'All Status' },
   { value: 'sent', label: 'Sent' },
   { value: 'delivered', label: 'Delivered' },
   { value: 'opened', label: 'Opened' },
@@ -499,20 +499,20 @@ const statusOptions = [
 ]
 
 const repliesOptions = [
-  { value: '', label: 'All' },
+  { value: 'all', label: 'All' },
   { value: 'true', label: 'Has Replies' },
   { value: 'false', label: 'No Replies' }
 ]
 </script>
 
 <template>
-  <div class="h-screen flex flex-col overflow-hidden">
+  <div class="h-full min-h-0 flex flex-col overflow-hidden">
     <!-- Draft Editor (Full Width when open) -->
     <div v-if="showDraftEditor" class="flex-1 flex flex-col overflow-hidden">
       <!-- Editor Header -->
-      <div class="border-b border-default bg-surface px-6 py-4 flex-shrink-0">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-4">
+      <div class="border-b border-default bg-muted px-4 sm:px-6 py-4 flex-shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-y-3">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4">
             <UButton
               icon="i-lucide-arrow-left"
               variant="ghost"
@@ -521,9 +521,9 @@ const repliesOptions = [
               Back to Inbox
             </UButton>
             
-            <div class="h-6 w-px bg-default" />
+            <div class="hidden sm:block h-6 w-px bg-default" />
             
-            <h1 class="text-xl font-semibold">
+            <h1 class="font-display text-xl font-semibold tracking-tight">
               {{ currentDraftId ? 'Edit Draft' : 'Compose Email' }}
             </h1>
             
@@ -537,7 +537,7 @@ const repliesOptions = [
             </UBadge>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <UButton
               v-if="currentDraftId"
               icon="i-lucide-trash-2"
@@ -582,8 +582,8 @@ const repliesOptions = [
       </div>
 
       <!-- Editor Body -->
-      <div class="flex-1 overflow-y-auto bg-surface-muted">
-        <div class="max-w-6xl mx-auto py-8 px-6 space-y-6">
+      <div class="flex-1 overflow-y-auto bg-default">
+        <div class="max-w-6xl mx-auto py-6 px-4 sm:py-8 sm:px-6 space-y-6">
           <!-- AI Generation Section -->
           <UCard v-if="draftBusinessId && !draftBodyHtml">
             <template #header>
@@ -624,7 +624,6 @@ const repliesOptions = [
                   @click="generateWithAI"
                   :loading="isGenerating"
                   :disabled="isSending"
-                  class="flex-1"
                 >
                   {{ draftSubject || draftBodyText ? 'Regenerate with AI' : 'Generate Personalized Email' }}
                 </UButton>
@@ -635,18 +634,18 @@ const repliesOptions = [
           <!-- Email Editor -->
           <UCard v-if="draftBodyHtml || editedBody">
             <template #header>
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-4">
+              <div class="flex flex-wrap items-center justify-between gap-y-2">
+                <div class="flex flex-wrap items-center gap-2 sm:gap-4">
                   <h3 class="font-semibold">Email Editor</h3>
                   
                   <!-- Tab Switcher -->
-                  <div class="flex gap-1 bg-surface-muted p-1 rounded-lg">
+                  <div class="flex gap-1 bg-elevated p-1 rounded-lg">
                     <button
                       @click="editorTab = 'preview'"
                       :class="[
                         'px-3 py-1.5 text-sm font-medium rounded transition-colors',
                         editorTab === 'preview'
-                          ? 'bg-surface text-primary'
+                          ? 'bg-accented text-primary'
                           : 'text-muted hover:text-default'
                       ]"
                     >
@@ -658,7 +657,7 @@ const repliesOptions = [
                       :class="[
                         'px-3 py-1.5 text-sm font-medium rounded transition-colors',
                         editorTab === 'edit'
-                          ? 'bg-surface text-primary'
+                          ? 'bg-accented text-primary'
                           : 'text-muted hover:text-default'
                       ]"
                     >
@@ -705,23 +704,26 @@ const repliesOptions = [
                 </div>
               </div>
 
-              <!-- Email Preview (with branded template) -->
-              <div class="rounded-lg border border-default overflow-hidden bg-white">
-                <iframe
-                  ref="previewFrame"
-                  class="w-full border-0"
-                  style="min-height: 600px;"
-                  sandbox="allow-same-origin"
-                />
+              <!-- Email Preview (white document inside dark chrome) -->
+              <div class="rounded-lg bg-elevated p-3">
+                <p class="eyebrow mb-2">Email Preview</p>
+                <div class="rounded-md overflow-hidden bg-white shadow-inner ring-1 ring-default">
+                  <iframe
+                    ref="previewFrame"
+                    class="w-full border-0"
+                    style="min-height: 600px;"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
               </div>
 
               <!-- Audit Summary (if available) -->
-              <div v-if="auditData" class="p-4 bg-surface-muted rounded-lg">
+              <div v-if="auditData" class="p-4 bg-elevated rounded-lg">
                 <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
                   <UIcon name="i-lucide-gauge" />
                   Website Audit Scores Referenced
                 </h4>
-                <div class="grid grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div class="text-center">
                     <div class="text-2xl font-bold" :class="auditData.performance_score >= 90 ? 'text-success' : auditData.performance_score >= 50 ? 'text-warning' : 'text-error'">
                       {{ auditData.performance_score }}
@@ -792,13 +794,13 @@ const repliesOptions = [
       <div class="flex-1 overflow-y-auto p-6">
         <div class="space-y-6">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-bold">Inbox</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">Inbox</h1>
         <p class="text-muted">Track sent emails, drafts, and replies from businesses</p>
       </div>
       
-      <div class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <UButton
           icon="i-lucide-pencil"
           color="primary"
@@ -860,25 +862,29 @@ const repliesOptions = [
     <!-- Filters (only for sent emails) -->
     <UCard v-if="activeTab === 'sent'">
       <div class="flex flex-wrap gap-4">
-        <div class="flex-1 min-w-[250px]">
+        <div class="flex-1 min-w-62.5">
           <UInput
             v-model="searchQuery"
             icon="i-lucide-search"
             placeholder="Search by business, subject, or email..."
+            size="md"
+            class="w-full"
           />
         </div>
         
         <USelect
           v-model="statusFilter"
-          :options="statusOptions"
+          :items="statusOptions"
           placeholder="Filter by status"
+          size="md"
           class="w-40"
         />
         
         <USelect
           v-model="repliesFilter"
-          :options="repliesOptions"
+          :items="repliesOptions"
           placeholder="Filter by replies"
+          size="md"
           class="w-40"
         />
       </div>
@@ -897,12 +903,12 @@ const repliesOptions = [
         <UIcon name="i-lucide-inbox" class="text-4xl text-muted mb-3" />
         <h3 class="text-lg font-semibold mb-2">No emails found</h3>
         <p class="text-muted mb-4">
-          {{ searchQuery || statusFilter || repliesFilter 
+          {{ searchQuery || statusFilter !== 'all' || repliesFilter !== 'all'
             ? 'Try adjusting your filters' 
             : 'Send your first outreach email to see it here' }}
         </p>
         <UButton
-          v-if="!searchQuery && !statusFilter && !repliesFilter"
+          v-if="!searchQuery && statusFilter === 'all' && repliesFilter === 'all'"
           @click="router.push('/businesses')"
         >
           Browse Businesses
@@ -915,7 +921,7 @@ const repliesOptions = [
       <UCard
         v-for="thread in threads"
         :key="thread.id"
-        class="cursor-pointer hover:bg-surface-hover transition-colors"
+        class="cursor-pointer hover:bg-elevated/50 transition-colors"
         @click="openThread(thread.id)"
       >
         <div class="flex items-start justify-between gap-4">
@@ -967,7 +973,7 @@ const repliesOptions = [
       </UCard>
 
       <!-- Pagination -->
-      <div v-if="pagination && threads.length > 0" class="flex items-center justify-between">
+      <div v-if="pagination && threads.length > 0" class="flex flex-wrap items-center justify-between gap-3">
       <p class="text-sm text-muted">
         Showing {{ offset + 1 }}-{{ Math.min(offset + limit, pagination.total) }} of {{ pagination.total }}
       </p>
@@ -1024,7 +1030,7 @@ const repliesOptions = [
         <UCard
           v-for="draft in drafts"
           :key="draft.id"
-          class="cursor-pointer hover:bg-surface-hover transition-colors"
+          class="cursor-pointer hover:bg-elevated/50 transition-colors"
           @click="openDraft(draft.id)"
         >
           <div class="flex items-start justify-between gap-4">
@@ -1077,26 +1083,16 @@ const repliesOptions = [
     </div>
 
     <!-- Thread Modal -->
-    <UModal v-model:open="showThreadModal" :ui="{ width: 'max-w-4xl' }">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center justify-between">
-              <h2 class="text-lg font-semibold">Email Thread</h2>
-              <UButton
-                icon="i-lucide-x"
-                variant="ghost"
-                size="sm"
-                @click="closeThreadModal"
-              />
-            </div>
-          </template>
-
-          <EmailThread
-            v-if="selectedThreadId"
-            :thread-id="selectedThreadId"
-          />
-        </UCard>
+    <UModal
+      v-model:open="showThreadModal"
+      title="Email Thread"
+      :ui="{ content: 'sm:max-w-4xl' }"
+    >
+      <template #body>
+        <EmailThread
+          v-if="selectedThreadId"
+          :thread-id="selectedThreadId"
+        />
       </template>
     </UModal>
         </div>
