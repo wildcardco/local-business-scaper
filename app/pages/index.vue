@@ -128,6 +128,10 @@ async function handleReject(id: string) {
   }
 }
 
+function handleGenerateMockup(id: string) {
+  useGenerateMockup().open(id)
+}
+
 function handleClearRecent() {
   hideRecent.value = true
   toast.add({
@@ -235,6 +239,7 @@ const statCards = computed(() => [
         @view="handleView"
         @approve="handleApprove"
         @reject="handleReject"
+        @generate="handleGenerateMockup"
       />
     </UCard>
 
@@ -271,6 +276,7 @@ const statCards = computed(() => [
         @view="handleView"
         @approve="handleApprove"
         @reject="handleReject"
+        @generate="handleGenerateMockup"
       />
     </UCard>
 

@@ -77,6 +77,10 @@ async function handleReject(id: string) {
   }
 }
 
+function handleGenerateMockup(id: string) {
+  useGenerateMockup().open(id)
+}
+
 function handleSelectionChange(ids: string[]) {
   selectedBusinessIds.value = ids
 }
@@ -215,6 +219,7 @@ function clearSelection() {
         @view="handleView"
         @approve="handleApprove"
         @reject="handleReject"
+        @generate="handleGenerateMockup"
         @update:selected="handleSelectionChange"
       />
 

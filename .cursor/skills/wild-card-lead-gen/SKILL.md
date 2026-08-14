@@ -33,7 +33,7 @@ If the vault is available, read the matching note before large changes. If it is
 |---|---|
 | Framework | Nuxt ^4.5, `app/` directory |
 | UI | `@nuxt/ui` ^4.10 — no extra `@tailwindcss/vite` |
-| Auth | `nuxt-auth-utils` — **username** + password, sealed cookie |
+| Auth | `nuxt-auth-utils` — **email code** (Resend) + sealed cookie. No passwords. |
 | DB | `@libsql/client` — `file:dev.db` in dev, Turso in prod. **No Prisma. No Drizzle.** |
 | Search | RapidAPI `local-business-data.p.rapidapi.com` (`server/utils/openweb-ninja.ts`) |
 | Audit | PageSpeed Insights v5, strategy `mobile` |
@@ -50,7 +50,7 @@ If the vault is available, read the matching note before large changes. If it is
 - Scope SQL by `event.context.user.id` except `email_templates` (global).
 - `ui.colors` only in `app/app.config.ts` (`primary: 'wcRed'`, `secondary: 'wcGold'`, `neutral: 'wcNeutral'`, etc.).
 - Dashboard uses official-site red/gold dark-only tokens; do not revert to purple. No `dark:` pairs in Vue files.
-- Register always creates `role: 'user'`. Open registration — do not advertise `/register`.
+- Register always creates `role: 'user'`. **Allowlisted emails only** — `ALLOWED_EMAILS` comma list, trim/lowercase. Fail closed if empty. Re-check on every API call. Sign-in is email → 6-digit Resend code. `/register` redirects to `/login`.
 - Outreach send: business must be `approved` and have `email`.
 - Batch audit max 50, sequential.
 - `/api/emails/webhook` is session-gated and unsigned — do not assume tracking works.
@@ -69,13 +69,13 @@ Status: `new → approved → sent → responded | rejected`.
 
 ## Pages
 
-`/login` `/register` (layout `auth`) · `/` dashboard · `/businesses` · `/businesses/[id]` · `/queue` · `/inbox` · `/compose` · `/templates` · `/settings`
+`/login` (layout `auth`) · `/` dashboard · `/businesses` · `/businesses/[id]` · `/studio` · `/studio/new` · `/studio/[id]` · `/queue` · `/inbox` · `/compose` · `/templates` · `/settings`
 
 Chrome lives in `app.vue` (`UDashboardSidebar`), not `layouts/default.vue`.
 
 ## Env (names matter)
 
-`NUXT_SESSION_PASSWORD` `DATABASE_URL` `TURSO_DB_URL` `TURSO_KEY` `RAPIDAPI_KEY` `RAPIDAPI_HOST` `GOOGLE_PAGESPEED_API_KEY` `RESEND_API_KEY` **`GROQ_API`** `N8N_WEBHOOK_URL` `IMAGE_KIT_URL` `IMAGE_KIT_PUBLIC_KEY` `IMAGE_KIT_PRIVATE_KEY`
+`NUXT_SESSION_PASSWORD` `DATABASE_URL` `TURSO_DB_URL` `TURSO_KEY` `RAPIDAPI_KEY` `RAPIDAPI_HOST` `GOOGLE_PAGESPEED_API_KEY` `RESEND_API_KEY` **`GROQ_API`** `N8N_WEBHOOK_URL` `N8N_API_KEY` `N8N_BASE_URL` `N8N_STUDIO_WEBHOOK_URL` `N8N_STUDIO_SECRET` `N8N_LEADS_TABLE_ID` `ALLOWED_EMAILS` `IMAGE_KIT_URL` `IMAGE_KIT_PUBLIC_KEY` `IMAGE_KIT_PRIVATE_KEY`
 
 ## Local boot
 

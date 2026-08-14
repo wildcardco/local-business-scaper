@@ -1,28 +1,24 @@
-// Server-side auth middleware
-// Protects API routes that require authentication
+import { isEmailAllowed } from '~~/server/utils/allowlist'
 
 export default defineEventHandler(async (event) => {
-  // Only apply to API routes (except auth endpoints)
   const path = getRequestURL(event).pathname
 
-  // Skip auth for public endpoints
   const publicPaths = [
     '/api/auth/',
-    '/api/_auth/',  // nuxt-auth-utils built-in session endpoint
-    '/api/_nuxt_icon/', // Nuxt icon API
-    '/api/health'
+    '/api/_auth/',
+    '/api/_nuxt_icon/',
+    '/api/health',
+    '/api/mockups/webhook'
   ]
 
   if (publicPaths.some(p => path.startsWith(p))) {
     return
   }
 
-  // Skip for non-API routes
   if (!path.startsWith('/api/')) {
     return
   }
 
-  // Require authentication for all other API routes
   const session = await getUserSession(event)
 
   if (!session?.user) {
@@ -32,6 +28,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Set user in event context for downstream handlers
+  if (!isEmailAllowed(session.user.email)) {
+    await clearUserSession(event)
+    throw createError({
+      statusCode: 403,
+      message: 'This email is not authorized'
+    })
+  }
+
   event.context.user = session.user
 })

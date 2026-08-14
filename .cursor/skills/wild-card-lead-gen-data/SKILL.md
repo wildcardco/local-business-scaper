@@ -22,7 +22,7 @@ Schema: `initializeSchema()` on Nitro start. `CREATE TABLE IF NOT EXISTS` + try/
 
 ## Local database (dev.db)
 
-`dev.db` is **not tracked in git** (removed Aug 2026; gitignored via `*.db`). Fresh clones start with no database — `initializeSchema()` creates an empty one automatically on first `npm run dev`, then register a user through the app at `/register`.
+`dev.db` is **not tracked in git** (removed Aug 2026; gitignored via `*.db`). Fresh clones start with no database — `initializeSchema()` creates an empty one automatically on first `npm run dev`, then sign in with an allowlisted email code.
 
 Local `dev.db` and production Turso are **separate databases with separate accounts**. Production credentials will not log in locally and vice versa. Never commit `dev.db` or seed it into the repo.
 
@@ -30,27 +30,27 @@ Local `dev.db` and production Turso are **separate databases with separate accou
 
 | Table | Scope | Notes |
 |---|---|---|
-| `users` | — | `username` UNIQUE, `password_hash`, `role` default `user` |
+| `users` | — | `username` UNIQUE, **`email` UNIQUE**, `password_hash` leftover unused, `role` default `user`. Allowlisted emails only. Sign-in via `login_codes`. |
+| `login_codes` | email | Hashed 6-digit code, 10 min expiry, max 5 attempts |
 | `searches` | user | query + location |
-| `businesses` | user | `place_id` **UNIQUE globally**; social cols via ALTER |
+| `businesses` | user | `search_id` nullable; **`UNIQUE(user_id, place_id)`** where place_id is not null (not global unique) |
 | `audits` | 1:1 business | Lighthouse + CWV + `raw_lighthouse_json` |
 | `email_templates` | **global** | not per-user |
 | `outreach_logs` | user | Resend `message_id`, `ai_generated` |
 | `email_replies` | log | inbound (helper not routed) |
 | `email_drafts` | user | |
-| `branding_settings` | user | defaults `#D6293E` / `#2d1818` (red/burgundy — purple retired Aug 2026) |
+| `branding_settings` | user | defaults `#D6293E` / `#2d1818`. Also `ai_model` (default `claude-fable-5`), `ai_max_tokens` (16000), `pitch_max_tokens` (1500) |
+| `mockups` | user | Studio + n8n digest rows. Keyed by `place_id` + owner slug |
 
-Indexes: businesses(user, search, status), searches(user), outreach_logs(user, business), email_replies(outreach).
+Indexes: businesses(user, search, status, unique user+place), searches(user), outreach_logs(user, business), email_replies(outreach), mockups(user, business, place).
 
 SQLite booleans = INTEGER 0/1. Timestamps = `datetime('now')` text.
 
 ## Session user
 
 ```ts
-{ id: string; username: string; name: string; role: string }
+{ id: string; username: string; name: string; email: string; role: string }
 ```
-
-`AuthUser.email` in `server/utils/auth.ts` is unused. Prefer `#auth-utils` User.
 
 ## Scoring (`lead-scorer.ts`)
 
@@ -84,16 +84,18 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 
 ## API map (session unless noted)
 
-**Public prefix:** `/api/auth/*` `/api/_auth/` `/api/_nuxt_icon/` `/api/health`
+**Public prefix:** `/api/auth/*` `/api/_auth/` `/api/_nuxt_icon/` `/api/health` `/api/mockups/webhook`
 
 | Method | Path |
 |---|---|
-| POST | `/api/auth/register` `login` `logout` `change-password` |
+| POST | `/api/auth/request-code` `login` `logout` |
 | GET | `/api/auth/session` |
-| POST | `/api/search` |
-| GET | `/api/autocomplete` `/api/businesses` `/api/businesses/[id]` |
+| POST | `/api/search` `/api/businesses/manual` |
+| GET | `/api/autocomplete` `/api/businesses` `/api/businesses/[id]` `/api/mockups` `/api/mockups/[id]` |
 | PATCH | `/api/businesses/[id]` |
 | POST | `/api/businesses/delete` `[id]/audit` `[id]/scrape-contacts` `/api/audit/batch` |
+| POST | `/api/mockups/generate` `/api/mockups/sync` `/api/mockups/[id]/revise` `pitch` `photos` |
+| POST | `/api/mockups/webhook` (public, `X-Studio-Secret`) |
 | GET/POST | `/api/templates` `/api/drafts` `/api/branding` |
 | PATCH/DEL | `/api/templates/[id]` |
 | POST | `/api/templates/seed` `/api/emails/generate` `/api/emails/webhook` |
@@ -104,7 +106,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | POST | `/api/export/n8n` `/api/report/batch` `email` `n8n` |
 | GET | `/api/imagekit/auth` |
 
-Webhook is **not** actually public — middleware will 401 Resend.
+Studio webhook `/api/mockups/webhook` is public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated.
 
 ## Categories
 
@@ -112,4 +114,10 @@ Webhook is **not** actually public — middleware will 401 Resend.
 
 ## Migrate to Turso
 
-`npm run migrate-to-turso` — needs `TURSO_DB_URL` + `TURSO_KEY`. Order: users → searches → businesses → audits → email_templates → outreach_logs → email_replies → email_drafts → branding_settings.
+`npm run migrate-to-turso` — needs `TURSO_DB_URL` + `TURSO_KEY`. Order: users → searches → businesses → audits → email_templates → outreach_logs → email_replies → email_drafts → branding_settings → mockups.
+
+`npm run backfill-user-emails` — maps `ryan` / `aaron` / `chase` usernames to allowlisted addresses.
+
+## Studio AI
+
+Per-user in `branding_settings`. Defaults match live n8n: HTML `claude-fable-5` @ 16000 tokens, pitch 1500 tokens. Options: Haiku (cheap), Sonnet, Fable (current HTML), Opus. Sent on every Studio fire as `model`, `max_tokens`, `pitch_max_tokens`, `research_model`.

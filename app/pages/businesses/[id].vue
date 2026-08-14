@@ -10,6 +10,7 @@ const business = computed(() => data.value?.business)
 
 const isAuditing = ref(false)
 const isScrapingContacts = ref(false)
+const isGeneratingMockup = ref(false)
 const showEmailComposer = ref(false)
 const emailMode = ref<'ai' | 'template'>('ai')
 const selectedTemplateId = ref<string | undefined>()
@@ -90,6 +91,10 @@ function openAIEmailComposer() {
 function handleEmailSent() {
   showEmailComposer.value = false
   refresh()
+}
+
+function generateMockup() {
+  useGenerateMockup().open(id)
 }
 
 async function scrapeContacts() {
@@ -256,8 +261,17 @@ function hasSocialMedia(contactsData: any): boolean {
           <template #footer>
             <div class="flex flex-wrap gap-2">
               <UButton
+                icon="i-lucide-palette"
+                :loading="isGeneratingMockup"
+                @click="generateMockup"
+              >
+                Generate mockup
+              </UButton>
+
+              <UButton
                 v-if="business.website"
                 icon="i-lucide-scan"
+                variant="outline"
                 :loading="isAuditing"
                 @click="runAudit"
               >
@@ -290,7 +304,7 @@ function hasSocialMedia(contactsData: any): boolean {
               >
                 <UButton
                   icon="i-lucide-sparkles"
-                  color="primary"
+                  variant="outline"
                   :disabled="business.status !== 'approved' || !business.email"
                   @click="openAIEmailComposer"
                 >

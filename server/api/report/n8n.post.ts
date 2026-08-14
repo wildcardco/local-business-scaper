@@ -3,6 +3,7 @@ import { buildReportData, generateHtmlReport, generateMarkdownReport } from '~~/
 import type { N8nReportPayload, ReportFormat } from '~~/shared/types'
 
 export default defineEventHandler(async (event) => {
+  const user = event.context.user
   const config = useRuntimeConfig()
   const body = await readBody(event)
 
@@ -37,9 +38,9 @@ export default defineEventHandler(async (event) => {
           a.has_ssl, a.detected_platform, a.audited_at
         FROM businesses b
         LEFT JOIN audits a ON b.id = a.business_id
-        WHERE b.id = ?
+        WHERE b.id = ? AND b.user_id = ?
       `,
-      args: [businessId]
+      args: [businessId, user.id]
     })
 
     if (result.rows.length === 0) {

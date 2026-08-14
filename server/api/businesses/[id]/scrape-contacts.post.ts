@@ -1,5 +1,17 @@
 import { db } from '~~/server/utils/db'
 
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return null
+}
+
+function socialUrl(value: unknown): string | null {
+  return firstString(value)
+}
+
 export default defineEventHandler(async (event) => {
   const user = event.context.user
   const id = getRouterParam(event, 'id')
@@ -18,7 +30,6 @@ export default defineEventHandler(async (event) => {
       throw new Error('RAPIDAPI_KEY is not configured')
     }
 
-    // Fetch business to get place_id
     const businessResult = await db.execute({
       sql: 'SELECT * FROM businesses WHERE id = ? AND user_id = ?',
       args: [id, user.id]
@@ -37,11 +48,10 @@ export default defineEventHandler(async (event) => {
     if (!placeId) {
       throw createError({
         statusCode: 400,
-        message: 'Business has no place_id to fetch details'
+        message: 'No Google listing on file for this business'
       })
     }
 
-    // Fetch detailed business info from RapidAPI
     const detailsUrl = new URLSearchParams({
       business_id: placeId,
       extract_emails_and_contacts: 'true',
@@ -66,93 +76,112 @@ export default defineEventHandler(async (event) => {
     }
 
     const data = await response.json()
-    console.log('✅ RapidAPI response received:', { hasData: !!data.data, dataLength: data.data?.length })
-    
-    // data.data is an array, get first business
+
     if (!data.data || data.data.length === 0) {
       throw new Error('No business data returned from API')
     }
-    
-    const businessData = data.data[0]
 
-    // Extract email and contacts
-    const email = businessData.emails_and_contacts?.emails?.[0] || null
-    const phoneNumbers = businessData.emails_and_contacts?.phone_numbers || []
-    const phone = phoneNumbers[0] || business.phone
+    const listing = data.data[0]
+    const contacts = listing.emails_and_contacts || {}
+    const emails = Array.isArray(contacts.emails) ? contacts.emails : []
+    const extraPhones = Array.isArray(contacts.phone_numbers) ? contacts.phone_numbers : []
 
-    // Store full contacts data as JSON for display
-    const contactsData = businessData.emails_and_contacts ? JSON.stringify(businessData.emails_and_contacts) : null
+    const name = firstString(listing.name) || (business.name as string)
+    const website = firstString(listing.website) || (business.website as string | null)
+    const phone = firstString(listing.phone_number, extraPhones[0]) || (business.phone as string | null)
+    const email = firstString(emails[0]) || (business.email as string | null)
+    const address = firstString(listing.full_address) || (business.address as string | null)
+    const city = firstString(listing.city) || (business.city as string | null)
+    const state = firstString(listing.state) || (business.state as string | null)
+    const zipCode = firstString(listing.postal_code) || (business.zip_code as string | null)
+    const category = firstString(listing.types?.[0], listing.type) || (business.category as string | null)
+    const googleMapsUrl = firstString(listing.google_maps_url) || (business.google_maps_url as string | null)
 
-    // Extract social media links
-    const facebook = businessData.emails_and_contacts?.facebook || null
-    const instagram = businessData.emails_and_contacts?.instagram || null
-    const twitter = businessData.emails_and_contacts?.twitter || null
-    const linkedin = businessData.emails_and_contacts?.linkedin || null
-    const youtube = businessData.emails_and_contacts?.youtube || null
-    const tiktok = businessData.emails_and_contacts?.tiktok || null
-    const yelp = businessData.emails_and_contacts?.yelp || null
+    const facebook = socialUrl(contacts.facebook)
+    const instagram = socialUrl(contacts.instagram)
+    const twitter = socialUrl(contacts.twitter)
+    const linkedin = socialUrl(contacts.linkedin)
+    const youtube = socialUrl(contacts.youtube)
+    const tiktok = socialUrl(contacts.tiktok)
+    const yelp = socialUrl(contacts.yelp)
 
-    console.log('📧 Extracted contact data:', { email, phone, hasContactsData: !!contactsData })
+    const contactsData = Object.keys(contacts).length ? JSON.stringify(contacts) : (business.contacts_data as string | null)
 
-    // Update business record with new contact info
-    // Try to update with social media columns, fall back if they don't exist
-    console.log('💾 Updating database...')
     try {
       await db.execute({
-        sql: `UPDATE businesses 
-              SET email = ?, phone = ?, contacts_data = ?,
+        sql: `UPDATE businesses
+              SET name = ?, website = ?, phone = ?, email = ?, address = ?, city = ?, state = ?, zip_code = ?,
+                  category = ?, google_maps_url = ?, contacts_data = ?,
                   facebook = ?, instagram = ?, twitter = ?, linkedin = ?,
                   youtube = ?, tiktok = ?, yelp = ?,
                   updated_at = datetime('now')
-              WHERE id = ?`,
-        args: [email, phone, contactsData, facebook, instagram, twitter, linkedin, youtube, tiktok, yelp, id]
+              WHERE id = ? AND user_id = ?`,
+        args: [
+          name, website, phone, email, address, city, state, zipCode,
+          category, googleMapsUrl, contactsData,
+          facebook, instagram, twitter, linkedin, youtube, tiktok, yelp,
+          id, user.id
+        ]
       })
-      console.log('✅ Database updated with social media fields')
-    } catch (dbError) {
-      console.warn('⚠️ Could not update social media fields, trying without them:', dbError)
-      // Fall back to updating just the core fields if social media columns don't exist yet
+    } catch {
       await db.execute({
-        sql: `UPDATE businesses 
-              SET email = ?, phone = ?, contacts_data = ?, updated_at = datetime('now')
-              WHERE id = ?`,
-        args: [email, phone, contactsData, id]
+        sql: `UPDATE businesses
+              SET name = ?, website = ?, phone = ?, email = ?, address = ?, city = ?, state = ?,
+                  category = ?, contacts_data = ?, updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+        args: [name, website, phone, email, address, city, state, category, contactsData, id, user.id]
       })
-      console.log('✅ Database updated with core fields only')
     }
+
+    const socialMedia = { facebook, instagram, twitter, linkedin, youtube, tiktok, yelp }
+    const foundBits = [
+      email && `email ${email}`,
+      phone && `phone ${phone}`,
+      facebook && 'Facebook',
+      instagram && 'Instagram'
+    ].filter(Boolean)
 
     return {
       success: true,
-      message: email 
-        ? `Found email: ${email}` 
-        : 'No email found, but business updated',
+      message: foundBits.length
+        ? `Updated from Google listing: ${foundBits.join(', ')}`
+        : 'Google listing refreshed, no extra contacts found',
+      business: {
+        name,
+        website,
+        phone,
+        email,
+        address,
+        city,
+        state,
+        zipCode,
+        category,
+        googleMapsUrl,
+        contactsData: contacts,
+        facebook,
+        instagram,
+        twitter,
+        linkedin,
+        youtube,
+        tiktok,
+        yelp
+      },
       contactsFound: {
         email,
         phone,
-        emailsCount: businessData.emails_and_contacts?.emails?.length || 0,
-        phonesCount: phoneNumbers.length,
-        socialMedia: {
-          facebook,
-          instagram,
-          twitter,
-          linkedin,
-          youtube,
-          tiktok,
-          yelp
-        }
+        emailsCount: emails.length,
+        phonesCount: extraPhones.length,
+        socialMedia
       }
     }
   } catch (error: unknown) {
-    console.error('❌ Scrape contacts error:', error)
     if ((error as { statusCode?: number }).statusCode) {
       throw error
     }
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorStack = error instanceof Error ? error.stack : undefined
-    console.error('Error details:', { errorMessage, errorStack })
     throw createError({
       statusCode: 500,
       message: `Failed to scrape contacts: ${errorMessage}`
     })
   }
 })
-

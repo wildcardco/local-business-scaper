@@ -88,6 +88,8 @@ onMounted(() => {
 })
 
 // Load draft if draftId is provided
+const studioMockupId = ref<string | null>(null)
+
 onMounted(async () => {
   if (draftId) {
     await loadDraft()
@@ -95,6 +97,16 @@ onMounted(async () => {
     await loadBusiness()
   }
 })
+
+async function loadStudioLink() {
+  if (!businessId) return
+  try {
+    const result = await $fetch('/api/mockups', { query: { businessId } })
+    studioMockupId.value = result.mockups?.[0]?.id || null
+  } catch {
+    studioMockupId.value = null
+  }
+}
 
 async function loadDraft() {
   try {
@@ -137,6 +149,7 @@ async function loadBusiness() {
       if (response.business.audit) {
         auditData.value = response.business.audit
       }
+      await loadStudioLink()
     }
   } catch (error) {
     toast.add({
@@ -408,6 +421,21 @@ async function deleteDraft() {
           </UButton>
         </div>
       </div>
+    </div>
+
+    <div v-if="studioMockupId" class="px-4 sm:px-6 py-3 bg-elevated border-b border-default shrink-0">
+      <p class="text-sm text-muted">
+        This lead has a Studio mockup. Prefer the n8n pitch writer over Groq when you want copy that matches the sample site.
+      </p>
+      <UButton
+        class="mt-2"
+        size="sm"
+        variant="outline"
+        icon="i-lucide-palette"
+        :to="`/studio/${studioMockupId}`"
+      >
+        Open in Studio
+      </UButton>
     </div>
 
     <!-- Editor Body -->

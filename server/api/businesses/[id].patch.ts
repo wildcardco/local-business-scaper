@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { status, email, leadScore, leadCategory } = body
+  const { status, leadCategory } = body
 
   // Validate status if provided
   const validStatuses = ['new', 'approved', 'sent', 'responded', 'rejected']
@@ -46,33 +46,34 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Build dynamic UPDATE query
     const updates: string[] = [`updated_at = datetime('now')`]
     const args: (string | number | null)[] = []
 
-    if (status !== undefined) {
-      updates.push('status = ?')
-      args.push(status)
-      if (status === 'approved') {
-        updates.push(`approved_at = datetime('now')`)
-      } else if (status === 'sent') {
-        updates.push(`sent_at = datetime('now')`)
+    const fieldMap: Record<string, string> = {
+      status: 'status',
+      email: 'email',
+      leadScore: 'lead_score',
+      leadCategory: 'lead_category',
+      name: 'name',
+      website: 'website',
+      phone: 'phone',
+      address: 'address',
+      city: 'city',
+      state: 'state',
+      category: 'category'
+    }
+
+    for (const [key, column] of Object.entries(fieldMap)) {
+      if (body[key] !== undefined) {
+        updates.push(`${column} = ?`)
+        args.push(body[key] === '' ? null : body[key])
       }
     }
 
-    if (email !== undefined) {
-      updates.push('email = ?')
-      args.push(email)
-    }
-
-    if (leadScore !== undefined) {
-      updates.push('lead_score = ?')
-      args.push(leadScore)
-    }
-
-    if (leadCategory !== undefined) {
-      updates.push('lead_category = ?')
-      args.push(leadCategory)
+    if (body.status === 'approved') {
+      updates.push(`approved_at = datetime('now')`)
+    } else if (body.status === 'sent') {
+      updates.push(`sent_at = datetime('now')`)
     }
 
     args.push(id)

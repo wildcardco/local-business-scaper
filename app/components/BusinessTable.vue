@@ -36,6 +36,7 @@ const emit = defineEmits<{
   view: [id: string]
   approve: [id: string]
   reject: [id: string]
+  generate: [id: string]
   'update:selected': [ids: string[]]
 }>()
 
@@ -703,7 +704,8 @@ defineExpose({
               <UDropdownMenu
                 :items="[[
                   { label: 'View Details', icon: 'i-lucide-eye', onSelect: () => emit('view', business.id) },
-                  { label: 'Run Audit', icon: 'i-lucide-scan', disabled: !business.website, onSelect: () => emit('audit', business.id) }
+                  { label: 'Run Audit', icon: 'i-lucide-scan', disabled: !business.website, onSelect: () => emit('audit', business.id) },
+                  { label: 'Generate mockup', icon: 'i-lucide-palette', onSelect: () => emit('generate', business.id) }
                 ], [
                   { label: 'Approve', icon: 'i-lucide-check', disabled: business.status !== 'new', onSelect: () => emit('approve', business.id) },
                   { label: 'Reject', icon: 'i-lucide-x', color: 'error', disabled: business.status !== 'new', onSelect: () => emit('reject', business.id) }

@@ -6,6 +6,7 @@ declare module '#auth-utils' {
     id: string
     username: string
     name: string
+    email: string
     role: string
   }
 
@@ -22,6 +23,7 @@ declare module 'h3' {
       id: string
       username: string
       name: string
+      email: string
       role: string
     }
   }

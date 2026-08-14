@@ -40,6 +40,11 @@ const navigation: NavigationMenuItem[][] = [[
     icon: 'i-lucide-building-2'
   },
   {
+    label: 'Studio',
+    to: '/studio',
+    icon: 'i-lucide-palette'
+  },
+  {
     label: 'Approval Queue',
     to: '/queue',
     icon: 'i-lucide-check-square'
@@ -189,6 +194,8 @@ onMounted(() => {
       </UDashboardGroup>
 
       <UToaster />
+
+      <GenerateMockupModal />
 
       <!-- Debug Panel for API logging (toggle with Ctrl+Shift+D) -->
       <ClientOnly>

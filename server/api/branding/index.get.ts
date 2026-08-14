@@ -1,4 +1,11 @@
 import { db } from '~~/server/utils/db'
+import {
+  clampTokens,
+  DEFAULT_AI_MAX_TOKENS,
+  DEFAULT_AI_MODEL,
+  DEFAULT_PITCH_MAX_TOKENS,
+  isStudioAiModel
+} from '~~/shared/studio-ai'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -29,6 +36,9 @@ export default defineEventHandler(async (event) => {
         primaryColor: branding.primary_color,
         secondaryColor: branding.secondary_color,
         fontFamily: branding.font_family,
+        aiModel: isStudioAiModel(branding.ai_model) ? branding.ai_model : DEFAULT_AI_MODEL,
+        aiMaxTokens: clampTokens(branding.ai_max_tokens, DEFAULT_AI_MAX_TOKENS),
+        pitchMaxTokens: clampTokens(branding.pitch_max_tokens, DEFAULT_PITCH_MAX_TOKENS, 256, 8000),
         createdAt: branding.created_at,
         updatedAt: branding.updated_at
       }
@@ -41,4 +51,3 @@ export default defineEventHandler(async (event) => {
     })
   }
 })
-

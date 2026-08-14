@@ -37,6 +37,7 @@ const tursoDb = createClient({
 // Tables to migrate (in order due to foreign keys)
 const tables = [
   'users',
+  'login_codes',
   'searches',
   'businesses',
   'audits',
@@ -44,7 +45,8 @@ const tables = [
   'outreach_logs',
   'email_replies',
   'email_drafts',
-  'branding_settings'
+  'branding_settings',
+  'mockups'
 ]
 
 async function migrateTable(tableName: string) {

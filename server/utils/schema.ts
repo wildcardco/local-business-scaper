@@ -1,14 +1,108 @@
 import { db } from './db'
 
-// Initialize database schema
-// Run once on startup or via API endpoint
+async function tryAlter(sql: string) {
+  try {
+    await db.execute(sql)
+  } catch {
+    // Column or index might already exist
+  }
+}
+
+async function migrateBusinessesTable() {
+  const master = await db.execute(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'businesses'`
+  )
+  const createSql = String(master.rows[0]?.sql || '')
+  if (!createSql) return
+
+  const hasGlobalPlaceUnique = /place_id TEXT UNIQUE/i.test(createSql)
+  const searchNotNull = /search_id TEXT NOT NULL/i.test(createSql)
+
+  if (!hasGlobalPlaceUnique && !searchNotNull) {
+    await tryAlter(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_businesses_user_place ON businesses(user_id, place_id) WHERE place_id IS NOT NULL`
+    )
+    return
+  }
+
+  try {
+    await db.execute('PRAGMA foreign_keys = OFF')
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS businesses_migrating (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        search_id TEXT,
+        name TEXT NOT NULL,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        zip_code TEXT,
+        phone TEXT,
+        website TEXT,
+        email TEXT,
+        google_maps_url TEXT,
+        place_id TEXT,
+        category TEXT,
+        rating REAL,
+        review_count INTEGER,
+        price_level TEXT,
+        lead_score INTEGER DEFAULT 0,
+        lead_category TEXT,
+        status TEXT DEFAULT 'new',
+        approved_at TEXT,
+        sent_at TEXT,
+        contacts_data TEXT,
+        facebook TEXT,
+        instagram TEXT,
+        twitter TEXT,
+        linkedin TEXT,
+        youtube TEXT,
+        tiktok TEXT,
+        yelp TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE SET NULL
+      )
+    `)
+
+    const info = await db.execute('PRAGMA table_info(businesses)')
+    const existingCols = new Set(info.rows.map(row => String(row.name)))
+    const targetCols = [
+      'id', 'user_id', 'search_id', 'name', 'address', 'city', 'state', 'zip_code',
+      'phone', 'website', 'email', 'google_maps_url', 'place_id', 'category', 'rating',
+      'review_count', 'price_level', 'lead_score', 'lead_category', 'status',
+      'approved_at', 'sent_at', 'contacts_data', 'facebook', 'instagram', 'twitter',
+      'linkedin', 'youtube', 'tiktok', 'yelp', 'created_at', 'updated_at'
+    ]
+    const copyCols = targetCols.filter(col => existingCols.has(col))
+    const colList = copyCols.join(', ')
+
+    await db.execute(`INSERT INTO businesses_migrating (${colList}) SELECT ${colList} FROM businesses`)
+    await db.execute('DROP TABLE businesses')
+    await db.execute('ALTER TABLE businesses_migrating RENAME TO businesses')
+    await db.execute('PRAGMA foreign_keys = ON')
+  } catch (error) {
+    console.warn('Could not rebuild businesses table (place_id / search_id). Continuing with additive indexes.', error)
+    try {
+      await db.execute('PRAGMA foreign_keys = ON')
+    } catch {
+      // ignore
+    }
+  }
+
+  await tryAlter(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_businesses_user_place ON businesses(user_id, place_id) WHERE place_id IS NOT NULL`
+  )
+}
+
 export async function initializeSchema() {
-  // Users table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
+      email TEXT UNIQUE,
       password_hash TEXT NOT NULL,
       role TEXT DEFAULT 'user',
       last_login_at TEXT,
@@ -17,7 +111,21 @@ export async function initializeSchema() {
     )
   `)
 
-  // Searches table
+  await tryAlter(`ALTER TABLE users ADD COLUMN email TEXT`)
+  await tryAlter(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL`)
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS login_codes (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_login_codes_email ON login_codes(email)`)
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS searches (
       id TEXT PRIMARY KEY,
@@ -29,12 +137,11 @@ export async function initializeSchema() {
     )
   `)
 
-  // Businesses table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS businesses (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      search_id TEXT NOT NULL,
+      search_id TEXT,
       name TEXT NOT NULL,
       address TEXT,
       city TEXT,
@@ -44,7 +151,7 @@ export async function initializeSchema() {
       website TEXT,
       email TEXT,
       google_maps_url TEXT,
-      place_id TEXT UNIQUE,
+      place_id TEXT,
       category TEXT,
       rating REAL,
       review_count INTEGER,
@@ -58,11 +165,12 @@ export async function initializeSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE CASCADE
+      FOREIGN KEY (search_id) REFERENCES searches(id) ON DELETE SET NULL
     )
   `)
 
-  // Audits table
+  await migrateBusinessesTable()
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS audits (
       id TEXT PRIMARY KEY,
@@ -86,7 +194,6 @@ export async function initializeSchema() {
     )
   `)
 
-  // Email templates table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS email_templates (
       id TEXT PRIMARY KEY,
@@ -99,7 +206,6 @@ export async function initializeSchema() {
     )
   `)
 
-  // Outreach logs table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS outreach_logs (
       id TEXT PRIMARY KEY,
@@ -120,7 +226,6 @@ export async function initializeSchema() {
     )
   `)
 
-  // Email replies table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS email_replies (
       id TEXT PRIMARY KEY,
@@ -135,7 +240,6 @@ export async function initializeSchema() {
     )
   `)
 
-  // Email drafts table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS email_drafts (
       id TEXT PRIMARY KEY,
@@ -154,7 +258,6 @@ export async function initializeSchema() {
     )
   `)
 
-  // Branding settings table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS branding_settings (
       id TEXT PRIMARY KEY,
@@ -167,76 +270,55 @@ export async function initializeSchema() {
       primary_color TEXT DEFAULT '#D6293E',
       secondary_color TEXT DEFAULT '#2d1818',
       font_family TEXT DEFAULT 'system-ui',
+      ai_model TEXT DEFAULT 'claude-fable-5',
+      ai_max_tokens INTEGER DEFAULT 16000,
+      pitch_max_tokens INTEGER DEFAULT 1500,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `)
 
-  // Add sender email columns if they don't exist
-  try {
-    await db.execute(`ALTER TABLE branding_settings ADD COLUMN sender_email TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
+  await tryAlter(`ALTER TABLE branding_settings ADD COLUMN sender_email TEXT`)
+  await tryAlter(`ALTER TABLE branding_settings ADD COLUMN sender_name TEXT`)
+  await tryAlter(`ALTER TABLE branding_settings ADD COLUMN ai_model TEXT DEFAULT 'claude-fable-5'`)
+  await tryAlter(`ALTER TABLE branding_settings ADD COLUMN ai_max_tokens INTEGER DEFAULT 16000`)
+  await tryAlter(`ALTER TABLE branding_settings ADD COLUMN pitch_max_tokens INTEGER DEFAULT 1500`)
 
-  try {
-    await db.execute(`ALTER TABLE branding_settings ADD COLUMN sender_name TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN contacts_data TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN facebook TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN instagram TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN twitter TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN linkedin TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN youtube TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN tiktok TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN yelp TEXT`)
 
-  // Add contacts_data column to businesses table (using ALTER TABLE for existing databases)
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN contacts_data TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS mockups (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      business_id TEXT,
+      place_id TEXT,
+      owner TEXT,
+      source TEXT DEFAULT 'studio',
+      status TEXT DEFAULT 'draft',
+      mockup_url TEXT,
+      mockup_version INTEGER DEFAULT 0,
+      pitch_draft TEXT,
+      pitch_subject TEXT,
+      pitch_version INTEGER DEFAULT 0,
+      last_feedback TEXT,
+      photo_urls TEXT,
+      ai_model TEXT,
+      n8n_synced_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE SET NULL
+    )
+  `)
 
-  // Add social media columns to businesses table (using ALTER TABLE for existing databases)
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN facebook TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-  
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN instagram TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-  
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN twitter TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-  
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN linkedin TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-  
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN youtube TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-  
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN tiktok TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-  
-  try {
-    await db.execute(`ALTER TABLE businesses ADD COLUMN yelp TEXT`)
-  } catch (e) {
-    // Column might already exist
-  }
-
-  // Create indexes for common queries
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_businesses_user ON businesses(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_businesses_search ON businesses(search_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_businesses_status ON businesses(status)`)
@@ -244,11 +326,9 @@ export async function initializeSchema() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_outreach_logs_user ON outreach_logs(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_outreach_logs_business ON outreach_logs(business_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_email_replies_outreach ON email_replies(outreach_log_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_place ON mockups(place_id)`)
 
-  console.log('✅ Database schema initialized')
+  console.log('Database schema initialized')
 }
-
-
-
-
-

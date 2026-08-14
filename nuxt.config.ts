@@ -49,8 +49,17 @@ export default defineNuxtConfig({
     rapidApiHost: process.env.RAPIDAPI_HOST || 'local-business-data.p.rapidapi.com',
     googlePageSpeedApiKey: process.env.GOOGLE_PAGESPEED_API_KEY,
     resendApiKey: process.env.RESEND_API_KEY,
+    resendFrom: process.env.NUXT_RESEND_FROM || process.env.RESEND_FROM || 'Wild Card Creative Co <marketing@outreach.wildcardcreativeco.com>',
     groqApiKey: process.env.GROQ_API,
     n8nWebhookUrl: process.env.N8N_WEBHOOK_URL,
+    n8nApiKey: process.env.N8N_API_KEY,
+    n8nBaseUrl: process.env.N8N_BASE_URL || 'https://n8n.wildcardcreative.cloud',
+    n8nStudioWebhookUrl: process.env.N8N_STUDIO_WEBHOOK_URL || 'https://n8n.wildcardcreative.cloud/webhook/studio',
+    n8nStudioSecret: process.env.N8N_STUDIO_SECRET,
+    n8nLeadsTableId: process.env.N8N_LEADS_TABLE_ID || 'HnKWbJiHsPeWOtMk',
+    n8nProjectId: process.env.N8N_PROJECT_ID || 'zjqtNDk0RAupaxDa',
+    allowedEmails: process.env.ALLOWED_EMAILS || 'ryan@wildcardcreativeco.com,aaron@wildcardcreativeco.com,chase@wildcardcreativeco.com',
+    n8nCallbackUrl: process.env.N8N_CALLBACK_URL || '',
     
     // ImageKit
     imageKitUrl: process.env.IMAGE_KIT_URL,

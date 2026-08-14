@@ -12,8 +12,7 @@ export async function searchBusinesses(params: BusinessSearchParams): Promise<Op
     query: `${params.query} in ${params.location}`,
     limit: String(params.limit || 20),
     language: 'en',
-    region: 'us',
-    extract_emails_and_contacts: 'true'
+    region: 'us'
   }
 
   // Add coordinates if available for precise location filtering

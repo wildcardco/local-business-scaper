@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { upload } from '@imagekit/vue'
+import {
+  DEFAULT_AI_MAX_TOKENS,
+  DEFAULT_AI_MODEL,
+  DEFAULT_PITCH_MAX_TOKENS,
+  STUDIO_AI_MODELS,
+  TOKEN_PRESETS
+} from '~~/shared/studio-ai'
 
 const toast = useToast()
 const config = useRuntimeConfig()
+const { user } = useUserSession()
 
 // Form state
 const companyName = ref('')
@@ -13,16 +21,13 @@ const senderName = ref('')
 const primaryColor = ref('#D6293E')
 const secondaryColor = ref('#2d1818')
 const fontFamily = ref('system-ui')
+const aiModel = ref(DEFAULT_AI_MODEL)
+const aiMaxTokens = ref(DEFAULT_AI_MAX_TOKENS)
+const pitchMaxTokens = ref(DEFAULT_PITCH_MAX_TOKENS)
 
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isUploading = ref(false)
-const isChangingPassword = ref(false)
-
-// Password change form
-const currentPassword = ref('')
-const newPassword = ref('')
-const confirmPassword = ref('')
 
 // Load existing branding settings
 async function loadBranding() {
@@ -38,6 +43,9 @@ async function loadBranding() {
       primaryColor.value = response.branding.primaryColor || '#D6293E'
       secondaryColor.value = response.branding.secondaryColor || '#2d1818'
       fontFamily.value = response.branding.fontFamily || 'system-ui'
+      aiModel.value = response.branding.aiModel || DEFAULT_AI_MODEL
+      aiMaxTokens.value = response.branding.aiMaxTokens || DEFAULT_AI_MAX_TOKENS
+      pitchMaxTokens.value = response.branding.pitchMaxTokens || DEFAULT_PITCH_MAX_TOKENS
     }
   } catch (error) {
     console.error('Failed to load branding:', error)
@@ -127,7 +135,10 @@ async function saveBranding() {
         senderName: senderName.value,
         primaryColor: primaryColor.value,
         secondaryColor: secondaryColor.value,
-        fontFamily: fontFamily.value
+        fontFamily: fontFamily.value,
+        aiModel: aiModel.value,
+        aiMaxTokens: aiMaxTokens.value,
+        pitchMaxTokens: pitchMaxTokens.value
       }
     })
 
@@ -157,67 +168,19 @@ const fontOptions = [
   { value: 'Verdana', label: 'Verdana' }
 ]
 
-// Change password
-async function changePassword() {
-  // Validate passwords
-  if (!currentPassword.value || !newPassword.value || !confirmPassword.value) {
-    toast.add({
-      title: 'Validation Error',
-      description: 'All password fields are required',
-      color: 'error'
-    })
-    return
-  }
+const modelOptions = STUDIO_AI_MODELS.map(model => ({
+  value: model.value,
+  label: `${model.label} — ${model.cost}`
+}))
 
-  if (newPassword.value.length < 8) {
-    toast.add({
-      title: 'Validation Error',
-      description: 'New password must be at least 8 characters',
-      color: 'error'
-    })
-    return
-  }
+const selectedModelHint = computed(() =>
+  STUDIO_AI_MODELS.find(model => model.value === aiModel.value)?.hint || ''
+)
 
-  if (newPassword.value !== confirmPassword.value) {
-    toast.add({
-      title: 'Validation Error',
-      description: 'New passwords do not match',
-      color: 'error'
-    })
-    return
-  }
-
-  isChangingPassword.value = true
-  try {
-    const response = await $fetch('/api/auth/change-password', {
-      method: 'POST',
-      body: {
-        currentPassword: currentPassword.value,
-        newPassword: newPassword.value
-      }
-    })
-
-    toast.add({
-      title: 'Password changed',
-      description: response.message,
-      color: 'success'
-    })
-
-    // Clear form
-    currentPassword.value = ''
-    newPassword.value = ''
-    confirmPassword.value = ''
-  } catch (error: any) {
-    const errorMessage = error?.data?.message || error?.message || 'Failed to change password'
-    toast.add({
-      title: 'Password change failed',
-      description: errorMessage,
-      color: 'error'
-    })
-  } finally {
-    isChangingPassword.value = false
-  }
-}
+const tokenOptions = TOKEN_PRESETS.map(preset => ({
+  value: preset.value,
+  label: preset.label
+}))
 
 // Load branding on mount
 onMounted(() => {
@@ -247,48 +210,57 @@ onMounted(() => {
         </template>
 
         <div class="space-y-4">
-          <UFormField label="Current Password">
+          <UFormField label="Account email" help="Allowlisted Wild Card email. Sign-in uses a 6-digit code sent here — there is no password.">
             <UInput
-              v-model="currentPassword"
-              type="password"
-              placeholder="Enter current password"
+              :model-value="user?.email || ''"
+              icon="i-lucide-mail"
               size="lg"
-              autocomplete="current-password"
+              class="w-full"
+              disabled
+            />
+          </UFormField>
+        </div>
+      </UCard>
+
+      <!-- Mockup AI -->
+      <UCard>
+        <template #header>
+          <h3 class="text-lg font-semibold">Mockup AI</h3>
+        </template>
+
+        <div class="space-y-4">
+          <p class="text-sm text-muted">
+            Used by Studio when n8n generates HTML, research, and pitch copy. Defaults match the current factory: Fable 5 at 16k tokens for mockups, 1500 tokens for pitches.
+          </p>
+
+          <UFormField label="Claude model" :help="selectedModelHint">
+            <USelect
+              v-model="aiModel"
+              :items="modelOptions"
+              size="lg"
               class="w-full"
             />
           </UFormField>
 
-          <UFormField label="New Password">
-            <UInput
-              v-model="newPassword"
-              type="password"
-              placeholder="Enter new password (min 8 characters)"
+          <UFormField label="Mockup max tokens" help="HTML generation is the expensive call. Lower this to save money; raise it if pages get cut off.">
+            <USelect
+              v-model="aiMaxTokens"
+              :items="tokenOptions"
               size="lg"
-              autocomplete="new-password"
               class="w-full"
             />
           </UFormField>
 
-          <UFormField label="Confirm New Password">
+          <UFormField label="Pitch max tokens" help="Pitch emails stay short. Default is 1500, same as the current writer.">
             <UInput
-              v-model="confirmPassword"
-              type="password"
-              placeholder="Confirm new password"
+              v-model.number="pitchMaxTokens"
+              type="number"
+              min="256"
+              max="8000"
               size="lg"
-              autocomplete="new-password"
               class="w-full"
             />
           </UFormField>
-
-          <div class="flex justify-end">
-            <UButton
-              icon="i-lucide-key"
-              :loading="isChangingPassword"
-              @click="changePassword"
-            >
-              Change Password
-            </UButton>
-          </div>
         </div>
       </UCard>
 

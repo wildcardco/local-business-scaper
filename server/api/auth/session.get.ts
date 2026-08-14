@@ -1,17 +1,19 @@
-// Custom session endpoint (nuxt-auth-utils also provides /api/_auth/session)
+import { isEmailAllowed } from '~~/server/utils/allowlist'
+
 export default defineEventHandler(async (event) => {
   const session = await getUserSession(event)
+  const user = session?.user ?? null
+
+  if (user && !isEmailAllowed(user.email)) {
+    await clearUserSession(event)
+    return {
+      loggedIn: false,
+      user: null
+    }
+  }
 
   return {
-    loggedIn: !!session?.user,
-    user: session?.user ?? null
+    loggedIn: !!user,
+    user
   }
 })
-
-
-
-
-
-
-
-

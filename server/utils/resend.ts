@@ -30,10 +30,12 @@ function getResendClient(): Resend {
 }
 
 export async function sendEmail(options: EmailOptions): Promise<ResendResponse> {
+  const config = useRuntimeConfig()
   const client = getResendClient()
-  
+  const from = options.from || String(config.resendFrom || 'Wild Card Creative Co <marketing@outreach.wildcardcreativeco.com>')
+
   const response = await client.emails.send({
-    from: options.from || 'Wild Card Creative <outreach@wildcardcreativeco.com>',
+    from,
     to: options.to,
     subject: options.subject,
     html: options.html,

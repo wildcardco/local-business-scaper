@@ -156,3 +156,23 @@ export interface MailgunReportPayload {
   htmlContent: string
 }
 
+export type MockupStatus =
+  | 'draft'
+  | 'generating'
+  | 'revising'
+  | 'enhancing'
+  | 'mockup_ready'
+  | 'writing_pitch'
+  | 'pitch_ready'
+  | 'failed'
+
+export interface StudioFirePayload {
+  action: 'generate_mockup' | 'revise_mockup' | 'write_pitch' | 'add_photos'
+  place_id: string
+  owner: string
+  model: string
+  max_tokens: number
+  pitch_max_tokens: number
+  research_model: string
+}
+

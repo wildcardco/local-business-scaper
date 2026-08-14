@@ -49,40 +49,26 @@ async function exportJson() {
   }
 }
 
-async function sendToN8n() {
+async function generateMockups() {
   if (!props.businessIds || props.businessIds.length === 0) {
     toast.add({
       title: 'No leads selected',
-      description: 'Please select leads to send to n8n',
+      description: 'Please select leads to generate mockups',
       color: 'warning'
     })
     return
   }
 
-  isExporting.value = true
-  try {
-    await $fetch('/api/export/n8n', {
-      method: 'POST',
-      body: {
-        businessIds: props.businessIds
-      }
-    })
-
-    toast.add({
-      title: 'Sent to n8n',
-      description: `${props.businessIds.length} leads sent to automation workflow`,
-      color: 'success'
-    })
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send'
-    toast.add({
-      title: 'Export Failed',
-      description: errorMessage,
-      color: 'error'
-    })
-  } finally {
-    isExporting.value = false
+  if (props.businessIds.length === 1) {
+    useGenerateMockup().open(props.businessIds[0]!)
+    return
   }
+
+  toast.add({
+    title: 'Generate one at a time',
+    description: 'Use Generate mockup on a row so we can confirm the listing without extra RapidAPI calls on every selected lead.',
+    color: 'warning'
+  })
 }
 
 // Batch audit report exports
@@ -204,9 +190,9 @@ const menuItems = computed(() => [
   ],
   [
     {
-      label: 'Send to n8n',
-      icon: 'i-lucide-workflow',
-      click: sendToN8n,
+      label: 'Generate mockup',
+      icon: 'i-lucide-palette',
+      click: generateMockups,
       disabled: !hasSelection.value
     }
   ]
