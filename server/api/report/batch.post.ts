@@ -205,7 +205,7 @@ function generateBatchHtmlReport(reports: AuditReportData[]): string {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background: #f3f4f6; }
     .container { max-width: 1200px; margin: 0 auto; background: white; }
-    .header { background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%); color: white; padding: 40px; }
+    .header { background: linear-gradient(135deg, #2d1818 0%, #D6293E 100%); color: white; padding: 40px; }
     .header h1 { margin: 0 0 8px 0; font-size: 28px; }
     .header p { margin: 0; opacity: 0.9; }
     .content { padding: 40px; }
@@ -230,7 +230,7 @@ function generateBatchHtmlReport(reports: AuditReportData[]): string {
         <div class="stat-card"><div class="stat-value">${totalLeads}</div><div class="stat-label">Total Leads</div></div>
         <div class="stat-card"><div class="stat-value" style="color: #dc2626;">🔥 ${hotLeads}</div><div class="stat-label">Hot Leads</div></div>
         <div class="stat-card"><div class="stat-value" style="color: #d97706;">⚡ ${warmLeads}</div><div class="stat-label">Warm Leads</div></div>
-        <div class="stat-card"><div class="stat-value" style="color: #7c3aed;">${noWebsite}</div><div class="stat-label">No Website</div></div>
+        <div class="stat-card"><div class="stat-value" style="color: #C9A227;">${noWebsite}</div><div class="stat-label">No Website</div></div>
         <div class="stat-card"><div class="stat-value">${avgScore}</div><div class="stat-label">Avg. Score</div></div>
       </div>
       <table>

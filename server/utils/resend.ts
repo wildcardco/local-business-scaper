@@ -70,7 +70,7 @@ export function generateEmailHTML(content: {
   
   const companyName = branding?.companyName || 'Wild Card Creative Co.'
   const tagline = branding?.tagline || 'Your Ace in Digital Success'
-  const primaryColor = branding?.primaryColor || '#8b5cf6'
+  const primaryColor = branding?.primaryColor || '#D6293E'
   const secondaryColor = branding?.secondaryColor || '#2d1818'
   const fontFamily = branding?.fontFamily || 'system-ui, -apple-system, sans-serif'
   

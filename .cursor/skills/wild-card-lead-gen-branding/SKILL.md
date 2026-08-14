@@ -17,7 +17,7 @@ Three systems. Do not collapse them:
 |---|---|---|
 | **App UI** | Official red/gold dark-only (`#D6293E` / `#C9A227` on `#1A1A1A`) | `app/assets/css/main.css`, `app.config.ts` — tokens ported from `wcco-official-website` |
 | **Official WC guide** | Burgundy `#2d1818` | `public/brand-assets/`, email fallbacks, Groq prompt |
-| **Outbound email HTML** | Settings defaults purple `#8b5cf6` / `#3b1f5c` | Resend/Groq/`branding_settings` — **separate from dashboard UI** |
+| **Outbound email HTML** | Settings defaults red `#D6293E` / burgundy `#2d1818` | Resend/Groq/`branding_settings` — separate system, but purple is retired here too (Aug 2026) |
 
 ## App tokens (`@theme static`)
 
@@ -75,7 +75,7 @@ Radius: `--ui-radius: var(--radius-wc)` = **10px**; cards **16px** (`--radius-wc
 | Warm | `#4a1c1c` |
 | White | `#ffffff` |
 
-Email signature / `formatIssuesListHTML` use `#2d1818`. Settings defaults are purple `#8b5cf6` / `#3b1f5c` (email system only — dashboard UI does not use purple).
+Email signature / `formatIssuesListHTML` use `#2d1818`. Settings defaults are red `#D6293E` / burgundy `#2d1818`. **Purple is fully retired** — no purple anywhere (UI, emails, reports). `scripts/migrate-purple-branding.mjs` updates old purple rows in the DB.
 
 ## Lead colors
 
@@ -89,7 +89,7 @@ Email signature / `formatIssuesListHTML` use `#2d1818`. Settings defaults are pu
 - Semantic tokens only for chrome: `bg-default` / `bg-muted` / `bg-elevated` / `border-default` / `text-muted` etc. — **no `gray-*` / `bg-white`**
 - Email preview iframes stay white (outbound email documents) but sit inside dark chrome
 - Custom: `.gradient-border`, `.animate-pulse-soft`, page fade 0.2s
-- Reports HTML: blue→purple header `#1e40af` → `#7c3aed` (report-only)
+- Reports HTML: burgundy→red header `#2d1818` → `#D6293E`; gold `#C9A227` for no-website stat
 
 ## Email HTML (`generateEmailHTML`)
 

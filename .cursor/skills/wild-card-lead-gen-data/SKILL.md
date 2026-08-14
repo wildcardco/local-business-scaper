@@ -38,7 +38,7 @@ Local `dev.db` and production Turso are **separate databases with separate accou
 | `outreach_logs` | user | Resend `message_id`, `ai_generated` |
 | `email_replies` | log | inbound (helper not routed) |
 | `email_drafts` | user | |
-| `branding_settings` | user | purple defaults `#8b5cf6` / `#3b1f5c` |
+| `branding_settings` | user | defaults `#D6293E` / `#2d1818` (red/burgundy — purple retired Aug 2026) |
 
 Indexes: businesses(user, search, status), searches(user), outreach_logs(user, business), email_replies(outreach).
 

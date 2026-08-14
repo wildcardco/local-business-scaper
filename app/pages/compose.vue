@@ -52,7 +52,7 @@ function loadPreviewContent() {
         }
         p { margin-bottom: 1rem; }
         strong { font-weight: 600; }
-        a { color: #8b5cf6; text-decoration: underline; }
+        a { color: #D6293E; text-decoration: underline; }
         ul, ol { margin-left: 1.5rem; margin-bottom: 1rem; }
         li { margin-bottom: 0.5rem; }
         h1, h2, h3, h4, h5, h6 { font-weight: 600; margin-bottom: 0.5rem; }
@@ -339,7 +339,7 @@ async function deleteDraft() {
 <template>
   <div class="h-full min-h-0 flex flex-col overflow-hidden">
     <!-- Header -->
-    <div class="border-b border-default bg-muted px-4 sm:px-6 py-4 flex-shrink-0">
+    <div class="border-b border-default bg-muted px-4 sm:px-6 py-4 shrink-0">
       <div class="flex flex-wrap items-center justify-between gap-y-3">
         <div class="flex flex-wrap items-center gap-2 sm:gap-4">
           <UButton

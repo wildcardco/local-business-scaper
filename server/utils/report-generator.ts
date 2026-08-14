@@ -238,7 +238,7 @@ export function generateHtmlReport(data: AuditReportData): string {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background: #f3f4f6; }
     .container { max-width: 800px; margin: 0 auto; background: white; }
-    .header { background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%); color: white; padding: 40px; }
+    .header { background: linear-gradient(135deg, #2d1818 0%, #D6293E 100%); color: white; padding: 40px; }
     .header h1 { margin: 0 0 8px 0; font-size: 28px; }
     .header p { margin: 0; opacity: 0.9; }
     .content { padding: 40px; }

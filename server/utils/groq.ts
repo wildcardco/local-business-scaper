@@ -103,8 +103,8 @@ ${brandGuide}
 ${branding ? `BRANDING SETTINGS:
 - Company Name: ${companyName}
 - Tagline: ${tagline}
-- Primary Brand Color: ${branding.primaryColor || '#8b5cf6'}
-- Secondary Brand Color: ${branding.secondaryColor || '#3b1f5c'}
+- Primary Brand Color: ${branding.primaryColor || '#D6293E'}
+- Secondary Brand Color: ${branding.secondaryColor || '#2d1818'}
 ` : ''}
 
 BUSINESS INFORMATION:

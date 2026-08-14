@@ -10,8 +10,8 @@ const tagline = ref('')
 const logoUrl = ref('')
 const senderEmail = ref('')
 const senderName = ref('')
-const primaryColor = ref('#8b5cf6')
-const secondaryColor = ref('#3b1f5c')
+const primaryColor = ref('#D6293E')
+const secondaryColor = ref('#2d1818')
 const fontFamily = ref('system-ui')
 
 const isLoading = ref(false)
@@ -35,8 +35,8 @@ async function loadBranding() {
       logoUrl.value = response.branding.logoUrl || ''
       senderEmail.value = response.branding.senderEmail || ''
       senderName.value = response.branding.senderName || ''
-      primaryColor.value = response.branding.primaryColor || '#8b5cf6'
-      secondaryColor.value = response.branding.secondaryColor || '#3b1f5c'
+      primaryColor.value = response.branding.primaryColor || '#D6293E'
+      secondaryColor.value = response.branding.secondaryColor || '#2d1818'
       fontFamily.value = response.branding.fontFamily || 'system-ui'
     }
   } catch (error) {
@@ -443,7 +443,7 @@ onMounted(() => {
               />
               <UInput
                 v-model="primaryColor"
-                placeholder="#8b5cf6"
+                placeholder="#D6293E"
                 size="lg"
                 class="flex-1"
               />
@@ -459,7 +459,7 @@ onMounted(() => {
               />
               <UInput
                 v-model="secondaryColor"
-                placeholder="#3b1f5c"
+                placeholder="#2d1818"
                 size="lg"
                 class="flex-1"
               />
