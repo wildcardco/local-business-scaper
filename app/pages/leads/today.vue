@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getTodayCentralTime, addDays } from '~~/shared/date-utils'
+import { getTodayCentralTime, addDays, formatCentralTime } from '~~/shared/date-utils'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,13 +57,11 @@ const tierGroups = computed(() => {
   return groups
 })
 
-const tierColors: Record<string, { bg: string; text: string; border: string }> = {
-  call_first: { bg: 'bg-wcRed-500/20', text: 'text-wcRed-400', border: 'border-wcRed-500/30' },
-  good: { bg: 'bg-wcGold-400/20', text: 'text-wcGold-400', border: 'border-wcGold-400/30' },
-  worth_a_look: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30' },
-  long_shot: { bg: 'bg-neutral-500/20', text: 'text-neutral-400', border: 'border-neutral-500/30' },
-  skip: { bg: 'bg-neutral-600/20', text: 'text-neutral-500', border: 'border-neutral-600/30' }
-}
+const receivedLabel = computed(() => {
+  const received = digest.value?.received_at
+  if (!received) return ''
+  return formatCentralTime(String(received))
+})
 
 async function fetchDigest() {
   isLoading.value = true
@@ -93,13 +91,6 @@ function goToDate(date: string) {
 
 function handleGenerateMockup(businessId: string) {
   openGenerateMockup(businessId)
-}
-
-function signalLabel(key: string, value: any): string {
-  if (key === 'no_website' && value) return 'No website'
-  if (key === 'agency_credit' && value) return `Agency: ${value}`
-  if (key === 'copyright_year' && value) return `© ${value}`
-  return ''
 }
 
 watch(() => route.query.date, fetchDigest, { immediate: true })
@@ -161,8 +152,8 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
             <p class="text-sm text-muted">
               {{ digest.search.location }} • {{ digest.lead_count }} lead{{ digest.lead_count === 1 ? '' : 's' }}
             </p>
-            <p v-if="digest.received_at" class="text-xs text-muted mt-1">
-              Received {{ new Date(digest.received_at).toLocaleString() }}
+            <p v-if="receivedLabel" class="text-xs text-muted mt-1">
+              Received {{ receivedLabel }}
             </p>
           </div>
         </div>
@@ -175,169 +166,34 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
 
       <div v-else class="space-y-8">
         <div v-for="(tierLeads, tierSlug) in tierGroups" :key="tierSlug">
-          <div v-if="tierLeads.length > 0">
-          <div v-if="tierSlug === 'skip'" class="mb-4">
-            <UAccordion :items="[{ label: `Skip tier (${tierLeads.length})`, content: 'skip-leads', slot: 'skip-leads', defaultOpen: false }]">
-              <template #default="{ item, open }">
-                <UButton
-                  variant="ghost"
-                  color="neutral"
-                  class="w-full justify-between"
-                >
-                  <span class="text-sm text-muted">Skip tier ({{ tierLeads.length }})</span>
-                  <UIcon :name="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" />
-                </UButton>
-              </template>
+          <div v-if="tierLeads.length > 0 && tierSlug === 'skip'">
+            <UAccordion
+              :items="[{
+                label: `Skip tier (${tierLeads.length})`,
+                slot: 'skip-leads'
+              }]"
+            >
               <template #skip-leads>
-                <div class="grid grid-cols-1 gap-4 mt-4">
-                  <UCard
+                <div class="grid grid-cols-1 gap-4">
+                  <LeadCard
                     v-for="lead in tierLeads"
                     :key="lead.id"
-                    class="overflow-hidden"
-                  >
-                    <LeadCard :lead="lead" :tier-colors="tierColors" @generate-mockup="handleGenerateMockup" />
-                  </UCard>
+                    :lead="lead"
+                    tier-slug="skip"
+                    @generate-mockup="handleGenerateMockup"
+                  />
                 </div>
               </template>
             </UAccordion>
           </div>
-            <div v-else class="grid grid-cols-1 gap-4">
-              <UCard
-                v-for="lead in tierLeads"
-                :key="lead.id"
-                class="overflow-hidden"
-              >
-                <div class="space-y-3">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <h3 class="font-display font-semibold text-highlighted text-lg mb-1">
-                        {{ lead.business.name }}
-                      </h3>
-                      <p v-if="lead.business.category" class="text-sm text-muted mb-2">
-                        {{ lead.business.category }}
-                      </p>
-                    </div>
-                    <div
-                      :class="[
-                        'px-3 py-1 rounded-full border text-xs font-medium whitespace-nowrap',
-                        tierColors[tierSlug as keyof typeof tierColors]?.bg || '',
-                        tierColors[tierSlug as keyof typeof tierColors]?.text || '',
-                        tierColors[tierSlug as keyof typeof tierColors]?.border || ''
-                      ]"
-                    >
-                      {{ lead.tier.label }}
-                    </div>
-                  </div>
-
-                  <div class="flex items-center gap-4 text-sm">
-                    <div v-if="lead.score" class="flex items-center gap-1">
-                      <UIcon name="i-lucide-target" class="text-primary-500" />
-                      <span class="font-medium text-highlighted">{{ lead.score }}</span>
-                    </div>
-                    <div v-if="lead.business?.rating" class="flex items-center gap-1">
-                      <UIcon name="i-lucide-star" class="text-wcGold-400" />
-                      <span class="text-highlighted">{{ lead.business.rating }}</span>
-                      <span class="text-muted">({{ lead.business.review_count || 0 }})</span>
-                    </div>
-                    <div v-if="lead.business?.city" class="flex items-center gap-1">
-                      <UIcon name="i-lucide-map-pin" class="text-muted" />
-                      <span class="text-muted">{{ lead.business.city }}</span>
-                    </div>
-                  </div>
-
-                  <div v-if="lead.angle || lead.note" class="space-y-2 text-sm">
-                    <div v-if="lead.angle" class="flex items-start gap-2">
-                      <UIcon name="i-lucide-lightbulb" class="text-wcGold-400 mt-0.5 shrink-0" />
-                      <p class="text-muted">{{ lead.angle }}</p>
-                    </div>
-                    <div v-if="lead.note" class="flex items-start gap-2">
-                      <UIcon name="i-lucide-sticky-note" class="text-blue-400 mt-0.5 shrink-0" />
-                      <p class="text-muted">{{ lead.note }}</p>
-                    </div>
-                  </div>
-
-                  <div v-if="lead.signals" class="flex flex-wrap gap-2">
-                    <span
-                      v-for="([key, value], idx) in Object.entries(lead.signals)"
-                      :key="idx"
-                      class="px-2 py-1 rounded text-xs bg-neutral-500/20 text-neutral-400 border border-neutral-500/30"
-                    >
-                      {{ signalLabel(key, value) }}
-                    </span>
-                  </div>
-
-                  <div class="flex flex-wrap gap-2 pt-2 border-t border-default">
-                    <UButton
-                      v-if="lead.business.phone"
-                      :to="`tel:${lead.business.phone}`"
-                      size="sm"
-                      variant="outline"
-                      icon="i-lucide-phone"
-                    >
-                      Call
-                    </UButton>
-                    <UButton
-                      v-if="lead.business.website"
-                      :to="lead.business.website"
-                      target="_blank"
-                      size="sm"
-                      variant="outline"
-                      icon="i-lucide-globe"
-                      trailing-icon="i-lucide-external-link"
-                    >
-                      Website
-                    </UButton>
-                    <UButton
-                      :to="`/businesses/${lead.business.id}`"
-                      size="sm"
-                      variant="outline"
-                      icon="i-lucide-info"
-                    >
-                      Details
-                    </UButton>
-                  </div>
-
-                  <div v-if="lead.mockup" class="rounded-lg border border-default bg-muted p-3">
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <p class="text-sm font-medium text-highlighted mb-1">Mockup</p>
-                        <p class="text-xs text-muted capitalize">{{ lead.mockup.status.replace(/_/g, ' ') }}</p>
-                      </div>
-                      <UButton
-                        :to="`/studio/${lead.mockup.id}`"
-                        size="xs"
-                        variant="soft"
-                        trailing-icon="i-lucide-arrow-right"
-                      >
-                        View
-                      </UButton>
-                    </div>
-                    <UButton
-                      v-if="lead.mockup.url"
-                      :to="lead.mockup.url"
-                      target="_blank"
-                      size="xs"
-                      variant="ghost"
-                      color="neutral"
-                      trailing-icon="i-lucide-external-link"
-                      class="mt-2"
-                    >
-                      Live mockup
-                    </UButton>
-                  </div>
-                  <div v-else>
-                    <UButton
-                      size="sm"
-                      icon="i-lucide-palette"
-                      block
-                      @click="handleGenerateMockup(lead.business.id)"
-                    >
-                      Generate mockup
-                    </UButton>
-                  </div>
-                </div>
-              </UCard>
-            </div>
+          <div v-else-if="tierLeads.length > 0" class="grid grid-cols-1 gap-4">
+            <LeadCard
+              v-for="lead in tierLeads"
+              :key="lead.id"
+              :lead="lead"
+              :tier-slug="String(tierSlug)"
+              @generate-mockup="handleGenerateMockup"
+            />
           </div>
         </div>
       </div>

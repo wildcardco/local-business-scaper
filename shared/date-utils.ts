@@ -21,3 +21,22 @@ export function addDays(dateStr: string, days: number): string {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+/**
+ * SQLite `datetime('now')` is UTC with no zone (`YYYY-MM-DD HH:MM:SS`).
+ * Parse that as UTC and show the clock time in America/Chicago.
+ */
+export function formatCentralTime(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(trimmed)
+  const iso = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T')
+  const date = new Date(hasZone ? iso : `${iso}Z`)
+  if (Number.isNaN(date.getTime())) return value
+  const time = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(date)
+  return `${time} CT`
+}
