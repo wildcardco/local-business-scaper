@@ -1,4 +1,5 @@
 import { db, generateId } from '~~/server/utils/db'
+import { ensureDigestTables } from '~~/server/utils/digest-schema'
 import { OWNER_EMAIL_MAP, normalizeEmail } from '~~/server/utils/allowlist'
 import { callbackUrlFromEvent } from '~~/server/utils/n8n'
 
@@ -55,6 +56,8 @@ function constantTimeCompare(a: string, b: string): boolean {
 }
 
 export default defineEventHandler(async (event) => {
+  await ensureDigestTables()
+
   const config = useRuntimeConfig()
   const secret = config.digestIngestSecret as string | undefined
 
