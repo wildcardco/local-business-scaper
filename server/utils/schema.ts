@@ -319,6 +319,46 @@ export async function initializeSchema() {
     )
   `)
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS digests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      digest_date TEXT NOT NULL,
+      search_category TEXT NOT NULL,
+      search_location TEXT NOT NULL,
+      lead_count INTEGER DEFAULT 0,
+      received_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `)
+
+  await db.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_digests_user_date ON digests(user_id, digest_date)
+  `)
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS digest_leads (
+      id TEXT PRIMARY KEY,
+      digest_id TEXT NOT NULL,
+      business_id TEXT NOT NULL,
+      place_id TEXT NOT NULL,
+      rank INTEGER,
+      score INTEGER,
+      tier_slug TEXT,
+      tier_label TEXT,
+      angle TEXT,
+      note TEXT,
+      signals TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (digest_id) REFERENCES digests(id) ON DELETE CASCADE,
+      FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
+    )
+  `)
+
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_digest_leads_digest ON digest_leads(digest_id)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_digest_leads_business ON digest_leads(business_id)`)
+
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_businesses_user ON businesses(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_businesses_search ON businesses(search_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_businesses_status ON businesses(status)`)
