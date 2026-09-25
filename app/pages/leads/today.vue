@@ -3,10 +3,10 @@ import { getTodayCentralTime, addDays, formatCentralTime } from '~~/shared/date-
 
 const route = useRoute()
 const router = useRouter()
-const toast = useToast()
 const { open: openGenerateMockup } = useGenerateMockup()
 
 const isLoading = ref(true)
+const loadError = ref('')
 const digest = ref<any>(null)
 const leads = ref<any[]>([])
 
@@ -65,6 +65,7 @@ const receivedLabel = computed(() => {
 
 async function fetchDigest() {
   isLoading.value = true
+  loadError.value = ''
   try {
     const result = await $fetch('/api/digests', {
       query: { date: displayDate.value }
@@ -73,11 +74,7 @@ async function fetchDigest() {
     leads.value = result.leads || []
   } catch (error: unknown) {
     const err = error as { data?: { message?: string } }
-    toast.add({
-      title: 'Could not load digest',
-      description: err.data?.message || 'Try again',
-      color: 'error'
-    })
+    loadError.value = err.data?.message || 'Could not load today\'s leads. Try again.'
     digest.value = null
     leads.value = []
   } finally {
@@ -127,6 +124,17 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
 
     <div v-if="isLoading" class="flex justify-center py-20">
       <UIcon name="i-lucide-loader-2" class="animate-spin text-4xl text-primary" />
+    </div>
+
+    <div v-else-if="loadError" class="text-center py-20">
+      <UIcon name="i-lucide-cloud-off" class="text-6xl text-muted mb-4" />
+      <h2 class="font-display text-xl font-medium text-highlighted mb-2">
+        Could not load leads
+      </h2>
+      <p class="text-muted mb-6">{{ loadError }}</p>
+      <UButton icon="i-lucide-refresh-cw" @click="fetchDigest">
+        Retry
+      </UButton>
     </div>
 
     <div v-else-if="!digest" class="text-center py-20">

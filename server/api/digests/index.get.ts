@@ -1,6 +1,9 @@
 import { db } from '~~/server/utils/db'
+import { ensureDigestTables } from '~~/server/utils/digest-schema'
 
 export default defineEventHandler(async (event) => {
+  await ensureDigestTables()
+
   const user = event.context.user
   if (!user?.id) {
     throw createError({
