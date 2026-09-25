@@ -40,6 +40,11 @@ const navigation: NavigationMenuItem[][] = [[
     icon: 'i-lucide-building-2'
   },
   {
+    label: "Today's Leads",
+    to: '/leads/today',
+    icon: 'i-lucide-calendar-check'
+  },
+  {
     label: 'Studio',
     to: '/studio',
     icon: 'i-lucide-palette'

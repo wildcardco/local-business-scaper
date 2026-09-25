@@ -8,7 +8,8 @@ export default defineEventHandler(async (event) => {
     '/api/_auth/',
     '/api/_nuxt_icon/',
     '/api/health',
-    '/api/mockups/webhook'
+    '/api/mockups/webhook',
+    '/api/digests/ingest'
   ]
 
   if (publicPaths.some(p => path.startsWith(p))) {

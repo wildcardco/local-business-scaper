@@ -5,6 +5,7 @@ definePageMeta({
 
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 const { fetch: refreshSession } = useUserSession()
 
 const step = ref<'email' | 'code'>('email')
@@ -12,6 +13,19 @@ const email = ref('')
 const code = ref('')
 const isSending = ref(false)
 const isVerifying = ref(false)
+
+const redirectTo = computed(() => {
+  const redirect = route.query.redirect
+  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+    // Reject URLs with backslashes or schemes (e.g. /\evil.com, /%5Cevil.com)
+    const decoded = decodeURIComponent(redirect)
+    if (decoded.includes('\\') || decoded.includes(':')) {
+      return '/'
+    }
+    return redirect
+  }
+  return '/'
+})
 
 async function sendCode() {
   if (!email.value.trim() || !email.value.includes('@')) {
@@ -72,7 +86,7 @@ async function verifyCode() {
       title: 'Welcome back!',
       color: 'success'
     })
-    router.push('/')
+    router.push(redirectTo.value)
   } catch (error: unknown) {
     const err = error as { data?: { message?: string } }
     toast.add({

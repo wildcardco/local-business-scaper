@@ -60,6 +60,7 @@ export default defineNuxtConfig({
     n8nProjectId: process.env.N8N_PROJECT_ID || 'zjqtNDk0RAupaxDa',
     allowedEmails: process.env.ALLOWED_EMAILS || 'ryan@wildcardcreativeco.com,aaron@wildcardcreativeco.com,chase@wildcardcreativeco.com',
     n8nCallbackUrl: process.env.N8N_CALLBACK_URL || '',
+    digestIngestSecret: process.env.DIGEST_INGEST_SECRET,
     
     // ImageKit
     imageKitUrl: process.env.IMAGE_KIT_URL,
