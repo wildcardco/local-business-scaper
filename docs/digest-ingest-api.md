@@ -93,7 +93,7 @@ Each lead requires:
   "success": true,
   "digest_id": "abc123",
   "lead_count": 5,
-  "url": "https://app.example.com/leads/today?date=2026-09-25"
+  "url": "https://your-app-url/leads/today?date=2026-09-25"
 }
 ```
 
@@ -121,7 +121,7 @@ The `url` field contains the absolute URL to view the digest (used in Discord no
 ## Example cURL
 
 ```bash
-curl -X POST https://app.example.com/api/digests/ingest \
+curl -X POST https://your-app-url/api/digests/ingest \
   -H "Content-Type: application/json" \
   -H "X-Digest-Secret: your-secret-here" \
   -d '{

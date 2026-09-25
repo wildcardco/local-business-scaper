@@ -61,7 +61,12 @@ export default defineEventHandler(async (event) => {
         m.mockup_url
       FROM digest_leads dl
       INNER JOIN businesses b ON dl.business_id = b.id
-      LEFT JOIN mockups m ON b.id = m.business_id
+      LEFT JOIN (
+        SELECT id, business_id, status, mockup_url,
+               ROW_NUMBER() OVER (PARTITION BY business_id ORDER BY updated_at DESC) as rn
+        FROM mockups
+        WHERE user_id = ?
+      ) m ON b.id = m.business_id AND m.rn = 1
       WHERE dl.digest_id = ?
       ORDER BY
         CASE dl.tier_slug
@@ -75,7 +80,7 @@ export default defineEventHandler(async (event) => {
         COALESCE(dl.rank, 999999),
         dl.score DESC
     `,
-    args: [digest.id]
+    args: [String(user.id), String(digest.id)]
   })
 
   return {
@@ -103,16 +108,16 @@ export default defineEventHandler(async (event) => {
       signals: row.signals ? JSON.parse(String(row.signals)) : null,
       business: {
         id: row.business_id,
-        name: row.name,
-        address: row.address,
-        city: row.city,
-        state: row.state,
-        phone: row.phone,
-        website: row.website,
-        category: row.category,
-        rating: row.rating,
-        review_count: row.review_count,
-        status: row.status
+        name: row.name || '',
+        address: row.address || null,
+        city: row.city || null,
+        state: row.state || null,
+        phone: row.phone || null,
+        website: row.website || null,
+        category: row.category || null,
+        rating: row.rating || null,
+        review_count: row.review_count || null,
+        status: row.status || 'new'
       },
       mockup: row.mockup_id ? {
         id: row.mockup_id,

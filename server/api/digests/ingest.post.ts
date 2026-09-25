@@ -122,7 +122,7 @@ export default defineEventHandler(async (event) => {
   })
 
   const user = userResult.rows[0]
-  if (!user) {
+  if (!user || !user.id) {
     throw createError({
       statusCode: 404,
       message: `Owner "${body.owner}" has no Studio account yet`
@@ -140,7 +140,7 @@ export default defineEventHandler(async (event) => {
   })
 
   let searchId: string
-  if (searchResult.rows.length > 0) {
+  if (searchResult.rows.length > 0 && searchResult.rows[0]?.id) {
     searchId = String(searchResult.rows[0].id)
   } else {
     const existingSearch = await db.execute({
@@ -182,16 +182,16 @@ export default defineEventHandler(async (event) => {
     const tier = normalizeTier(lead.tier)
     const score = typeof lead.score === 'number' ? lead.score : 0
 
-    const existingBusiness = await db.execute({
-      sql: 'SELECT id, status FROM businesses WHERE user_id = ? AND place_id = ? LIMIT 1',
-      args: [userId, lead.place_id]
-    })
+  const existingBusiness = await db.execute({
+    sql: 'SELECT id, status FROM businesses WHERE user_id = ? AND place_id = ? LIMIT 1',
+    args: [userId, lead.place_id]
+  })
 
-    let businessId: string
-    if (existingBusiness.rows.length > 0) {
-      const existing = existingBusiness.rows[0]
-      businessId = String(existing.id)
-      const currentStatus = String(existing.status || 'new')
+  let businessId: string
+  const existing = existingBusiness.rows[0]
+  if (existing) {
+    businessId = String(existing.id)
+    const currentStatus = String(existing.status || 'new')
 
       await db.execute({
         sql: `UPDATE businesses SET

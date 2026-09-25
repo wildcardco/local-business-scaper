@@ -16,7 +16,11 @@ export default defineNuxtRouteMiddleware((to) => {
   // Redirect to login if not authenticated
   if (!loggedIn.value) {
     // Preserve the destination URL (same-origin relative paths only)
+    // Skip adding ?redirect= for the root path
     const destination = to.fullPath
+    if (destination === '/') {
+      return navigateTo('/login')
+    }
     return navigateTo(`/login?redirect=${encodeURIComponent(destination)}`)
   }
 })

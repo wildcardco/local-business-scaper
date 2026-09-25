@@ -17,6 +17,11 @@ const isVerifying = ref(false)
 const redirectTo = computed(() => {
   const redirect = route.query.redirect
   if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+    // Reject URLs with backslashes or schemes (e.g. /\evil.com, /%5Cevil.com)
+    const decoded = decodeURIComponent(redirect)
+    if (decoded.includes('\\') || decoded.includes(':')) {
+      return '/'
+    }
     return redirect
   }
   return '/'

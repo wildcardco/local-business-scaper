@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { getTodayCentralTime, addDays } from '~~/shared/date-utils'
+
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
@@ -8,11 +10,7 @@ const isLoading = ref(true)
 const digest = ref<any>(null)
 const leads = ref<any[]>([])
 
-const today = computed(() => {
-  const tz = 'America/Chicago'
-  const now = new Date()
-  return new Date(now.toLocaleString('en-US', { timeZone: tz })).toISOString().slice(0, 10)
-})
+const today = computed(() => getTodayCentralTime())
 
 const displayDate = computed(() => {
   const dateParam = route.query.date
@@ -22,17 +20,9 @@ const displayDate = computed(() => {
   return today.value
 })
 
-const previousDate = computed(() => {
-  const date = new Date(displayDate.value)
-  date.setDate(date.getDate() - 1)
-  return date.toISOString().slice(0, 10)
-})
+const previousDate = computed(() => addDays(displayDate.value, -1))
 
-const nextDate = computed(() => {
-  const date = new Date(displayDate.value)
-  date.setDate(date.getDate() + 1)
-  return date.toISOString().slice(0, 10)
-})
+const nextDate = computed(() => addDays(displayDate.value, 1))
 
 const canGoNext = computed(() => nextDate.value <= today.value)
 
@@ -186,31 +176,31 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
       <div v-else class="space-y-8">
         <div v-for="(tierLeads, tierSlug) in tierGroups" :key="tierSlug">
           <div v-if="tierLeads.length > 0">
-            <div v-if="tierSlug === 'skip'" class="mb-4">
-              <UAccordion :items="[{ label: `Skip tier (${tierLeads.length})`, content: 'skip-leads', defaultOpen: false }]">
-                <template #default="{ item, open }">
-                  <UButton
-                    variant="ghost"
-                    color="neutral"
-                    class="w-full justify-between"
+          <div v-if="tierSlug === 'skip'" class="mb-4">
+            <UAccordion :items="[{ label: `Skip tier (${tierLeads.length})`, content: 'skip-leads', slot: 'skip-leads', defaultOpen: false }]">
+              <template #default="{ item, open }">
+                <UButton
+                  variant="ghost"
+                  color="neutral"
+                  class="w-full justify-between"
+                >
+                  <span class="text-sm text-muted">Skip tier ({{ tierLeads.length }})</span>
+                  <UIcon :name="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" />
+                </UButton>
+              </template>
+              <template #skip-leads>
+                <div class="grid grid-cols-1 gap-4 mt-4">
+                  <UCard
+                    v-for="lead in tierLeads"
+                    :key="lead.id"
+                    class="overflow-hidden"
                   >
-                    <span class="text-sm text-muted">Skip tier ({{ tierLeads.length }})</span>
-                    <UIcon :name="open ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" />
-                  </UButton>
-                </template>
-                <template #skip-leads>
-                  <div class="grid grid-cols-1 gap-4 mt-4">
-                    <UCard
-                      v-for="lead in tierLeads"
-                      :key="lead.id"
-                      class="overflow-hidden"
-                    >
-                      <LeadCard :lead="lead" :tier-colors="tierColors" @generate-mockup="handleGenerateMockup" />
-                    </UCard>
-                  </div>
-                </template>
-              </UAccordion>
-            </div>
+                    <LeadCard :lead="lead" :tier-colors="tierColors" @generate-mockup="handleGenerateMockup" />
+                  </UCard>
+                </div>
+              </template>
+            </UAccordion>
+          </div>
             <div v-else class="grid grid-cols-1 gap-4">
               <UCard
                 v-for="lead in tierLeads"
@@ -230,9 +220,9 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
                     <div
                       :class="[
                         'px-3 py-1 rounded-full border text-xs font-medium whitespace-nowrap',
-                        tierColors[tierSlug].bg,
-                        tierColors[tierSlug].text,
-                        tierColors[tierSlug].border
+                        tierColors[tierSlug as keyof typeof tierColors]?.bg || '',
+                        tierColors[tierSlug as keyof typeof tierColors]?.text || '',
+                        tierColors[tierSlug as keyof typeof tierColors]?.border || ''
                       ]"
                     >
                       {{ lead.tier.label }}
@@ -244,12 +234,12 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
                       <UIcon name="i-lucide-target" class="text-primary-500" />
                       <span class="font-medium text-highlighted">{{ lead.score }}</span>
                     </div>
-                    <div v-if="lead.business.rating" class="flex items-center gap-1">
+                    <div v-if="lead.business?.rating" class="flex items-center gap-1">
                       <UIcon name="i-lucide-star" class="text-wcGold-400" />
                       <span class="text-highlighted">{{ lead.business.rating }}</span>
-                      <span class="text-muted">({{ lead.business.review_count }})</span>
+                      <span class="text-muted">({{ lead.business.review_count || 0 }})</span>
                     </div>
-                    <div v-if="lead.business.city" class="flex items-center gap-1">
+                    <div v-if="lead.business?.city" class="flex items-center gap-1">
                       <UIcon name="i-lucide-map-pin" class="text-muted" />
                       <span class="text-muted">{{ lead.business.city }}</span>
                     </div>
