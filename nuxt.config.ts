@@ -72,11 +72,17 @@ export default defineNuxtConfig({
       imageKitPublicKey: process.env.IMAGE_KIT_PUBLIC_KEY
     },
 
-    // Auth session (nuxt-auth-utils)
-    // NUXT_SESSION_PASSWORD auto-generated in dev, required in production
+    // Sealed httpOnly cookie. The seal key is NUXT_SESSION_PASSWORD (32+ chars)
+    // in the environment, not in this file. maxAge is the idle lifetime;
+    // server/utils/session.ts slides it forward while the user is active.
     session: {
-      maxAge: 60 * 60 * 24 * 7 // 7 days
-    } as any
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      cookie: {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax'
+      }
+    }
   },
 
   eslint: {

@@ -1,7 +1,6 @@
-// Global client-side auth middleware
-// Redirects unauthenticated users to login page
+// Redirects unauthenticated users to the login page.
 
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtRouteMiddleware(async (to) => {
   // Public routes that don't require authentication
   const publicRoutes = ['/login', '/register']
 
@@ -10,8 +9,15 @@ export default defineNuxtRouteMiddleware((to) => {
     return
   }
 
-  // Check if user is authenticated (client-side)
-  const { loggedIn } = useUserSession()
+  const { loggedIn, ready, session, fetch: fetchSession } = useUserSession()
+
+  // The sealed cookie is loaded by the session plugin. Redirecting before that
+  // resolves treats a still-valid session as logged out. A null session means
+  // the read failed (network or 5xx), not that the server said logged out, so
+  // retry once instead of sending the user to /login.
+  if (!ready.value || session.value === null) {
+    await fetchSession()
+  }
 
   // Redirect to login if not authenticated
   if (!loggedIn.value) {
@@ -24,11 +30,3 @@ export default defineNuxtRouteMiddleware((to) => {
     return navigateTo(`/login?redirect=${encodeURIComponent(destination)}`)
   }
 })
-
-
-
-
-
-
-
-

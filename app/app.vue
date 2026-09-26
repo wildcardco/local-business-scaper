@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
 
-const { loggedIn, user, clear: logout, fetch: refreshSession } = useUserSession()
+const { loggedIn, user, clear: logout } = useUserSession()
 const toast = useToast()
 const router = useRouter()
 
@@ -89,11 +89,6 @@ async function handleLogout() {
     })
   }
 }
-
-// Ensure session is loaded
-onMounted(() => {
-  refreshSession()
-})
 </script>
 
 <template>
