@@ -1,8 +1,6 @@
 <script setup lang="ts">
-const toast = useToast()
-const isSyncing = ref(false)
-const syncProgress = ref('')
 const owner = ref('mine')
+const { running: syncRunning, revision: syncRevision, start: startSync } = useStudioSync()
 
 const { data, pending, refresh } = await useFetch('/api/mockups', {
   query: computed(() => owner.value === 'mine' ? {} : { owner: owner.value }),
@@ -27,71 +25,9 @@ const ownerOptions = computed(() => {
   ]
 })
 
-function syncFailureMessage(error: unknown) {
-  const message = readError(error, '')
-  if (!message || /load failed|failed to fetch|networkerror|network request failed/i.test(message)) {
-    return 'The phone dropped the connection before Studio answered (Load failed). Each page is saved on its own now. Try again.'
-  }
-  return message
-}
-
-async function syncFromN8n() {
-  if (isSyncing.value) return
-  isSyncing.value = true
-  let cursor: string | null = null
-  let unsorted = false
-  let imported = 0
-  let refreshed = 0
-  let synced = 0
-  let ownerName = ''
-  let pages = 0
-  try {
-    do {
-      pages++
-      syncProgress.value = pages === 1 ? 'Syncing…' : `Syncing page ${pages}…`
-      const result = await $fetch('/api/mockups/sync', {
-        method: 'POST',
-        body: { cursor, unsorted }
-      })
-      imported += result.imported || 0
-      refreshed += result.updated || 0
-      synced += result.synced || 0
-      ownerName = result.owner || ownerName
-      cursor = result.nextCursor || null
-      unsorted = result.unsorted === true
-      if (pages >= 40) break
-    } while (cursor)
-
-    const stoppedEarly = Boolean(cursor)
-    const description = synced === 0
-      ? `n8n returned no leads for ${ownerName || 'your account'}.`
-      : [
-          imported ? `Imported ${imported} new` : '',
-          refreshed ? `Refreshed ${refreshed} already in Studio` : '',
-          `Checked ${synced} n8n lead${synced === 1 ? '' : 's'} for ${ownerName || 'you'}`,
-          stoppedEarly ? 'Stopped after 40 pages. Run sync again to continue.' : ''
-        ].filter(Boolean).join('. ')
-    toast.add({
-      title: 'Studio synced',
-      description,
-      color: 'success'
-    })
-    await refresh()
-  } catch (error: unknown) {
-    const saved = synced
-      ? `Saved ${synced} lead${synced === 1 ? '' : 's'} before it stopped. `
-      : ''
-    toast.add({
-      title: 'Sync failed',
-      description: saved + syncFailureMessage(error),
-      color: 'error'
-    })
-    if (synced) await refresh()
-  } finally {
-    isSyncing.value = false
-    syncProgress.value = ''
-  }
-}
+watch(syncRevision, () => {
+  refresh()
+})
 
 function statusColor(status: string) {
   if (status === 'mockup_ready' || status === 'pitch_ready') return 'success'
@@ -121,11 +57,11 @@ function statusColor(status: string) {
           class="min-h-11 w-full justify-center sm:w-auto"
           icon="i-lucide-refresh-cw"
           variant="outline"
-          :loading="isSyncing"
-          :disabled="isSyncing"
-          @click="syncFromN8n"
+          :loading="syncRunning"
+          :disabled="syncRunning"
+          @click="startSync"
         >
-          {{ syncProgress || 'Sync from n8n' }}
+          {{ syncRunning ? 'Syncing in background' : 'Sync from n8n' }}
         </UButton>
         <UButton
           class="min-h-11 w-full justify-center sm:w-auto"
