@@ -7,9 +7,10 @@ import {
   categoryGroups,
   categoryIconForGroup,
   CLOSE_CATEGORY_MATCH_SCORE,
-  resolveCategoryQuery,
-  suggestBusinessCategories
+  resolveCategoryQuery
 } from '~/data/business-categories'
+import { suggestGoogleCategories } from '~~/shared/utils/google-categories'
+import { preferRegionMatches, rankTownSuggestions } from '~~/shared/utils/town-suggestions'
 
 const emit = defineEmits<{
   search: [{ query: string; location: string; limit: number; lat?: number; lng?: number; placeId?: string }]
@@ -30,7 +31,7 @@ const country = ref('us')
 const zipCode = ref('')
 const limit = ref(20)
 
-function categoryMenuItem(cat: { label: string, value: string, group: string }): InputMenuItem {
+function categoryMenuItem(cat: { label: string, value: string, group?: string }): InputMenuItem {
   return {
     label: cat.label,
     value: cat.value,
@@ -65,11 +66,13 @@ const categoryItems = computed<InputMenuItem[]>(() => {
     return items
   }
 
-  const suggestions = suggestBusinessCategories(term)
-  const presetItems = suggestions.map(row => categoryMenuItem(row.category))
+  const suggestions = suggestGoogleCategories(term)
+  const presetItems = suggestions.map(row => categoryMenuItem(row))
   const best = suggestions[0]
   const exact = exactCategoryItem(raw)
-  const alreadyListed = presetItems.some(item => item.label === raw)
+  const alreadyListed = presetItems.some(item =>
+    typeof item === 'object' && item !== null && item.label === raw
+  )
 
   if (best && best.score >= CLOSE_CATEGORY_MATCH_SCORE) {
     const [match, ...rest] = presetItems
@@ -114,6 +117,18 @@ const citySuggestions = ref<CitySuggestion[]>([])
 const isLoadingSuggestions = ref(false)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let cityRequestId = 0
+let cityAbort: AbortController | null = null
+let cityQuery = ''
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  if ('name' in error && error.name === 'AbortError') return true
+  if ('cause' in error && error.cause && typeof error.cause === 'object' && 'name' in error.cause) {
+    return error.cause.name === 'AbortError'
+  }
+  return false
+}
 
 // Get state name for filtering
 const selectedStateName = computed(() => {
@@ -123,24 +138,39 @@ const selectedStateName = computed(() => {
 })
 
 async function onCitySearch(searchTerm: string) {
-  if (!searchTerm || searchTerm.length < 2) {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  cityAbort?.abort()
+
+  const requestId = ++cityRequestId
+  const term = searchTerm.trim()
+  if (term.length < 2) {
+    cityQuery = ''
     citySuggestions.value = []
+    isLoadingSuggestions.value = false
     return
   }
 
-  if (debounceTimer) clearTimeout(debounceTimer)
+  // Drop a list from an unrelated query immediately. A shorter or longer
+  // version of the same text can stay until the new response arrives.
+  if (cityQuery && !term.startsWith(cityQuery) && !cityQuery.startsWith(term)) {
+    citySuggestions.value = []
+  }
+  cityQuery = term
 
   debounceTimer = setTimeout(async () => {
+    const controller = new AbortController()
+    cityAbort = controller
     isLoadingSuggestions.value = true
     try {
-      // Include state in query if selected to get more relevant results
       const queryWithState = state.value && state.value !== 'all'
-        ? `${searchTerm}, ${selectedStateName.value}`
-        : searchTerm
+        ? `${term}, ${selectedStateName.value}`
+        : term
 
       const response = await $fetch('/api/autocomplete', {
-        query: { query: queryWithState, region: country.value }
+        query: { query: queryWithState, region: country.value },
+        signal: controller.signal
       })
+      if (requestId !== cityRequestId) return
 
       let suggestions: CitySuggestion[] = (response.suggestions || []).map((s: CitySuggestion) => ({
         label: s.label,
@@ -150,48 +180,16 @@ async function onCitySearch(searchTerm: string) {
         lng: s.lng
       }))
 
-      // If a state is selected, prioritize results that match that state
       if (state.value && state.value !== 'all') {
-        const stateAbbr = state.value.toUpperCase()
-        const stateName = selectedStateName.value.toLowerCase()
-
-        // Sort to put matching state results first
-        suggestions = suggestions.sort((a, b) => {
-          const aLabel = a.label.toLowerCase()
-          const bLabel = b.label.toLowerCase()
-
-          const aMatchesState = aLabel.includes(stateAbbr.toLowerCase()) ||
-            aLabel.includes(stateName) ||
-            aLabel.includes(`, ${stateAbbr}`)
-          const bMatchesState = bLabel.includes(stateAbbr.toLowerCase()) ||
-            bLabel.includes(stateName) ||
-            bLabel.includes(`, ${stateAbbr}`)
-
-          if (aMatchesState && !bMatchesState) return -1
-          if (!aMatchesState && bMatchesState) return 1
-          return 0
-        })
-
-        // Filter to only show results from selected state if we have matches
-        const stateMatches = suggestions.filter((s) => {
-          const label = s.label.toLowerCase()
-          return label.includes(stateAbbr.toLowerCase()) ||
-            label.includes(stateName) ||
-            label.includes(`, ${stateAbbr}`)
-        })
-
-        // If we have state-specific matches, only show those
-        if (stateMatches.length > 0) {
-          suggestions = stateMatches
-        }
+        suggestions = preferRegionMatches(suggestions, state.value, selectedStateName.value)
       }
-
-      citySuggestions.value = suggestions
+      citySuggestions.value = rankTownSuggestions(term, suggestions)
     } catch (error) {
+      if (requestId !== cityRequestId || isAbortError(error)) return
       console.error('Autocomplete error:', error)
       citySuggestions.value = []
     } finally {
-      isLoadingSuggestions.value = false
+      if (requestId === cityRequestId) isLoadingSuggestions.value = false
     }
   }, 300)
 }
@@ -451,6 +449,7 @@ function handleSearch() {
             :placeholder="state && state !== 'all' ? `City in ${selectedStateName}...` : 'Start typing...'"
             icon="i-lucide-map-pin"
             size="lg"
+            ignore-filter
             :loading="isLoadingSuggestions"
             create-item
             class="w-full"
