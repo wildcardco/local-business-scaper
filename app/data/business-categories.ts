@@ -308,6 +308,11 @@ export function categoryDisplayIcon(input: string | null | undefined): string {
 
 const SUGGESTION_LIMIT = 8
 const SUGGESTION_MIN_SCORE = 0.48
+/**
+ * Typos and near-exact labels sit at or above this score ("plumer" → Plumber).
+ * Weaker overlaps ("food bank" → Bank) stay as suggestions only.
+ */
+export const CLOSE_CATEGORY_MATCH_SCORE = 0.8
 
 export interface CategorySuggestion {
   category: (typeof businessCategories)[number]

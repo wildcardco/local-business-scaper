@@ -6,6 +6,7 @@ import {
   categoryDisplayLabel,
   categoryGroups,
   categoryIconForGroup,
+  CLOSE_CATEGORY_MATCH_SCORE,
   resolveCategoryQuery,
   suggestBusinessCategories
 } from '~/data/business-categories'
@@ -37,10 +38,21 @@ function categoryMenuItem(cat: { label: string, value: string, group: string }):
   }
 }
 
-// Full grouped list until the user types. After that, ignore the menu's
-// substring filter and show similarity matches, best first.
+function exactCategoryItem(raw: string): InputMenuItem {
+  return {
+    label: raw,
+    value: raw.trim(),
+    exactQuery: true,
+    icon: 'i-lucide-search'
+  }
+}
+
+// Full grouped list until the user types. After that, rank by similarity.
+// A close typo leads the list so Enter selects it; the exact typed text sits
+// directly under that match. If nothing is close, the exact text leads instead.
 const categoryItems = computed<InputMenuItem[]>(() => {
-  const term = categorySearchTerm.value.trim()
+  const raw = categorySearchTerm.value
+  const term = raw.trim()
   if (!term) {
     const items: InputMenuItem[] = []
     categoryGroups.forEach((group) => {
@@ -54,12 +66,19 @@ const categoryItems = computed<InputMenuItem[]>(() => {
   }
 
   const suggestions = suggestBusinessCategories(term)
-  if (!suggestions.length) return []
+  const presetItems = suggestions.map(row => categoryMenuItem(row.category))
+  const best = suggestions[0]
+  const exact = exactCategoryItem(raw)
+  const alreadyListed = presetItems.some(item => item.label === raw)
 
-  return [
-    { type: 'label', label: 'Closest matches' },
-    ...suggestions.map(row => categoryMenuItem(row.category))
-  ]
+  if (best && best.score >= CLOSE_CATEGORY_MATCH_SCORE) {
+    const [match, ...rest] = presetItems
+    if (!match || alreadyListed) return presetItems
+    return [match, exact, ...rest]
+  }
+
+  if (alreadyListed) return presetItems
+  return [exact, ...presetItems]
 })
 
 // Autocomplete mode keeps the typed text as the model. Prefer that, and fall
@@ -362,7 +381,7 @@ function handleSearch() {
           value-key="label"
           mode="autocomplete"
           ignore-filter
-          :create-item="{ position: 'top', when: 'always' }"
+          create-item
           placeholder="Type or select a category..."
           icon="i-lucide-store"
           size="lg"
@@ -370,6 +389,14 @@ function handleSearch() {
           class="w-full"
           @blur="commitTypedCategory"
         >
+          <template #item-label="{ item }">
+            <template v-if="typeof item === 'object' && item?.exactQuery">
+              Search for "{{ String(item.label ?? '').trim() }}"
+            </template>
+            <template v-else>
+              {{ typeof item === 'object' && item ? item.label : item }}
+            </template>
+          </template>
           <template #create-item-label="{ item }">
             <span class="inline-flex items-center gap-2">
               <UIcon name="i-lucide-search" class="shrink-0" />
