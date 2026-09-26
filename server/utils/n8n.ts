@@ -79,7 +79,7 @@ function n8nConfig() {
   }
 }
 
-async function n8nFetch(path: string, init: RequestInit = {}) {
+async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
   const { apiKey, baseUrl } = n8nConfig()
   if (!apiKey) {
     throw createError({
@@ -88,14 +88,31 @@ async function n8nFetch(path: string, init: RequestInit = {}) {
     })
   }
 
-  const response = await fetch(`${baseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-N8N-API-KEY': apiKey,
-      ...(init.headers || {})
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-N8N-API-KEY': apiKey,
+        ...(init.headers || {})
+      }
+    })
+  } catch (error: unknown) {
+    const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : ''
+    const message = error instanceof Error ? error.message : 'network error'
+    if (name === 'TimeoutError' || name === 'AbortError' || /timeout/i.test(message)) {
+      throw createError({
+        statusCode: 504,
+        message: `n8n did not answer within ${Math.round(timeoutMs / 1000)} seconds. Sync stopped so the phone is not left waiting.`
+      })
     }
-  })
+    throw createError({
+      statusCode: 502,
+      message: `n8n request failed: ${message}`
+    })
+  }
 
   const text = await response.text()
   let json: unknown = null
@@ -210,8 +227,12 @@ function extractExecutionRows(json: unknown): Record<string, unknown>[] {
 
 function nextCursorOf(json: unknown): string | null {
   if (!json || typeof json !== 'object') return null
-  const cursor = (json as { nextCursor?: unknown }).nextCursor
-  return typeof cursor === 'string' && cursor ? cursor : null
+  const record = json as Record<string, unknown>
+  for (const key of ['nextCursor', 'next_cursor']) {
+    const cursor = record[key]
+    if (typeof cursor === 'string' && cursor) return cursor
+  }
+  return null
 }
 
 function errorText(error: unknown) {
@@ -227,37 +248,56 @@ function errorStatus(error: unknown) {
 }
 
 const LEAD_PAGE_LIMIT = 100
-const LEAD_PAGE_CAP = 40
+const LEAD_PAGE_CAP = 5
+const LEAD_PAGE_TIMEOUT_MS = 12_000
 
-async function listLeadRows(columnName: string, value: string, sortBy: string) {
-  const { leadsTableId } = n8nConfig()
-  const rows: Record<string, unknown>[] = []
-  let cursor: string | null = null
-  const seenCursors = new Set<string>()
-
-  for (let page = 0; page < LEAD_PAGE_CAP; page++) {
-    const params = new URLSearchParams()
-    params.set('limit', String(LEAD_PAGE_LIMIT))
-    params.set('filter', JSON.stringify({
-      type: 'and',
-      filters: [{ columnName, condition: 'eq', value }]
-    }))
-    if (sortBy) params.set('sortBy', sortBy)
-    if (cursor) params.set('cursor', cursor)
-
-    const json = await n8nFetch(`/api/v1/data-tables/${leadsTableId}/rows?${params}`)
-    const batch = extractTableRows(json)
-    rows.push(...batch)
-    const next = nextCursorOf(json)
-    if (!next || batch.length === 0 || seenCursors.has(next)) break
-    seenCursors.add(next)
-    cursor = next
-  }
-
-  return rows
+export interface N8nLeadPage {
+  rows: Record<string, unknown>[]
+  nextCursor: string | null
+  unsorted: boolean
 }
 
-export async function listN8nLeadsByOwner(email: string) {
+async function fetchLeadPage(columnName: string, value: string, sortBy: string, cursor: string | null) {
+  const { leadsTableId } = n8nConfig()
+  const params = new URLSearchParams()
+  params.set('limit', String(LEAD_PAGE_LIMIT))
+  params.set('filter', JSON.stringify({
+    type: 'and',
+    filters: [{ columnName, condition: 'eq', value }]
+  }))
+  if (sortBy) params.set('sortBy', sortBy)
+  if (cursor) params.set('cursor', cursor)
+
+  const json = await n8nFetch(
+    `/api/v1/data-tables/${leadsTableId}/rows?${params}`,
+    {},
+    LEAD_PAGE_TIMEOUT_MS
+  )
+  const rows = extractTableRows(json)
+  const next = nextCursorOf(json)
+  return {
+    rows,
+    nextCursor: next && rows.length > 0 && next !== cursor ? next : null
+  }
+}
+
+function rethrowLeadError(error: unknown): never {
+  const message = errorText(error)
+  const status = errorStatus(error)
+  const scopeHint = status === 401 || status === 403
+    ? ' The key needs the dataTableRow:read scope. Sync does not use N8N_STUDIO_SECRET.'
+    : ''
+  throw createError({
+    statusCode: status >= 400 && status < 600 ? status : 502,
+    message: `${message}${scopeHint}`
+  })
+}
+
+/** One page of the signed-in owner's leads. The client asks for the next cursor. */
+export async function listN8nLeadPage(email: string, options?: {
+  cursor?: string | null
+  unsorted?: boolean
+}): Promise<N8nLeadPage> {
   const owner = ownerSlugFromEmail(email)
   const { apiKey } = n8nConfig()
   if (!apiKey) {
@@ -267,22 +307,48 @@ export async function listN8nLeadsByOwner(email: string) {
     })
   }
 
+  const cursor = options?.cursor || null
+  const unsorted = options?.unsorted === true
+  if (unsorted) {
+    try {
+      const page = await fetchLeadPage('owner', owner, '', cursor)
+      return { ...page, unsorted: true }
+    } catch (error: unknown) {
+      rethrowLeadError(error)
+    }
+  }
+
   try {
-    return await listLeadRows('owner', owner, 'updatedAt:desc')
+    const page = await fetchLeadPage('owner', owner, 'updatedAt:desc', cursor)
+    return { ...page, unsorted: false }
   } catch (error: unknown) {
     const message = errorText(error)
-    if (/sort/i.test(message)) {
-      return await listLeadRows('owner', owner, '')
+    if (!cursor && /sort/i.test(message)) {
+      try {
+        const page = await fetchLeadPage('owner', owner, '', null)
+        return { ...page, unsorted: true }
+      } catch (retryError: unknown) {
+        rethrowLeadError(retryError)
+      }
     }
-    const status = errorStatus(error)
-    const scopeHint = status === 401 || status === 403
-      ? ' The key needs the dataTableRow:read scope. Sync does not use N8N_STUDIO_SECRET.'
-      : ''
-    throw createError({
-      statusCode: status >= 400 && status < 600 ? status : 502,
-      message: `${message}${scopeHint}`
-    })
+    rethrowLeadError(error)
   }
+}
+
+async function listLeadRows(columnName: string, value: string, sortBy: string) {
+  const rows: Record<string, unknown>[] = []
+  let cursor: string | null = null
+  const seenCursors = new Set<string>()
+
+  for (let page = 0; page < LEAD_PAGE_CAP; page++) {
+    const batch = await fetchLeadPage(columnName, value, sortBy, cursor)
+    rows.push(...batch.rows)
+    if (!batch.nextCursor || seenCursors.has(batch.nextCursor)) break
+    seenCursors.add(batch.nextCursor)
+    cursor = batch.nextCursor
+  }
+
+  return rows
 }
 
 export async function writeN8nLeadFeedback(placeId: string, owner: string, feedback: string) {

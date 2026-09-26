@@ -334,6 +334,26 @@ export async function initializeSchema() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_place ON mockups(place_id)`)
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS mockup_sync_jobs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      cursor TEXT,
+      unsorted INTEGER DEFAULT 0,
+      imported INTEGER DEFAULT 0,
+      refreshed INTEGER DEFAULT 0,
+      synced INTEGER DEFAULT 0,
+      pages INTEGER DEFAULT 0,
+      error TEXT,
+      locked_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockup_sync_jobs_user ON mockup_sync_jobs(user_id, created_at)`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`[schema] initializeSchema stopped early (${message}). Digest tables are created separately.`)

@@ -1,7 +1,6 @@
 <script setup lang="ts">
-const toast = useToast()
-const isSyncing = ref(false)
 const owner = ref('mine')
+const { running: syncRunning, revision: syncRevision, start: startSync } = useStudioSync()
 
 const { data, pending, refresh } = await useFetch('/api/mockups', {
   query: computed(() => owner.value === 'mine' ? {} : { owner: owner.value }),
@@ -26,36 +25,9 @@ const ownerOptions = computed(() => {
   ]
 })
 
-async function syncFromN8n() {
-  isSyncing.value = true
-  try {
-    const result = await $fetch('/api/mockups/sync', { method: 'POST' })
-    const imported = result.imported || 0
-    const refreshed = result.updated || 0
-    const synced = result.synced || 0
-    const description = synced === 0
-      ? `n8n returned no leads for ${result.owner || 'your account'}.`
-      : [
-          imported ? `Imported ${imported} new` : '',
-          refreshed ? `Refreshed ${refreshed} already in Studio` : '',
-          `Checked ${synced} n8n lead${synced === 1 ? '' : 's'} for ${result.owner || 'you'}`
-        ].filter(Boolean).join('. ')
-    toast.add({
-      title: 'Studio synced',
-      description,
-      color: 'success'
-    })
-    await refresh()
-  } catch (error: unknown) {
-    toast.add({
-      title: 'Sync failed',
-      description: readError(error, 'Could not read n8n leads. Nothing was imported.'),
-      color: 'error'
-    })
-  } finally {
-    isSyncing.value = false
-  }
-}
+watch(syncRevision, () => {
+  refresh()
+})
 
 function statusColor(status: string) {
   if (status === 'mockup_ready' || status === 'pitch_ready') return 'success'
@@ -85,10 +57,11 @@ function statusColor(status: string) {
           class="min-h-11 w-full justify-center sm:w-auto"
           icon="i-lucide-refresh-cw"
           variant="outline"
-          :loading="isSyncing"
-          @click="syncFromN8n"
+          :loading="syncRunning"
+          :disabled="syncRunning"
+          @click="startSync"
         >
-          Sync from n8n
+          {{ syncRunning ? 'Syncing in background' : 'Sync from n8n' }}
         </UButton>
         <UButton
           class="min-h-11 w-full justify-center sm:w-auto"

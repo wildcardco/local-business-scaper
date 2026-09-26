@@ -188,6 +188,7 @@ async function handleLogout() {
           </template>
 
           <template #body>
+            <StudioSyncBanner />
             <NuxtPage />
           </template>
         </UDashboardPanel>
