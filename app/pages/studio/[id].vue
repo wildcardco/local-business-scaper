@@ -293,6 +293,12 @@ function statusColor(status: string) {
             </a>
           </div>
           <p
+            v-else-if="mockup.deploymentMissing"
+            class="text-sm text-muted"
+          >
+            That Vercel deployment was removed, so this mockup is no longer live.
+          </p>
+          <p
             v-else
             class="text-sm text-muted"
           >
@@ -318,7 +324,7 @@ function statusColor(status: string) {
             v-else
             class="text-sm text-muted"
           >
-            No GitHub repo yet. The factory creates one in the same run that publishes the Vercel deployment. Sync does not create repos.
+            No GitHub repo on file.
           </p>
         </div>
       </UCard>

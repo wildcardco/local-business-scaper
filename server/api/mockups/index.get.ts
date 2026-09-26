@@ -1,5 +1,6 @@
 import { db } from '~~/server/utils/db'
 import { expireStaleMockups, mapMockup, removeDigestLeadsWithoutMockups, visibleMockupSql } from '~~/server/utils/mockups'
+import { checkUserMockupLinks } from '~~/server/utils/mockup-links'
 import { applyN8nLeadToMockup } from '~~/server/utils/n8n'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { STUDIO_OWNERS, studioOwnerBySlug } from '~~/shared/studio-owners'
@@ -26,15 +27,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Unknown owner. Use mine, ryan, chase, or aaron.' })
   }
 
+  let teammateId = ''
   await removeDigestLeadsWithoutMockups(user.id)
   if (teammate) {
     const teammateUser = await db.execute({
       sql: 'SELECT id FROM users WHERE lower(email) = ? LIMIT 1',
       args: [teammate.email]
     })
-    const teammateId = teammateUser.rows[0]?.id
-    if (teammateId && String(teammateId) !== user.id) {
-      await removeDigestLeadsWithoutMockups(String(teammateId))
+    teammateId = String(teammateUser.rows[0]?.id || '')
+    if (teammateId && teammateId !== user.id) {
+      await removeDigestLeadsWithoutMockups(teammateId)
     }
   }
 
@@ -51,6 +53,10 @@ export default defineEventHandler(async (event) => {
   ))
 
   await expireStaleMockups(user.id)
+  await checkUserMockupLinks(user.id)
+  if (teammateId && teammateId !== user.id) {
+    await checkUserMockupLinks(teammateId)
+  }
 
   const visible = visibleMockupSql('m')
   const mineCount = await db.execute({

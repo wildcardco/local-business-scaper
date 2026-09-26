@@ -2,6 +2,7 @@ import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
 import { githubRepoForMockup, mockupGithubUrl } from '~~/shared/mockup-repo'
+import { checkUserMockupLinks } from '~~/server/utils/mockup-links'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -54,14 +55,18 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
   const state = rawState || parsed.state
   const placeId = (row.place_id as string) || (business?.place_id as string) || null
   const mockupUrl = (row.mockup_url as string) || null
-  const vercelUrl = mockupUrl && /^https?:\/\//i.test(mockupUrl) ? mockupUrl : null
-  const githubRepo = githubRepoForMockup({
-    owner: (row.owner as string) || null,
-    businessName,
-    placeId,
-    stored: (row.github_repo as string) || null,
-    vercelUrl
-  })
+  const deploymentMissing = Number(row.deployment_missing || 0) === 1
+  const githubMissing = Number(row.github_missing || 0) === 1
+  const vercelUrl = !deploymentMissing && mockupUrl && /^https?:\/\//i.test(mockupUrl) ? mockupUrl : null
+  const githubRepo = deploymentMissing || githubMissing
+    ? null
+    : githubRepoForMockup({
+        owner: (row.owner as string) || null,
+        businessName,
+        placeId,
+        stored: (row.github_repo as string) || null,
+        vercelUrl
+      })
 
   return {
     id: String(row.id),
@@ -73,6 +78,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     status: (row.status as string) || 'draft',
     mockupUrl,
     vercelUrl,
+    deploymentMissing,
     githubRepo,
     githubUrl: mockupGithubUrl(githubRepo),
     locationLabel: locationLabel({
@@ -115,9 +121,12 @@ export function visibleMockupSql(alias: string) {
   const url = `lower(trim(COALESCE(${alias}.mockup_url, '')))`
   const vercel = `(${url} LIKE 'https://%.vercel.app%' OR ${url} LIKE 'http://%.vercel.app%')`
   return `(
-    ${vercel}
-    OR COALESCE(${alias}.source, 'studio') != 'digest'
-    OR ${alias}.status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+    (
+      ${vercel}
+      OR COALESCE(${alias}.source, 'studio') != 'digest'
+      OR ${alias}.status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+    )
+    AND COALESCE(${alias}.deployment_missing, 0) = 0
   )`
 }
 
@@ -181,6 +190,7 @@ export async function getMockupForUser(id: string, userId: string) {
     await applyN8nLeadToMockup(userId, id, placeId)
   }
   await expireStaleMockups(userId, id)
+  await checkUserMockupLinks(userId, id)
 
   const result = await db.execute({
     sql: `

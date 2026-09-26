@@ -1,8 +1,9 @@
 import { db, generateId } from '~~/server/utils/db'
 import { listN8nLeadPage } from '~~/server/utils/n8n'
 import { isPlaceId, parseUsCityState } from '~~/shared/studio-location'
-import { isVercelMockupUrl, storedGithubRepo } from '~~/shared/mockup-repo'
+import { isVercelMockupUrl, mockupGithubRepo, mockupGithubUrl, storedGithubRepo } from '~~/shared/mockup-repo'
 import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
+import { inspectMockupTarget } from '~~/server/utils/mockup-links'
 
 type SqlArg = string | number | bigint | null
 
@@ -132,6 +133,18 @@ export async function getSyncJob(userId: string) {
   return viewOf(await latestJob(userId))
 }
 
+async function mapPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  let next = 0
+  async function run() {
+    while (next < items.length) {
+      const index = next
+      next += 1
+      await worker(items[index]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => run()))
+}
+
 function explicitGithubRepo(row: Record<string, unknown>) {
   const stored = storedGithubRepo(asString(row.github_repo) || asString(row.repo_full_name))
   if (stored) return stored
@@ -182,7 +195,7 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
   const marks = placeIds.map(() => '?').join(', ')
   const [mockupResult, businessResult] = await db.batch([
     {
-      sql: `SELECT m.id, m.place_id, m.business_id, b.city as b_city, b.state as b_state,
+      sql: `SELECT m.id, m.place_id, m.business_id, m.status, b.city as b_city, b.state as b_state,
           b.address as b_address, b.email as b_email, b.category as b_category
         FROM mockups m
         LEFT JOIN businesses b ON b.id = m.business_id
@@ -199,6 +212,25 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
 
   const mockupsByPlace = new Map(mockupResult.rows.map(row => [String(row.place_id || ''), row]))
   const businessesByPlace = new Map(businessResult.rows.map(row => [String(row.place_id || ''), row]))
+
+  const linkByPlace = new Map<string, { deployment: 'live' | 'missing' | 'unknown', githubMissing: boolean, githubRepo: string | null }>()
+  await mapPool([...byPlace.entries()], 8, async ([placeId, row]) => {
+    const mockupUrl = asString(row.mockup_url) || ''
+    const businessName = asString(row.business_name) || 'Imported lead'
+    const explicitRepo = explicitGithubRepo(row)
+    const repo = mockupGithubRepo({
+      owner,
+      businessName,
+      placeId,
+      stored: explicitRepo
+    })
+    const inspected = await inspectMockupTarget({
+      vercelUrl: mockupUrl,
+      githubUrl: mockupGithubUrl(repo),
+      githubRepo: explicitRepo || repo
+    })
+    linkByPlace.set(placeId, inspected)
+  })
 
   for (const [placeId, row] of byPlace) {
     const businessName = asString(row.business_name) || 'Imported lead'
@@ -220,24 +252,60 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
         : null
     const phone = row.phone != null ? String(row.phone) : null
     const existing = mockupsByPlace.get(placeId)
+    const link = linkByPlace.get(placeId)
+    const busy = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(String(existing?.status || ''))
+
+    if (link?.deployment === 'missing' && !busy) {
+      if (existing?.id) {
+        writes.push({
+          sql: `UPDATE mockups
+                SET deployment_missing = 1, links_checked_at = datetime('now')
+                WHERE id = ? AND user_id = ?`,
+          args: [String(existing.id), userId]
+        })
+      }
+      continue
+    }
+
+    const githubMissing = link?.deployment === 'live' && link.githubMissing ? 1 : 0
+    const confirmedRepo = link?.deployment === 'live' ? link.githubRepo : githubRepo
+    const live = link?.deployment === 'live'
 
     if (existing?.id) {
-      writes.push({
-        sql: `UPDATE mockups SET
-          owner = ?, status = ?, mockup_url = COALESCE(?, mockup_url),
-          mockup_version = ?, pitch_draft = COALESCE(?, pitch_draft),
-          pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
-          photo_urls = COALESCE(?, photo_urls),
-          github_repo = COALESCE(github_repo, ?),
-          n8n_synced_at = datetime('now'),
-          updated_at = datetime('now')
-          WHERE id = ? AND user_id = ?`,
-        args: [
-          owner, status, mockupUrl, mockupVersion, pitchDraft,
-          pitchVersion, lastFeedback, photoUrls, githubRepo,
-          String(existing.id), userId
-        ]
-      })
+      writes.push(live
+        ? {
+            sql: `UPDATE mockups SET
+              owner = ?, status = ?, mockup_url = COALESCE(?, mockup_url),
+              mockup_version = ?, pitch_draft = COALESCE(?, pitch_draft),
+              pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
+              photo_urls = COALESCE(?, photo_urls),
+              github_repo = ?, github_missing = ?, deployment_missing = 0,
+              links_checked_at = datetime('now'),
+              n8n_synced_at = datetime('now'),
+              updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+            args: [
+              owner, status, mockupUrl, mockupVersion, pitchDraft,
+              pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing,
+              String(existing.id), userId
+            ]
+          }
+        : {
+            sql: `UPDATE mockups SET
+              owner = ?, status = ?, mockup_url = COALESCE(?, mockup_url),
+              mockup_version = ?, pitch_draft = COALESCE(?, pitch_draft),
+              pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
+              photo_urls = COALESCE(?, photo_urls),
+              github_repo = COALESCE(github_repo, ?),
+              n8n_synced_at = datetime('now'),
+              updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+            args: [
+              owner, status, mockupUrl, mockupVersion, pitchDraft,
+              pitchVersion, lastFeedback, photoUrls, githubRepo,
+              String(existing.id), userId
+            ]
+          })
       refreshed++
       if (existing.business_id) {
         const patch = locationPatch({
@@ -284,11 +352,13 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     writes.push({
       sql: `INSERT INTO mockups (
         id, user_id, business_id, place_id, owner, source, status, mockup_url, mockup_version,
-        pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, n8n_synced_at
-      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, github_missing,
+        deployment_missing, links_checked_at, n8n_synced_at
+      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
       args: [
         generateId(), userId, businessId, placeId, owner, status, mockupUrl,
-        mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls, githubRepo
+        mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls,
+        live ? confirmedRepo : githubRepo, githubMissing
       ]
     })
     imported++
