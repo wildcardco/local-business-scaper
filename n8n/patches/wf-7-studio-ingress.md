@@ -59,7 +59,9 @@ Upsert Studio Lead currently matches **only** `place_id` and runs **in parallel*
 
 The leads table has no `city` column and no GitHub column. Nuxt parses city from `address` (`…, City, ST 12345`). Optional: on the WF-2 callback, send `github_repo` or `repo_html_url` (`https://github.com/wildcardco/wildcard-mockup-…`). Until then Studio derives that repo name with the same slug and hash as WF-2 Prepare.
 
-Callback `POST {callback_url}` with `X-Studio-Secret` is still not in WF-2. Without it, Studio only learns the new URL by reading the leads table.
+The webhook answers `200 {"ok":true}` immediately. n8n does not call `callback_url`. When the factory finishes it writes `status=mockup_ready`, a new `mockup_url`, and `mockup_version` incremented by 1 on the lead row. Studio stays on “Revision requested, in progress” and reads that row (detail refresh or Sync from n8n). It does not treat the immediate 200 as the finished mockup.
+
+Nuxt sends `X-Studio-Secret` on every Studio action (generate, revise, pitch, photos), all of which go through `fireStudioAction`. If `N8N_STUDIO_SECRET` is empty, Nuxt does not call the webhook and returns 500. A non-2xx from n8n is returned to the UI as “Studio webhook failed (status)”. Vercel must set `N8N_STUDIO_SECRET` to credential Studio secret (`bYKoHkwycoKjqI1A`).
 
 ## Nodes (recipe)
 

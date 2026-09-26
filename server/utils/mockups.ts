@@ -109,17 +109,16 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
 }
 
 const STALE_MINUTES = 12
-const STALE_MESSAGE = 'n8n did not finish. The factory stopped before a mockup URL came back. Try Generate mockup again.'
 
 export async function expireStaleMockups(userId: string, mockupId?: string) {
   await db.execute({
     sql: `UPDATE mockups
-          SET status = 'failed', last_feedback = ?, updated_at = datetime('now')
+          SET status = 'failed', updated_at = datetime('now')
           WHERE user_id = ?
             AND status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
             AND updated_at < datetime('now', '-${STALE_MINUTES} minutes')
             ${mockupId ? 'AND id = ?' : ''}`,
-    args: mockupId ? [STALE_MESSAGE, userId, mockupId] : [STALE_MESSAGE, userId]
+    args: mockupId ? [userId, mockupId] : [userId]
   })
 }
 

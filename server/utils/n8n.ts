@@ -8,6 +8,7 @@ import {
   DEFAULT_RESEARCH_MODEL,
   isStudioAiModel
 } from '~~/shared/studio-ai'
+import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
 
 export const N8N_WF_FACTORY = 'jslUBLzcV27vdLIA'
 export const N8N_WF_PITCH = 'wkqEVHfuCV1CsS2a'
@@ -129,20 +130,27 @@ export async function fireStudioAction(payload: StudioLeadPayload) {
     })
   }
 
+  if (!studioSecret) {
+    throw createError({
+      statusCode: 500,
+      message: 'N8N_STUDIO_SECRET is not configured, so Studio did not call the webhook. Since 2026-09-25 WF-7 requires header X-Studio-Secret. A missing or wrong secret is rejected with 403 and no execution is logged. Set the Vercel value to n8n credential Studio secret (bYKoHkwycoKjqI1A).'
+    })
+  }
+
   const response = await fetch(studioWebhookUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(studioSecret ? { 'X-Studio-Secret': studioSecret } : {})
+      'X-Studio-Secret': studioSecret
     },
     body: JSON.stringify(payload)
   })
 
+  const errorText = await response.text()
   if (!response.ok) {
-    const errorText = await response.text()
     const detail = errorText.slice(0, 300) || response.statusText
     const secretHint = response.status === 401 || response.status === 403
-      ? ' WF-7 Studio Ingress (HPHWqFUK7DXBynWo) checks header X-Studio-Secret. That credential must equal N8N_STUDIO_SECRET. A mismatch is rejected before an execution is created.'
+      ? ' WF-7 (HPHWqFUK7DXBynWo) checks X-Studio-Secret against the Studio secret credential. A mismatch is rejected before an execution is created. Vercel N8N_STUDIO_SECRET must equal that credential.'
       : ''
     throw createError({
       statusCode: 502,
@@ -150,9 +158,18 @@ export async function fireStudioAction(payload: StudioLeadPayload) {
     })
   }
 
+  if (!errorText) return { ok: true }
   try {
-    return await response.json()
-  } catch {
+    const body = JSON.parse(errorText) as { ok?: unknown }
+    if (body.ok === false) {
+      throw createError({
+        statusCode: 502,
+        message: 'Studio webhook returned 200 with ok:false. No mockup job was started.'
+      })
+    }
+    return body
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'statusCode' in error) throw error
     return { ok: true }
   }
 }
@@ -415,7 +432,7 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     if (!lead) return false
 
     const local = await db.execute({
-      sql: 'SELECT status, mockup_url, mockup_version FROM mockups WHERE id = ? AND user_id = ?',
+      sql: 'SELECT status, mockup_url, mockup_version, pitch_version, pitch_draft FROM mockups WHERE id = ? AND user_id = ?',
       args: [mockupId, userId]
     })
     const current = local.rows[0]
@@ -427,15 +444,34 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     const localVersion = Number(current.mockup_version || 0)
     const localUrl = asLeadString(current.mockup_url)
     const localStatus = String(current.status || '')
-
-    if (!mockupUrl && n8nStatus !== 'failed') return false
-
     const busyLocal = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(localStatus)
-    if (busyLocal && mockupUrl && localUrl === mockupUrl && n8nVersion <= localVersion) {
-      const job = await findRunningFactoryJob({ placeId, mockupId })
-      if (job.matched || (job.count > 0 && !job.inspected)) {
-        return false
+
+    // WF-7 answers 200 {ok:true} immediately and never calls callback_url.
+    // The lead row stays on the previous URL and version until the factory finishes,
+    // so an unchanged mockup_ready row is still in progress.
+    if (busyLocal) {
+      const advanced = leadAdvancedWhileBusy({
+        localStatus,
+        localUrl,
+        localVersion,
+        localPitchVersion: Number(current.pitch_version || 0),
+        localPitchDraft: asLeadString(current.pitch_draft),
+        n8nStatus,
+        n8nUrl: mockupUrl,
+        n8nVersion,
+        n8nPitchVersion: Number(lead.pitch_version || 0),
+        n8nPitchDraft: asLeadString(lead.pitch_draft)
+      })
+      if (advanced === 'wait') return false
+      if (advanced === 'failed') {
+        await db.execute({
+          sql: `UPDATE mockups SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND user_id = ?`,
+          args: [mockupId, userId]
+        })
+        return true
       }
+    } else if (!mockupUrl && n8nStatus !== 'failed') {
+      return false
     }
 
     const status = mockupUrl

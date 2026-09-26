@@ -152,7 +152,7 @@ function statusColor(status: string) {
         :key="mockup.id"
         class="min-w-0 rounded-wc-lg border border-default bg-elevated p-4"
       >
-        <div class="flex items-start justify-between gap-3">
+        <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="truncate font-medium">
               {{ mockup.business?.name || 'Untitled' }}
@@ -164,9 +164,9 @@ function statusColor(status: string) {
           <UBadge
             :color="statusColor(mockup.status)"
             variant="subtle"
-            class="shrink-0 capitalize"
+            class="max-w-full whitespace-normal text-left"
           >
-            {{ mockup.status.replaceAll('_', ' ') }}
+            {{ studioStatusLabel(mockup.status) }}
           </UBadge>
         </div>
         <p

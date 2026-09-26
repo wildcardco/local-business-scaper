@@ -20,6 +20,24 @@ const busy = computed(() =>
   ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.value?.status || '')
 )
 
+function notesAreWebhookError(notes: string) {
+  return /Studio webhook failed|N8N_STUDIO_SECRET|N8N_API_KEY|X-Studio-Secret|n8n API \d/.test(notes)
+}
+
+const failureDescription = computed(() => {
+  const notes = mockup.value?.lastFeedback || ''
+  if (notesAreWebhookError(notes)) return notes
+  if (notes) {
+    return 'The leads table did not move to a new mockup URL within 12 minutes. Your notes are still saved below. Sync from n8n if the factory finished later.'
+  }
+  return 'The factory stopped before a mockup URL came back. You can generate again.'
+})
+
+const showSavedNotes = computed(() => {
+  const notes = mockup.value?.lastFeedback || ''
+  return Boolean(notes) && !notesAreWebhookError(notes)
+})
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 watch(busy, (isBusy) => {
@@ -102,8 +120,8 @@ async function revise() {
       body: { notes: notes.value }
     })
     toast.add({
-      title: result.warning ? 'Feedback sent with a warning' : 'Feedback sent',
-      description: result.warning || 'n8n is revising this mockup.',
+      title: result.warning ? 'Revision requested, with a warning' : 'Revision requested, in progress',
+      description: result.warning || 'n8n accepted the notes and returned immediately. This page checks the leads table for a new URL and a higher version. It does not wait on a callback.',
       color: result.warning ? 'warning' : 'success'
     })
     notes.value = ''
@@ -226,7 +244,7 @@ function statusColor(status: string) {
           variant="subtle"
           class="capitalize"
         >
-          {{ mockup.status.replaceAll('_', ' ') }}
+          {{ studioStatusLabel(mockup.status) }}
         </UBadge>
         <span class="text-xs text-muted">v{{ mockup.mockupVersion }}</span>
         <span
@@ -236,11 +254,19 @@ function statusColor(status: string) {
       </div>
 
       <UAlert
-        v-if="mockup.status === 'failed'"
+        v-if="mockup.status === 'revising'"
+        color="warning"
+        icon="i-lucide-hourglass"
+        title="Revision requested, in progress"
+        description="n8n accepted revise_mockup and returned 200 right away. It does not call back. This page reads the leads table until that row is mockup_ready, the deployment URL is new, and mockup_version has gone up by one."
+      />
+
+      <UAlert
+        v-else-if="mockup.status === 'failed'"
         color="error"
         icon="i-lucide-triangle-alert"
         title="n8n did not finish"
-        :description="mockup.lastFeedback || 'The factory stopped before a mockup URL came back. You can generate again.'"
+        :description="failureDescription"
       />
 
       <UCard>
@@ -315,7 +341,7 @@ function statusColor(status: string) {
           />
         </UFormField>
         <p
-          v-if="mockup.lastFeedback && mockup.status !== 'failed'"
+          v-if="showSavedNotes"
           class="mt-3 text-sm text-muted"
         >
           Last notes: {{ mockup.lastFeedback }}
