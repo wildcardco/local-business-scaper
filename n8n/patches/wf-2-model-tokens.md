@@ -50,7 +50,7 @@ JSON body:
 
 On generate failure, callback `status: failed` so Studio stops polling.
 
-Also send `github_repo` (or `repo_html_url`) from Parse Deployment's `_repo_html_url` / `_full_name`. Update Lead does not store the repo today, so Studio derives `wildcardco/wildcard-mockup-<owner>-<slug>-<hash>` with the same slug and hash as the Prepare node. A callback field is the source of truth if the business is renamed later.
+Also send `github_repo` (or `repo_html_url`) from Parse Deployment's `_repo_html_url` / `_full_name`. Update Lead does not store the repo today. Studio does not create repos and does not show a GitHub link until `mockup_url` is a Vercel deployment. When that URL exists, the link uses a stored repo name if the callback sent one, otherwise `wildcardco/wildcard-mockup-<owner>-<slug>-<hash>` (same slug and hash as Prepare). A callback field is the source of truth if the business is renamed later.
 
 ## 5. Feedback is dropped before the model nodes
 

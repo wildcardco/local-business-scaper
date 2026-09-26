@@ -57,7 +57,7 @@ Upsert Studio Lead currently matches **only** `place_id` and runs **in parallel*
 2. Connect Upsert Studio Lead **before** Route Studio Action, and do not start WF-2 until the upsert finishes.
 3. Keep writing `last_feedback` from the normalized payload (already mapped).
 
-The leads table has no `city` column and no GitHub column. Nuxt parses city from `address` (`…, City, ST 12345`). Optional: on the WF-2 callback, send `github_repo` or `repo_html_url` (`https://github.com/wildcardco/wildcard-mockup-…`). Until then Studio derives that repo name with the same slug and hash as WF-2 Prepare.
+The leads table has no `city` column and no GitHub column. Nuxt parses city from `address` (`…, City, ST 12345`). Sync does not create GitHub repos. WF-2 **Create Repo** (`POST https://api.github.com/user/repos`) runs only after **Generation OK?**, in the same run that writes `mockup_url`. Studio lists a lead only when `mockup_url` is an `https://*.vercel.app` link, and shows the GitHub link only then, using a stored `github_repo` / `repo_html_url` when n8n sent one, otherwise the same slug and hash as WF-2 Prepare. Optional: send `github_repo` or `repo_html_url` on the callback so a renamed business still points at the repo that was created.
 
 The webhook answers `200 {"ok":true}` immediately. n8n does not call `callback_url`. When the factory finishes it writes `status=mockup_ready`, a new `mockup_url`, and `mockup_version` incremented by 1 on the lead row. Studio stays on “Revision requested, in progress” and reads that row (detail refresh or Sync from n8n). It does not treat the immediate 200 as the finished mockup.
 

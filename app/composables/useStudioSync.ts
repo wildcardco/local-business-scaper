@@ -12,13 +12,13 @@ export interface StudioSyncJob {
 let loop: Promise<void> | null = null
 
 function summary(job: StudioSyncJob, owner?: string) {
+  const kept = job.imported + job.refreshed
   if (job.synced === 0 && job.status === 'done') {
     return `n8n returned no leads${owner ? ` for ${owner}` : ''}.`
   }
   return [
-    job.imported ? `Imported ${job.imported} new` : '',
-    job.refreshed ? `Refreshed ${job.refreshed} already in Studio` : '',
     `Checked ${job.synced} n8n lead${job.synced === 1 ? '' : 's'}`,
+    kept ? `Kept ${kept} with a Vercel link` : 'No Vercel mockup links on those rows',
     job.partial ? 'Stopped after 40 pages. Run sync again to continue.' : ''
   ].filter(Boolean).join('. ')
 }

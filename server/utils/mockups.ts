@@ -1,7 +1,7 @@
 import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
-import { mockupGithubRepo, mockupGithubUrl } from '~~/shared/mockup-repo'
+import { githubRepoForMockup, mockupGithubUrl } from '~~/shared/mockup-repo'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -53,13 +53,15 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
   const city = rawCity || parsed.city
   const state = rawState || parsed.state
   const placeId = (row.place_id as string) || (business?.place_id as string) || null
-  const githubRepo = mockupGithubRepo({
+  const mockupUrl = (row.mockup_url as string) || null
+  const vercelUrl = mockupUrl && /^https?:\/\//i.test(mockupUrl) ? mockupUrl : null
+  const githubRepo = githubRepoForMockup({
     owner: (row.owner as string) || null,
     businessName,
     placeId,
-    stored: (row.github_repo as string) || null
+    stored: (row.github_repo as string) || null,
+    vercelUrl
   })
-  const mockupUrl = (row.mockup_url as string) || null
 
   return {
     id: String(row.id),
@@ -70,7 +72,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     source: (row.source as string) || 'studio',
     status: (row.status as string) || 'draft',
     mockupUrl,
-    vercelUrl: mockupUrl && /^https?:\/\//i.test(mockupUrl) ? mockupUrl : null,
+    vercelUrl,
     githubRepo,
     githubUrl: mockupGithubUrl(githubRepo),
     locationLabel: locationLabel({
@@ -106,6 +108,42 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
         }
       : null
   }
+}
+
+/** Rows Studio should list: a Vercel deployment, a hand-made Studio draft, or a job still running. */
+export function visibleMockupSql(alias: string) {
+  const url = `lower(trim(COALESCE(${alias}.mockup_url, '')))`
+  const vercel = `(${url} LIKE 'https://%.vercel.app%' OR ${url} LIKE 'http://%.vercel.app%')`
+  return `(
+    ${vercel}
+    OR COALESCE(${alias}.source, 'studio') != 'digest'
+    OR ${alias}.status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+  )`
+}
+
+export async function removeDigestLeadsWithoutMockups(userId: string) {
+  await db.execute({
+    sql: `DELETE FROM mockups
+          WHERE user_id = ?
+            AND COALESCE(source, 'studio') = 'digest'
+            AND status NOT IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+            AND NOT (
+              lower(trim(COALESCE(mockup_url, ''))) LIKE 'https://%.vercel.app%'
+              OR lower(trim(COALESCE(mockup_url, ''))) LIKE 'http://%.vercel.app%'
+            )`,
+    args: [userId]
+  })
+  await db.execute({
+    sql: `UPDATE mockups
+          SET github_repo = NULL
+          WHERE user_id = ?
+            AND github_repo IS NOT NULL
+            AND NOT (
+              lower(trim(COALESCE(mockup_url, ''))) LIKE 'https://%.vercel.app%'
+              OR lower(trim(COALESCE(mockup_url, ''))) LIKE 'http://%.vercel.app%'
+            )`,
+    args: [userId]
+  })
 }
 
 const STALE_MINUTES = 12
@@ -269,18 +307,12 @@ export async function fireMockupAction(opts: {
         ? 'revising'
         : 'generating'
   const owner = ownerSlugFromEmail(opts.user.email)
-  const githubRepo = mockupGithubRepo({
-    owner,
-    businessName: business?.name,
-    placeId,
-    stored: null
-  })
 
   await db.execute({
     sql: `UPDATE mockups SET
       place_id = ?, owner = ?, status = ?, last_feedback = COALESCE(?, last_feedback),
       photo_urls = COALESCE(?, photo_urls), ai_model = ?,
-      github_repo = COALESCE(github_repo, ?), updated_at = datetime('now')
+      updated_at = datetime('now')
       WHERE id = ? AND user_id = ?`,
     args: [
       placeId,
@@ -289,7 +321,6 @@ export async function fireMockupAction(opts: {
       extraPrompt,
       opts.photoUrls ? JSON.stringify(opts.photoUrls) : null,
       model,
-      githubRepo,
       mockup.id,
       opts.user.id
     ]
