@@ -306,6 +306,142 @@ export function categoryDisplayIcon(input: string | null | undefined): string {
   return categoryIconForGroup(findBusinessCategory(input)?.group)
 }
 
+const SUGGESTION_LIMIT = 8
+const SUGGESTION_MIN_SCORE = 0.48
+
+export interface CategorySuggestion {
+  category: (typeof businessCategories)[number]
+  score: number
+}
+
+/**
+ * Rank preset categories by similarity to free text.
+ * Exact and near matches come first. A low score is omitted so unrelated
+ * categories do not fill the menu. This does not rewrite the typed query.
+ */
+export function suggestBusinessCategories(input: string | null | undefined, limit = SUGGESTION_LIMIT): CategorySuggestion[] {
+  const query = input?.trim() ?? ''
+  if (query.length < 2) return []
+
+  return businessCategories
+    .map(category => ({ category, score: scoreBusinessCategory(query, category.label, category.value) }))
+    .filter(row => row.score >= SUGGESTION_MIN_SCORE)
+    .sort((a, b) => b.score - a.score || a.category.label.localeCompare(b.category.label))
+    .slice(0, limit)
+}
+
+function normalizeCategoryText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function categoryTokens(input: string): string[] {
+  return normalizeCategoryText(input).split(' ').filter(token => token.length > 0)
+}
+
+function compactCategoryText(input: string): string {
+  return normalizeCategoryText(input).replace(/ /g, '')
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0
+  if (!a.length) return b.length
+  if (!b.length) return a.length
+
+  const rows = b.length + 1
+  let prev = Array.from({ length: rows }, (_, index) => index)
+  let curr = new Array<number>(rows)
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i
+    const aChar = a[i - 1]
+    for (let j = 1; j <= b.length; j++) {
+      const cost = aChar === b[j - 1] ? 0 : 1
+      const insert = curr[j - 1] ?? 0
+      const remove = prev[j] ?? 0
+      const replace = prev[j - 1] ?? 0
+      curr[j] = Math.min(remove + 1, insert + 1, replace + cost)
+    }
+    const swap = prev
+    prev = curr
+    curr = swap
+  }
+
+  return prev[b.length] ?? 0
+}
+
+function tokenSimilarity(a: string, b: string): number {
+  if (a === b) return 1
+  const minLen = Math.min(a.length, b.length)
+  if (minLen < 3) return 0
+  if (a.startsWith(b) || b.startsWith(a)) {
+    return 0.84 + 0.16 * (minLen / Math.max(a.length, b.length))
+  }
+  const dist = levenshtein(a, b)
+  const maxLen = Math.max(a.length, b.length)
+  if (dist > 2) return 0
+  const similarity = 1 - dist / maxLen
+  return similarity >= 0.7 ? similarity : 0
+}
+
+function bestTokenSimilarity(token: string, candidates: string[]): number {
+  let best = 0
+  for (const candidate of candidates) {
+    const similarity = tokenSimilarity(token, candidate)
+    if (similarity > best) best = similarity
+    if (best === 1) return 1
+  }
+  return best
+}
+
+function coverage(source: string[], target: string[]): number {
+  if (!source.length) return 0
+  const total = source.reduce((sum, token) => sum + bestTokenSimilarity(token, target), 0)
+  return total / source.length
+}
+
+function compactSimilarity(query: string, candidate: string, queryTokenCount: number, candidateTokenCount: number): number {
+  if (!query || !candidate) return 0
+  if (query === candidate) return 1
+  if (query.length >= 4 && candidate.includes(query)) {
+    return 0.9 + 0.08 * (query.length / candidate.length)
+  }
+  // Edit distance is for a typo in one word ("plumer" → "plumber"), not for
+  // multi-word labels that only share a suffix ("hair salon" vs "nail salon").
+  if (queryTokenCount !== 1 || candidateTokenCount !== 1) return 0
+  const dist = levenshtein(query, candidate)
+  if (dist > 2) return 0
+  const similarity = 1 - dist / Math.max(query.length, candidate.length)
+  return similarity >= 0.7 ? similarity : 0
+}
+
+function scoreBusinessCategory(query: string, label: string, value: string): number {
+  const queryNorm = normalizeCategoryText(query)
+  const labelNorm = normalizeCategoryText(label)
+  const valueNorm = normalizeCategoryText(value)
+  if (!queryNorm) return 0
+  if (queryNorm === labelNorm || queryNorm === valueNorm) return 1
+
+  const queryTokens = categoryTokens(query)
+  const labelTokens = categoryTokens(label)
+  const tokenScore = coverage(queryTokens, labelTokens) * 0.7 + coverage(labelTokens, queryTokens) * 0.3
+  const compactScore = Math.max(
+    compactSimilarity(compactCategoryText(query), compactCategoryText(label), queryTokens.length, labelTokens.length),
+    compactSimilarity(compactCategoryText(query), compactCategoryText(value), queryTokens.length, categoryTokens(value).length)
+  )
+  let score = Math.max(tokenScore, compactScore)
+
+  if (labelNorm.includes(queryNorm) || valueNorm.includes(queryNorm)) {
+    score = Math.max(score, 0.93)
+  }
+
+  return score
+}
+
 // Popular categories for quick access
 export const popularCategories = [
   'restaurant',

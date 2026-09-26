@@ -6,7 +6,8 @@ import {
   categoryDisplayLabel,
   categoryGroups,
   categoryIconForGroup,
-  resolveCategoryQuery
+  resolveCategoryQuery,
+  suggestBusinessCategories
 } from '~/data/business-categories'
 
 const emit = defineEmits<{
@@ -28,33 +29,37 @@ const country = ref('us')
 const zipCode = ref('')
 const limit = ref(20)
 
-// Transform categories into InputMenu format with groups
+function categoryMenuItem(cat: { label: string, value: string, group: string }): InputMenuItem {
+  return {
+    label: cat.label,
+    value: cat.value,
+    icon: categoryIconForGroup(cat.group)
+  }
+}
+
+// Full grouped list until the user types. After that, ignore the menu's
+// substring filter and show similarity matches, best first.
 const categoryItems = computed<InputMenuItem[]>(() => {
-  const items: InputMenuItem[] = []
-
-  categoryGroups.forEach(group => {
-    // Add group label
-    items.push({
-      type: 'label',
-      label: group
+  const term = categorySearchTerm.value.trim()
+  if (!term) {
+    const items: InputMenuItem[] = []
+    categoryGroups.forEach((group) => {
+      items.push({ type: 'label', label: group })
+      businessCategories
+        .filter(cat => cat.group === group)
+        .forEach(cat => items.push(categoryMenuItem(cat)))
+      items.push({ type: 'separator' })
     })
+    return items
+  }
 
-    // Add items in this group
-    businessCategories
-      .filter(cat => cat.group === group)
-      .forEach(cat => {
-        items.push({
-          label: cat.label,
-          value: cat.value,
-          icon: categoryIconForGroup(cat.group)
-        })
-      })
+  const suggestions = suggestBusinessCategories(term)
+  if (!suggestions.length) return []
 
-    // Add separator after each group
-    items.push({ type: 'separator' })
-  })
-
-  return items
+  return [
+    { type: 'label', label: 'Closest matches' },
+    ...suggestions.map(row => categoryMenuItem(row.category))
+  ]
 })
 
 // Autocomplete mode keeps the typed text as the model. Prefer that, and fall
@@ -356,7 +361,8 @@ function handleSearch() {
           :items="categoryItems"
           value-key="label"
           mode="autocomplete"
-          create-item
+          ignore-filter
+          :create-item="{ position: 'top', when: 'always' }"
           placeholder="Type or select a category..."
           icon="i-lucide-store"
           size="lg"
@@ -366,16 +372,15 @@ function handleSearch() {
         >
           <template #create-item-label="{ item }">
             <span class="inline-flex items-center gap-2">
-              <UIcon name="i-lucide-store" class="shrink-0" />
-              Use "{{ item }}"
+              <UIcon name="i-lucide-search" class="shrink-0" />
+              Search for "{{ item }}"
             </span>
           </template>
           <template #empty>
             <div class="p-4 text-center text-muted">
-              <UIcon name="i-lucide-search-x" class="text-2xl mb-2" />
-              <p>No matching categories</p>
+              <p>No similar categories</p>
               <p class="text-xs mt-1">
-                Press Enter or search to use what you typed
+                Search for exactly what you typed
               </p>
             </div>
           </template>
