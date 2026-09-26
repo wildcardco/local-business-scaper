@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { InputMenuItem } from '@nuxt/ui'
-import { businessCategories, categoryGroups } from '~/data/business-categories'
+import {
+  businessCategories,
+  categoryDisplayIcon,
+  categoryDisplayLabel,
+  categoryGroups,
+  categoryIconForGroup,
+  resolveCategoryQuery
+} from '~/data/business-categories'
 
 const emit = defineEmits<{
   search: [{ query: string; location: string; limit: number; lat?: number; lng?: number; placeId?: string }]
@@ -11,6 +18,7 @@ defineProps<{
 }>()
 
 const selectedCategory = ref<string>('')
+const categorySearchTerm = ref('')
 const city = ref('')
 const cityPlaceId = ref<string | undefined>()
 const cityLat = ref<number | undefined>()
@@ -38,7 +46,7 @@ const categoryItems = computed<InputMenuItem[]>(() => {
         items.push({
           label: cat.label,
           value: cat.value,
-          icon: getIconForGroup(cat.group)
+          icon: categoryIconForGroup(cat.group)
         })
       })
 
@@ -49,26 +57,25 @@ const categoryItems = computed<InputMenuItem[]>(() => {
   return items
 })
 
-function getIconForGroup(group: string): string {
-  const icons: Record<string, string> = {
-    'Food & Dining': 'i-lucide-utensils',
-    'Home Services': 'i-lucide-wrench',
-    'Automotive': 'i-lucide-car',
-    'Health & Medical': 'i-lucide-heart-pulse',
-    'Beauty & Personal Care': 'i-lucide-sparkles',
-    'Retail & Shopping': 'i-lucide-shopping-bag',
-    'Professional Services': 'i-lucide-briefcase',
-    'Fitness & Recreation': 'i-lucide-dumbbell',
-    'Education & Childcare': 'i-lucide-graduation-cap',
-    'Lodging & Travel': 'i-lucide-plane',
-    'Events & Entertainment': 'i-lucide-party-popper',
-    'Pet Services': 'i-lucide-paw-print',
-    'Storage & Moving': 'i-lucide-truck',
-    'Financial Services': 'i-lucide-landmark',
-    'Religious Organizations': 'i-lucide-church',
-    'Industrial & Manufacturing': 'i-lucide-factory'
+// Autocomplete mode keeps the typed text as the model. Prefer that, and fall
+// back to the live search term so a value is never dropped on submit.
+const categoryQuery = computed(() =>
+  resolveCategoryQuery(selectedCategory.value || categorySearchTerm.value)
+)
+
+const selectedCategoryLabel = computed(() =>
+  categoryDisplayLabel(selectedCategory.value || categorySearchTerm.value)
+)
+
+const selectedCategoryIcon = computed(() =>
+  categoryDisplayIcon(selectedCategory.value || categorySearchTerm.value)
+)
+
+function commitTypedCategory() {
+  const typed = categorySearchTerm.value.trim()
+  if (typed && !selectedCategory.value.trim()) {
+    selectedCategory.value = typed
   }
-  return icons[group] || 'i-lucide-store'
 }
 
 // City autocomplete
@@ -285,8 +292,8 @@ const locationString = computed(() => {
 })
 
 const canSearch = computed(() =>
-  selectedCategory.value &&
-  (city.value.trim() || (state.value && state.value !== 'all') || zipCode.value.trim())
+  Boolean(categoryQuery.value)
+  && Boolean(city.value.trim() || (state.value && state.value !== 'all') || zipCode.value.trim())
 )
 
 // Reset state when country changes
@@ -316,10 +323,12 @@ watch(city, (newCity) => {
 })
 
 function handleSearch() {
-  if (!canSearch.value) return
+  commitTypedCategory()
+  const query = categoryQuery.value
+  if (!query || !canSearch.value) return
 
   emit('search', {
-    query: selectedCategory.value,
+    query,
     location: locationString.value,
     limit: limit.value,
     lat: cityLat.value,
@@ -343,25 +352,39 @@ function handleSearch() {
       <UFormField label="Business Type / Category">
         <UInputMenu
           v-model="selectedCategory"
+          v-model:search-term="categorySearchTerm"
           :items="categoryItems"
-          value-key="value"
-          placeholder="Search or select a category..."
+          value-key="label"
+          mode="autocomplete"
+          create-item
+          placeholder="Type or select a category..."
           icon="i-lucide-store"
           size="lg"
           open-on-focus
           class="w-full"
+          @blur="commitTypedCategory"
         >
+          <template #create-item-label="{ item }">
+            <span class="inline-flex items-center gap-2">
+              <UIcon name="i-lucide-store" class="shrink-0" />
+              Use "{{ item }}"
+            </span>
+          </template>
           <template #empty>
             <div class="p-4 text-center text-muted">
               <UIcon name="i-lucide-search-x" class="text-2xl mb-2" />
-              <p>No categories found</p>
+              <p>No matching categories</p>
+              <p class="text-xs mt-1">
+                Press Enter or search to use what you typed
+              </p>
             </div>
           </template>
         </UInputMenu>
 
-        <p v-if="selectedCategory" class="text-xs text-muted mt-1 flex items-center gap-1">
+        <p v-if="categoryQuery" class="text-xs text-muted mt-1 flex items-center gap-1">
+          <UIcon :name="selectedCategoryIcon" class="text-muted" />
           <UIcon name="i-lucide-check" class="text-success" />
-          Selected: {{ businessCategories.find(c => c.value === selectedCategory)?.label || selectedCategory }}
+          Selected: {{ selectedCategoryLabel }}
         </p>
       </UFormField>
 

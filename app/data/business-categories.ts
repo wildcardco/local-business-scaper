@@ -249,6 +249,63 @@ export const businessCategories = [
 // Get unique groups for filtering
 export const categoryGroups = [...new Set(businessCategories.map(c => c.group))]
 
+const fallbackCategoryIcon = 'i-lucide-store'
+
+const categoryGroupIcons: Record<string, string> = {
+  'Food & Dining': 'i-lucide-utensils',
+  'Home Services': 'i-lucide-wrench',
+  'Automotive': 'i-lucide-car',
+  'Health & Medical': 'i-lucide-heart-pulse',
+  'Beauty & Personal Care': 'i-lucide-sparkles',
+  'Retail & Shopping': 'i-lucide-shopping-bag',
+  'Professional Services': 'i-lucide-briefcase',
+  'Fitness & Recreation': 'i-lucide-dumbbell',
+  'Education & Childcare': 'i-lucide-graduation-cap',
+  'Lodging & Travel': 'i-lucide-plane',
+  'Events & Entertainment': 'i-lucide-party-popper',
+  'Pet Services': 'i-lucide-paw-print',
+  'Storage & Moving': 'i-lucide-truck',
+  'Financial Services': 'i-lucide-landmark',
+  'Religious Organizations': 'i-lucide-church',
+  'Industrial & Manufacturing': 'i-lucide-factory'
+}
+
+export function categoryIconForGroup(group: string | null | undefined): string {
+  if (!group) return fallbackCategoryIcon
+  return categoryGroupIcons[group] || fallbackCategoryIcon
+}
+
+/** Match a typed or stored category against the preset list (label or value, case-insensitive). */
+export function findBusinessCategory(input: string | null | undefined) {
+  const needle = input?.trim().toLowerCase()
+  if (!needle) return undefined
+  return businessCategories.find(category =>
+    category.value.toLowerCase() === needle || category.label.toLowerCase() === needle
+  )
+}
+
+/**
+ * Search query to submit. Preset categories keep their existing value
+ * ("Restaurant" → "restaurant"). Anything else is the trimmed text the user typed.
+ */
+export function resolveCategoryQuery(input: string | null | undefined): string {
+  const trimmed = input?.trim() ?? ''
+  if (!trimmed) return ''
+  return findBusinessCategory(trimmed)?.value ?? trimmed
+}
+
+/** Label for display. Unknown categories fall back to the text itself, never blank. */
+export function categoryDisplayLabel(input: string | null | undefined): string {
+  const trimmed = input?.trim() ?? ''
+  if (!trimmed) return ''
+  return findBusinessCategory(trimmed)?.label ?? trimmed
+}
+
+/** Icon for a category. Unknown categories use the store fallback. */
+export function categoryDisplayIcon(input: string | null | undefined): string {
+  return categoryIconForGroup(findBusinessCategory(input)?.group)
+}
+
 // Popular categories for quick access
 export const popularCategories = [
   'restaurant',
