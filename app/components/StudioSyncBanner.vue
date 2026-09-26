@@ -5,10 +5,11 @@ const detail = computed(() => {
   const current = job.value
   if (!current) return ''
   const page = Math.max(current.pages, 1)
-  const saved = current.synced
-  return saved
-    ? `Page ${page}. ${saved} lead${saved === 1 ? '' : 's'} saved. You can leave this page.`
-    : 'Reading the first page from n8n. You can leave this page.'
+  const checked = current.synced
+  const kept = current.imported + current.refreshed
+  return checked
+    ? `Page ${page}. Checked ${checked} leads. Kept ${kept} with a Vercel link. You can leave this page.`
+    : 'Reading the first page from n8n. Only Vercel mockups are saved. You can leave this page.'
 })
 </script>
 

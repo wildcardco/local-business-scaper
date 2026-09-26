@@ -1,5 +1,5 @@
 import { db } from '~~/server/utils/db'
-import { expireStaleMockups, mapMockup } from '~~/server/utils/mockups'
+import { expireStaleMockups, mapMockup, removeDigestLeadsWithoutMockups, visibleMockupSql } from '~~/server/utils/mockups'
 import { applyN8nLeadToMockup } from '~~/server/utils/n8n'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { STUDIO_OWNERS, studioOwnerBySlug } from '~~/shared/studio-owners'
@@ -26,6 +26,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'Unknown owner. Use mine, ryan, chase, or aaron.' })
   }
 
+  await removeDigestLeadsWithoutMockups(user.id)
+  if (teammate) {
+    const teammateUser = await db.execute({
+      sql: 'SELECT id FROM users WHERE lower(email) = ? LIMIT 1',
+      args: [teammate.email]
+    })
+    const teammateId = teammateUser.rows[0]?.id
+    if (teammateId && String(teammateId) !== user.id) {
+      await removeDigestLeadsWithoutMockups(String(teammateId))
+    }
+  }
+
   const pending = await db.execute({
     sql: `SELECT id, place_id, status FROM mockups
           WHERE user_id = ?
@@ -40,8 +52,9 @@ export default defineEventHandler(async (event) => {
 
   await expireStaleMockups(user.id)
 
+  const visible = visibleMockupSql('m')
   const mineCount = await db.execute({
-    sql: 'SELECT COUNT(*) as count FROM mockups WHERE user_id = ?',
+    sql: `SELECT COUNT(*) as count FROM mockups m WHERE m.user_id = ? AND ${visible}`,
     args: [user.id]
   })
 
@@ -50,12 +63,13 @@ export default defineEventHandler(async (event) => {
         sql: `${MOCKUP_SELECT}
          JOIN users u ON u.id = m.user_id
          WHERE lower(u.email) = ?
+           AND ${visible}
          ORDER BY m.updated_at DESC`,
         args: [teammate.email]
       })
     : await db.execute({
         sql: `${MOCKUP_SELECT}
-         WHERE m.user_id = ? ${businessId ? 'AND m.business_id = ?' : ''}
+         WHERE m.user_id = ? AND ${visible} ${businessId ? 'AND m.business_id = ?' : ''}
          ORDER BY m.updated_at DESC`,
         args: businessId ? [user.id, businessId] : [user.id]
       })

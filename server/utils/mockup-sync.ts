@@ -1,7 +1,8 @@
 import { db, generateId } from '~~/server/utils/db'
 import { listN8nLeadPage } from '~~/server/utils/n8n'
 import { isPlaceId, parseUsCityState } from '~~/shared/studio-location'
-import { mockupGithubRepo } from '~~/shared/mockup-repo'
+import { isVercelMockupUrl, storedGithubRepo } from '~~/shared/mockup-repo'
+import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
 
 type SqlArg = string | number | bigint | null
 
@@ -131,8 +132,17 @@ export async function getSyncJob(userId: string) {
   return viewOf(await latestJob(userId))
 }
 
+function explicitGithubRepo(row: Record<string, unknown>) {
+  const stored = storedGithubRepo(asString(row.github_repo) || asString(row.repo_full_name))
+  if (stored) return stored
+  const html = asString(row.repo_html_url)
+  const match = html?.match(/github\.com\/([\w.-]+\/[\w.-]+)/i)
+  return match?.[1] || null
+}
+
 export async function startSyncJob(userId: string) {
   await ensureMockupSyncTable()
+  await removeDigestLeadsWithoutMockups(userId)
   const current = await latestJob(userId)
   if (current && String(current.status) === 'running') {
     return viewOf(current)
@@ -159,7 +169,8 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
   const byPlace = new Map<string, Record<string, unknown>>()
   for (const row of rows) {
     const placeId = asString(row.place_id)
-    if (placeId) byPlace.set(placeId, row)
+    const mockupUrl = asString(row.mockup_url)
+    if (placeId && isVercelMockupUrl(mockupUrl)) byPlace.set(placeId, row)
   }
 
   let imported = 0
@@ -195,12 +206,7 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const parsedLocation = parseUsCityState(address)
     const city = parsedLocation.city
     const state = parsedLocation.state
-    const githubRepo = mockupGithubRepo({
-      owner,
-      businessName,
-      placeId,
-      stored: asString(row.github_repo) || asString(row.repo_full_name)
-    })
+    const githubRepo = explicitGithubRepo(row)
     const mockupUrl = asString(row.mockup_url)
     const pitchDraft = asString(row.pitch_draft)
     const status = asString(row.status) || (mockupUrl ? 'mockup_ready' : 'draft')

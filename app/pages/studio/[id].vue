@@ -318,7 +318,7 @@ function statusColor(status: string) {
             v-else
             class="text-sm text-muted"
           >
-            GitHub repo appears once the business name and place id are on file.
+            No GitHub repo yet. The factory creates one in the same run that publishes the Vercel deployment. Sync does not create repos.
           </p>
         </div>
       </UCard>

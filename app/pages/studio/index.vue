@@ -104,7 +104,7 @@ function statusColor(status: string) {
           No mockups yet
         </h2>
         <p class="mx-auto max-w-md text-sm text-muted">
-          Add a business by hand, or generate one from a scraped lead. Email-created mockups show up here after you sync.
+          Sync keeps rows that already have a Vercel deployment. Leads without one stay off this list. You can still start a mockup by hand.
         </p>
         <UButton
           class="min-h-11"
