@@ -4,10 +4,10 @@ import {
   DEFAULT_AI_MAX_TOKENS,
   DEFAULT_AI_MODEL,
   DEFAULT_PITCH_MAX_TOKENS,
-  STUDIO_AI_MODELS,
   TOKEN_PRESETS
 } from '~~/shared/studio-ai'
 
+const { optionsFor, hintFor, source: modelSource } = useStudioModels()
 const toast = useToast()
 const config = useRuntimeConfig()
 const { user } = useUserSession()
@@ -168,14 +168,9 @@ const fontOptions = [
   { value: 'Verdana', label: 'Verdana' }
 ]
 
-const modelOptions = STUDIO_AI_MODELS.map(model => ({
-  value: model.value,
-  label: `${model.label} — ${model.cost}`
-}))
+const modelOptions = computed(() => optionsFor(aiModel.value))
 
-const selectedModelHint = computed(() =>
-  STUDIO_AI_MODELS.find(model => model.value === aiModel.value)?.hint || ''
-)
+const selectedModelHint = computed(() => hintFor(aiModel.value))
 
 const tokenOptions = TOKEN_PRESETS.map(preset => ({
   value: preset.value,
@@ -230,7 +225,8 @@ onMounted(() => {
 
         <div class="space-y-4">
           <p class="text-sm text-muted">
-            Used by Studio when n8n generates HTML, research, and pitch copy. Defaults match the current factory: Fable 5 at 16k tokens for mockups, 1500 tokens for pitches.
+            Studio sends this model id to n8n on every mockup. The live factory still pins HTML to claude-opus-5-5 until WF-2 reads the model field.
+            {{ modelSource === 'anthropic' ? 'This list is from the Anthropic Models API.' : 'This list is the verified fallback. Set ANTHROPIC_API_KEY to load models live.' }}
           </p>
 
           <UFormField label="Claude model" :help="selectedModelHint">

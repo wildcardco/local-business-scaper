@@ -20,6 +20,24 @@ const busy = computed(() =>
   ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.value?.status || '')
 )
 
+function notesAreWebhookError(notes: string) {
+  return /Studio webhook failed|N8N_STUDIO_SECRET|N8N_API_KEY|X-Studio-Secret|n8n API \d/.test(notes)
+}
+
+const failureDescription = computed(() => {
+  const notes = mockup.value?.lastFeedback || ''
+  if (notesAreWebhookError(notes)) return notes
+  if (notes) {
+    return 'The leads table did not move to a new mockup URL within 12 minutes. Your notes are still saved below. Sync from n8n if the factory finished later.'
+  }
+  return 'The factory stopped before a mockup URL came back. You can generate again.'
+})
+
+const showSavedNotes = computed(() => {
+  const notes = mockup.value?.lastFeedback || ''
+  return Boolean(notes) && !notesAreWebhookError(notes)
+})
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 watch(busy, (isBusy) => {
@@ -80,10 +98,9 @@ async function generate() {
     toast.add({ title: 'Mockup generation started', color: 'success' })
     await refresh()
   } catch (error: unknown) {
-    const err = error as { data?: { message?: string } }
     toast.add({
       title: 'Could not start mockup',
-      description: err.data?.message || 'Check n8n studio webhook settings',
+      description: readError(error, 'Check the n8n studio webhook and X-Studio-Secret'),
       color: 'error'
     })
   } finally {
@@ -98,18 +115,21 @@ async function revise() {
   }
   isRevising.value = true
   try {
-    await $fetch(`/api/mockups/${id.value}/revise`, {
+    const result = await $fetch(`/api/mockups/${id.value}/revise`, {
       method: 'POST',
       body: { notes: notes.value }
     })
-    toast.add({ title: 'Revision started', color: 'success' })
+    toast.add({
+      title: result.warning ? 'Revision requested, with a warning' : 'Revision requested, in progress',
+      description: result.warning || 'n8n accepted the notes and returned immediately. This page checks the leads table for a new URL and a higher version. It does not wait on a callback.',
+      color: result.warning ? 'warning' : 'success'
+    })
     notes.value = ''
     await refresh()
   } catch (error: unknown) {
-    const err = error as { data?: { message?: string } }
     toast.add({
-      title: 'Revision failed',
-      description: err.data?.message,
+      title: 'Feedback failed',
+      description: readError(error, 'n8n did not accept the revision.'),
       color: 'error'
     })
   } finally {
@@ -124,10 +144,9 @@ async function writePitch() {
     toast.add({ title: 'Pitch writer started', color: 'success' })
     await refresh()
   } catch (error: unknown) {
-    const err = error as { data?: { message?: string } }
     toast.add({
       title: 'Pitch failed',
-      description: err.data?.message,
+      description: readError(error, 'n8n did not accept the pitch request.'),
       color: 'error'
     })
   } finally {
@@ -166,10 +185,9 @@ async function handlePhotoUpload(event: Event) {
     toast.add({ title: 'Photo added', color: 'success' })
     await refresh()
   } catch (error: unknown) {
-    const err = error as { data?: { message?: string } }
     toast.add({
       title: 'Photo upload failed',
-      description: err.data?.message || 'Try again',
+      description: readError(error, 'Try again'),
       color: 'error'
     })
   } finally {
@@ -186,54 +204,183 @@ function statusColor(status: string) {
 </script>
 
 <template>
-  <div class="space-y-6 pb-28 sm:pb-8">
-    <div class="flex flex-wrap items-start justify-between gap-3">
+  <div class="min-w-0 space-y-6 overflow-x-hidden pb-28 sm:pb-8">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div class="min-w-0">
-        <p class="eyebrow">Studio</p>
-        <h1 class="font-display text-2xl font-semibold tracking-tight truncate">
+        <p class="eyebrow">
+          Studio
+        </p>
+        <h1 class="truncate font-display text-2xl font-semibold tracking-tight">
           {{ mockup?.business?.name || 'Mockup' }}
         </h1>
-        <p class="text-muted">{{ mockup?.business?.category || mockup?.placeId }}</p>
+        <p class="text-muted">
+          {{ mockup?.locationLabel || mockup?.business?.category || 'City not on file' }}
+        </p>
       </div>
-      <UButton to="/studio" variant="ghost" icon="i-lucide-arrow-left">
+      <UButton
+        class="min-h-11 w-full justify-center sm:w-auto"
+        to="/studio"
+        variant="ghost"
+        icon="i-lucide-arrow-left"
+      >
         All mockups
       </UButton>
     </div>
 
-    <div v-if="pending && !mockup" class="flex justify-center py-16">
-      <UIcon name="i-lucide-loader-2" class="animate-spin text-3xl text-primary" />
+    <div
+      v-if="pending && !mockup"
+      class="flex justify-center py-16"
+    >
+      <UIcon
+        name="i-lucide-loader-2"
+        class="animate-spin text-3xl text-primary"
+      />
     </div>
 
     <template v-else-if="mockup">
       <div class="flex flex-wrap items-center gap-2">
-        <UBadge :color="statusColor(mockup.status)" variant="subtle" class="capitalize">
-          {{ mockup.status.replaceAll('_', ' ') }}
+        <UBadge
+          :color="statusColor(mockup.status)"
+          variant="subtle"
+          class="capitalize"
+        >
+          {{ studioStatusLabel(mockup.status) }}
         </UBadge>
         <span class="text-xs text-muted">v{{ mockup.mockupVersion }}</span>
-        <span v-if="mockup.aiModel" class="text-xs text-muted">{{ mockup.aiModel }}</span>
+        <span
+          v-if="mockup.aiModel"
+          class="text-xs text-muted"
+        >{{ mockup.aiModel }}</span>
       </div>
 
       <UAlert
-        v-if="mockup.status === 'failed'"
+        v-if="mockup.status === 'revising'"
+        color="warning"
+        icon="i-lucide-hourglass"
+        title="Revision requested, in progress"
+        description="n8n accepted revise_mockup and returned 200 right away. It does not call back. This page reads the leads table until that row is mockup_ready, the deployment URL is new, and mockup_version has gone up by one."
+      />
+
+      <UAlert
+        v-else-if="mockup.status === 'failed'"
         color="error"
         icon="i-lucide-triangle-alert"
         title="n8n did not finish"
-        :description="mockup.lastFeedback || 'The factory stopped before a mockup URL came back. You can generate again.'"
+        :description="failureDescription"
       />
+
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Where it lives
+          </h3>
+        </template>
+        <div class="space-y-3">
+          <div
+            v-if="mockup.vercelUrl"
+            class="min-w-0"
+          >
+            <p class="text-xs text-muted">
+              Vercel deployment
+            </p>
+            <a
+              :href="mockup.vercelUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-1 inline-flex min-h-11 items-center break-all text-sm text-primary underline"
+            >
+              {{ mockup.vercelUrl }}
+            </a>
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            No Vercel deployment yet.
+          </p>
+          <div
+            v-if="mockup.githubUrl"
+            class="min-w-0"
+          >
+            <p class="text-xs text-muted">
+              GitHub repo
+            </p>
+            <a
+              :href="mockup.githubUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-1 inline-flex min-h-11 items-center break-all text-sm text-primary underline"
+            >
+              {{ mockup.githubUrl }}
+            </a>
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            GitHub repo appears once the business name and place id are on file.
+          </p>
+        </div>
+      </UCard>
+
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">
+            Feedback
+          </h3>
+        </template>
+        <UFormField
+          label="Revision notes"
+          help="Sends action revise_mockup to the Studio webhook. Photos still go through ImageKit."
+        >
+          <UTextarea
+            v-model="notes"
+            class="w-full"
+            :rows="4"
+            placeholder="Move the hero photo down, make the phone number bigger…"
+          />
+        </UFormField>
+        <p
+          v-if="showSavedNotes"
+          class="mt-3 text-sm text-muted"
+        >
+          Last notes: {{ mockup.lastFeedback }}
+        </p>
+        <div class="mt-3">
+          <UButton
+            class="min-h-11 w-full justify-center sm:w-auto"
+            icon="i-lucide-message-square"
+            variant="outline"
+            :loading="isRevising"
+            :disabled="busy"
+            @click="revise"
+          >
+            Send feedback
+          </UButton>
+        </div>
+      </UCard>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <UCard class="lg:col-span-2">
           <template #header>
-            <h2 class="font-semibold">Preview</h2>
+            <h2 class="font-semibold">
+              Preview
+            </h2>
           </template>
-          <div v-if="mockup.mockupUrl" class="space-y-3">
+          <div
+            v-if="mockup.mockupUrl"
+            class="space-y-3"
+          >
             <iframe
               :src="mockup.mockupUrl"
-              class="w-full h-112 rounded-lg bg-white"
+              class="h-64 w-full max-w-full rounded-lg bg-white sm:h-112"
               title="Mockup preview"
             />
-            <p class="text-xs text-muted break-all">{{ mockup.mockupUrl }}</p>
+            <p class="break-all text-xs text-muted">
+              {{ mockup.mockupUrl }}
+            </p>
             <UButton
+              class="min-h-11 w-full justify-center sm:w-auto"
               :to="mockup.mockupUrl"
               target="_blank"
               variant="outline"
@@ -242,7 +389,10 @@ function statusColor(status: string) {
               Open live mockup
             </UButton>
           </div>
-          <p v-else class="text-muted text-sm">
+          <p
+            v-else
+            class="text-muted text-sm"
+          >
             {{ mockup.status === 'failed'
               ? 'Generation stopped. Use Generate mockup below to try again.'
               : busy
@@ -254,20 +404,30 @@ function statusColor(status: string) {
         <div class="space-y-6">
           <UCard>
             <template #header>
-              <h3 class="font-semibold">Business</h3>
+              <h3 class="font-semibold">
+                Business
+              </h3>
             </template>
             <dl class="space-y-2 text-sm">
               <div>
-                <dt class="text-muted">Website</dt>
-                <dd>{{ mockup.business?.website || 'None' }}</dd>
+                <dt class="text-muted">
+                  Website
+                </dt>
+                <dd class="break-all">
+                  {{ mockup.business?.website || 'None' }}
+                </dd>
               </div>
               <div>
-                <dt class="text-muted">Phone</dt>
+                <dt class="text-muted">
+                  Phone
+                </dt>
                 <dd>{{ mockup.business?.phone || '—' }}</dd>
               </div>
               <div>
-                <dt class="text-muted">Location</dt>
-                <dd>{{ [mockup.business?.city, mockup.business?.state].filter(Boolean).join(', ') || '—' }}</dd>
+                <dt class="text-muted">
+                  Location
+                </dt>
+                <dd>{{ mockup.locationLabel }}</dd>
               </div>
             </dl>
             <UButton
@@ -283,10 +443,15 @@ function statusColor(status: string) {
 
           <UCard>
             <template #header>
-              <h3 class="font-semibold">Photos</h3>
+              <h3 class="font-semibold">
+                Photos
+              </h3>
             </template>
             <div class="space-y-3">
-              <div v-if="mockup.photoUrls.length" class="grid grid-cols-3 gap-2">
+              <div
+                v-if="mockup.photoUrls.length"
+                class="grid grid-cols-3 gap-2"
+              >
                 <img
                   v-for="url in mockup.photoUrls"
                   :key="url"
@@ -320,41 +485,30 @@ function statusColor(status: string) {
 
       <UCard>
         <template #header>
-          <h3 class="font-semibold">Revise</h3>
+          <h3 class="font-semibold">
+            Pitch
+          </h3>
         </template>
-        <UFormField label="Notes" help="WF-5 email revise stays notes-only. Photos go through ImageKit here.">
-          <UTextarea
-            v-model="notes"
-            class="w-full"
-            :rows="4"
-            placeholder="Move the hero photo down, make the phone number bigger…"
-          />
-        </UFormField>
-        <div class="mt-3">
-          <UButton
-            icon="i-lucide-pencil"
-            variant="outline"
-            :loading="isRevising"
-            :disabled="busy"
-            @click="revise"
+        <div
+          v-if="mockup.pitchDraft"
+          class="space-y-2"
+        >
+          <p
+            v-if="mockup.pitchSubject"
+            class="font-medium"
           >
-            Send revision
-          </UButton>
-        </div>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <h3 class="font-semibold">Pitch</h3>
-        </template>
-        <div v-if="mockup.pitchDraft" class="space-y-2">
-          <p v-if="mockup.pitchSubject" class="font-medium">{{ mockup.pitchSubject }}</p>
+            {{ mockup.pitchSubject }}
+          </p>
           <pre class="whitespace-pre-wrap text-sm text-muted font-sans">{{ mockup.pitchDraft }}</pre>
         </div>
-        <p v-else class="text-sm text-muted mb-3">
+        <p
+          v-else
+          class="text-sm text-muted mb-3"
+        >
           Writes through n8n WF-3 when a mockup exists. Groq templates stay for bulk outreach without a mockup.
         </p>
         <UButton
+          class="min-h-11 w-full justify-center sm:w-auto"
           icon="i-lucide-mail"
           variant="outline"
           :loading="isPitching"
@@ -370,7 +524,7 @@ function statusColor(status: string) {
       class="fixed bottom-0 inset-x-0 z-20 flex justify-center p-4 sm:justify-end"
     >
       <UButton
-        class="w-[calc(100vw-2rem)] sm:w-auto"
+        class="min-h-11 w-full sm:w-auto"
         size="lg"
         icon="i-lucide-sparkles"
         :loading="isGenerating"

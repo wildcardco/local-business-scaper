@@ -2,13 +2,13 @@
 import {
   DEFAULT_AI_MAX_TOKENS,
   DEFAULT_AI_MODEL,
-  STUDIO_AI_MODELS,
   TOKEN_PRESETS
 } from '~~/shared/studio-ai'
 
 type ListingStatus = 'idle' | 'loading' | 'done' | 'skipped' | 'error'
 
 const { businessId, close, postGenerateMockup } = useGenerateMockup()
+const { optionsFor, hintFor, source: modelSource } = useStudioModels()
 const toast = useToast()
 const router = useRouter()
 
@@ -41,19 +41,14 @@ const form = ref({
 
 const socials = ref<{ label: string, href: string }[]>([])
 
-const modelOptions = STUDIO_AI_MODELS.map(model => ({
-  value: model.value,
-  label: `${model.label} — ${model.cost}`
-}))
+const modelOptions = computed(() => optionsFor(form.value.model))
 
 const tokenOptions = TOKEN_PRESETS.map(preset => ({
   value: preset.value,
   label: preset.label
 }))
 
-const modelHint = computed(() =>
-  STUDIO_AI_MODELS.find(model => model.value === form.value.model)?.hint || ''
-)
+const modelHint = computed(() => hintFor(form.value.model))
 
 function applyBusiness(business: Record<string, unknown> | null | undefined) {
   if (!business) return
@@ -182,10 +177,9 @@ async function confirm() {
       router.push(`/studio/${id}`)
     }
   } catch (error: unknown) {
-    const err = error as { data?: { message?: string } }
     toast.add({
       title: 'Could not start mockup',
-      description: err.data?.message || 'Check n8n studio webhook settings',
+      description: readError(error, 'Check the n8n studio webhook and X-Studio-Secret'),
       color: 'error'
     })
   } finally {
@@ -199,7 +193,7 @@ async function confirm() {
     v-model:open="open"
     title="Generate mockup"
     description="Confirm the listing, add direction for the designer, and pick the model for this run."
-    :ui="{ content: 'sm:max-w-lg' }"
+    :ui="{ content: 'sm:max-w-lg max-h-[90vh]' }"
   >
     <template #body>
       <div v-if="isLoading" class="flex justify-center py-10">
@@ -292,6 +286,10 @@ async function confirm() {
             class="w-full"
           />
         </UFormField>
+        <p class="text-xs text-muted">
+          {{ modelSource === 'anthropic' ? 'Model list loaded from the Anthropic Models API.' : 'Model list is the verified Anthropic fallback. Set ANTHROPIC_API_KEY to load it live.' }}
+          Studio sends the id as model. n8n uses it only after WF-2 reads that field.
+        </p>
 
         <UFormField label="Max tokens" help="Lower this to save money if pages are coming out complete enough.">
           <USelect

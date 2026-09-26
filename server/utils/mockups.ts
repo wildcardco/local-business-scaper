@@ -1,5 +1,7 @@
 import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
+import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
+import { mockupGithubRepo, mockupGithubUrl } from '~~/shared/mockup-repo'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -26,6 +28,7 @@ export interface MockupRow {
   last_feedback: string | null
   photo_urls: string | null
   ai_model: string | null
+  github_repo: string | null
   n8n_synced_at: string | null
   created_at: string | null
   updated_at: string | null
@@ -42,15 +45,40 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     }
   }
 
+  const businessName = business ? String(business.name || '') : ''
+  const rawCity = business && !isPlaceId(business.city) ? (business.city as string) || null : null
+  const rawState = business && !isPlaceId(business.state) ? (business.state as string) || null : null
+  const address = (business?.address as string) || null
+  const parsed = parseUsCityState(address)
+  const city = rawCity || parsed.city
+  const state = rawState || parsed.state
+  const placeId = (row.place_id as string) || (business?.place_id as string) || null
+  const githubRepo = mockupGithubRepo({
+    owner: (row.owner as string) || null,
+    businessName,
+    placeId,
+    stored: (row.github_repo as string) || null
+  })
+  const mockupUrl = (row.mockup_url as string) || null
+
   return {
     id: String(row.id),
     userId: String(row.user_id),
     businessId: (row.business_id as string) || null,
-    placeId: (row.place_id as string) || null,
+    placeId,
     owner: (row.owner as string) || null,
     source: (row.source as string) || 'studio',
     status: (row.status as string) || 'draft',
-    mockupUrl: (row.mockup_url as string) || null,
+    mockupUrl,
+    vercelUrl: mockupUrl && /^https?:\/\//i.test(mockupUrl) ? mockupUrl : null,
+    githubRepo,
+    githubUrl: mockupGithubUrl(githubRepo),
+    locationLabel: locationLabel({
+      city,
+      state,
+      address,
+      category: (business?.category as string) || null
+    }),
     mockupVersion: Number(row.mockup_version || 0),
     pitchDraft: (row.pitch_draft as string) || null,
     pitchSubject: (row.pitch_subject as string) || null,
@@ -69,8 +97,8 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
           phone: business.phone != null ? String(business.phone) : null,
           email: (business.email as string) || null,
           address: (business.address as string) || null,
-          city: (business.city as string) || null,
-          state: (business.state as string) || null,
+          city,
+          state,
           category: (business.category as string) || null,
           rating: business.rating != null ? Number(business.rating) : null,
           reviewCount: business.review_count != null ? Number(business.review_count) : null,
@@ -81,17 +109,16 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
 }
 
 const STALE_MINUTES = 12
-const STALE_MESSAGE = 'n8n did not finish. The factory stopped before a mockup URL came back. Try Generate mockup again.'
 
 export async function expireStaleMockups(userId: string, mockupId?: string) {
   await db.execute({
     sql: `UPDATE mockups
-          SET status = 'failed', last_feedback = ?, updated_at = datetime('now')
+          SET status = 'failed', updated_at = datetime('now')
           WHERE user_id = ?
             AND status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
             AND updated_at < datetime('now', '-${STALE_MINUTES} minutes')
             ${mockupId ? 'AND id = ?' : ''}`,
-    args: mockupId ? [STALE_MESSAGE, userId, mockupId] : [STALE_MESSAGE, userId]
+    args: mockupId ? [userId, mockupId] : [userId]
   })
 }
 
@@ -238,20 +265,31 @@ export async function fireMockupAction(opts: {
     ? 'writing_pitch'
     : opts.action === 'add_photos'
       ? 'enhancing'
-      : 'generating'
+      : opts.action === 'revise_mockup'
+        ? 'revising'
+        : 'generating'
+  const owner = ownerSlugFromEmail(opts.user.email)
+  const githubRepo = mockupGithubRepo({
+    owner,
+    businessName: business?.name,
+    placeId,
+    stored: null
+  })
 
   await db.execute({
     sql: `UPDATE mockups SET
       place_id = ?, owner = ?, status = ?, last_feedback = COALESCE(?, last_feedback),
-      photo_urls = COALESCE(?, photo_urls), ai_model = ?, updated_at = datetime('now')
+      photo_urls = COALESCE(?, photo_urls), ai_model = ?,
+      github_repo = COALESCE(github_repo, ?), updated_at = datetime('now')
       WHERE id = ? AND user_id = ?`,
     args: [
       placeId,
-      ownerSlugFromEmail(opts.user.email),
+      owner,
       nextStatus,
       extraPrompt,
       opts.photoUrls ? JSON.stringify(opts.photoUrls) : null,
       model,
+      githubRepo,
       mockup.id,
       opts.user.id
     ]
@@ -261,7 +299,7 @@ export async function fireMockupAction(opts: {
     await fireStudioAction({
       action: opts.action,
       place_id: placeId,
-      owner: ownerSlugFromEmail(opts.user.email),
+      owner,
       business_name: business?.name || 'Untitled business',
       website: business?.website,
       phone: business?.phone,
@@ -279,7 +317,8 @@ export async function fireMockupAction(opts: {
       callback_url: callbackUrlFromEvent(opts.event),
       user_email: opts.user.email,
       mockup_id: mockup.id,
-      business_id: mockup.businessId
+      business_id: mockup.businessId,
+      mockup_version: mockup.mockupVersion
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'n8n did not accept the Studio job'

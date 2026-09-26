@@ -103,7 +103,7 @@ async function submit() {
       class="fixed bottom-0 inset-x-0 sm:static z-20 flex justify-center sm:justify-start p-4 sm:p-0"
     >
       <UButton
-        class="w-[calc(100vw-2rem)] sm:w-auto"
+        class="min-h-11 w-full sm:w-auto"
         size="lg"
         :loading="isSaving"
         :style="{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }"

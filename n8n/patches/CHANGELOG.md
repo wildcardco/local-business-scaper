@@ -4,7 +4,9 @@ WF-7 Studio Ingress is live: `HPHWqFUK7DXBynWo`, `POST https://n8n.wildcardcreat
 
 WF-2/3/6 model-token expression patches are still optional. Do not paste `action_secret` or API keys into git.
 
-Current live defaults (Aug 2026):
+Checked live 2026-09-26: WF-2 HTML is pinned to `claude-opus-5-5` at 32000 tokens and research to `claude-sonnet-5` at 8000. Neither node reads the Studio `model` field. WF-7's header credential must match `N8N_STUDIO_SECRET`. See `wf-7-studio-ingress.md` and `wf-2-model-tokens.md`.
+
+Current live defaults (Aug 2026, superseded for the HTML model by the note above):
 
 | Call | Workflow | Model | Tokens |
 |---|---|---|---|

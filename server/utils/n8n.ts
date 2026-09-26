@@ -8,6 +8,7 @@ import {
   DEFAULT_RESEARCH_MODEL,
   isStudioAiModel
 } from '~~/shared/studio-ai'
+import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
 
 export const N8N_WF_FACTORY = 'jslUBLzcV27vdLIA'
 export const N8N_WF_PITCH = 'wkqEVHfuCV1CsS2a'
@@ -44,6 +45,7 @@ export interface StudioLeadPayload {
   user_email: string
   mockup_id: string
   business_id?: string | null
+  mockup_version?: number
 }
 
 export async function getStudioAiSettings(userId: string): Promise<StudioAiSettings> {
@@ -128,35 +130,48 @@ export async function fireStudioAction(payload: StudioLeadPayload) {
     })
   }
 
+  if (!studioSecret) {
+    throw createError({
+      statusCode: 500,
+      message: 'N8N_STUDIO_SECRET is not configured, so Studio did not call the webhook. Since 2026-09-25 WF-7 requires header X-Studio-Secret. A missing or wrong secret is rejected with 403 and no execution is logged. Set the Vercel value to n8n credential Studio secret (bYKoHkwycoKjqI1A).'
+    })
+  }
+
   const response = await fetch(studioWebhookUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(studioSecret ? { 'X-Studio-Secret': studioSecret } : {})
+      'X-Studio-Secret': studioSecret
     },
     body: JSON.stringify(payload)
   })
 
+  const errorText = await response.text()
   if (!response.ok) {
-    const errorText = await response.text()
+    const detail = errorText.slice(0, 300) || response.statusText
+    const secretHint = response.status === 401 || response.status === 403
+      ? ' WF-7 (HPHWqFUK7DXBynWo) checks X-Studio-Secret against the Studio secret credential. A mismatch is rejected before an execution is created. Vercel N8N_STUDIO_SECRET must equal that credential.'
+      : ''
     throw createError({
       statusCode: 502,
-      message: `Studio webhook failed (${response.status}): ${errorText.slice(0, 300)}`
+      message: `Studio webhook failed (${response.status}): ${detail}.${secretHint}`
     })
   }
 
+  if (!errorText) return { ok: true }
   try {
-    return await response.json()
-  } catch {
+    const body = JSON.parse(errorText) as { ok?: unknown }
+    if (body.ok === false) {
+      throw createError({
+        statusCode: 502,
+        message: 'Studio webhook returned 200 with ok:false. No mockup job was started.'
+      })
+    }
+    return body
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'statusCode' in error) throw error
     return { ok: true }
   }
-}
-
-function dataTableFilter(columnName: string, value: string) {
-  return encodeURIComponent(JSON.stringify({
-    type: 'and',
-    filters: [{ columnName, condition: 'eq', value }]
-  }))
 }
 
 function unwrapLeadRow(row: unknown): Record<string, unknown> {
@@ -193,26 +208,118 @@ function extractExecutionRows(json: unknown): Record<string, unknown>[] {
   return []
 }
 
+function nextCursorOf(json: unknown): string | null {
+  if (!json || typeof json !== 'object') return null
+  const cursor = (json as { nextCursor?: unknown }).nextCursor
+  return typeof cursor === 'string' && cursor ? cursor : null
+}
+
+function errorText(error: unknown) {
+  if (!error || typeof error !== 'object') return 'n8n request failed'
+  const record = error as { message?: string, statusMessage?: string, data?: { message?: string } }
+  return record.data?.message || record.message || record.statusMessage || 'n8n request failed'
+}
+
+function errorStatus(error: unknown) {
+  if (!error || typeof error !== 'object') return 0
+  const status = (error as { statusCode?: number }).statusCode
+  return typeof status === 'number' ? status : 0
+}
+
+const LEAD_PAGE_LIMIT = 100
+const LEAD_PAGE_CAP = 40
+
+async function listLeadRows(columnName: string, value: string, sortBy: string) {
+  const { leadsTableId } = n8nConfig()
+  const rows: Record<string, unknown>[] = []
+  let cursor: string | null = null
+  const seenCursors = new Set<string>()
+
+  for (let page = 0; page < LEAD_PAGE_CAP; page++) {
+    const params = new URLSearchParams()
+    params.set('limit', String(LEAD_PAGE_LIMIT))
+    params.set('filter', JSON.stringify({
+      type: 'and',
+      filters: [{ columnName, condition: 'eq', value }]
+    }))
+    if (sortBy) params.set('sortBy', sortBy)
+    if (cursor) params.set('cursor', cursor)
+
+    const json = await n8nFetch(`/api/v1/data-tables/${leadsTableId}/rows?${params}`)
+    const batch = extractTableRows(json)
+    rows.push(...batch)
+    const next = nextCursorOf(json)
+    if (!next || batch.length === 0 || seenCursors.has(next)) break
+    seenCursors.add(next)
+    cursor = next
+  }
+
+  return rows
+}
+
 export async function listN8nLeadsByOwner(email: string) {
   const owner = ownerSlugFromEmail(email)
-  const { leadsTableId, projectId, apiKey } = n8nConfig()
-  if (!apiKey) return []
+  const { apiKey } = n8nConfig()
+  if (!apiKey) {
+    throw createError({
+      statusCode: 500,
+      message: 'N8N_API_KEY is not configured, so Sync from n8n cannot read the leads table. This button does not use N8N_STUDIO_SECRET.'
+    })
+  }
 
-  const filter = dataTableFilter('owner', owner)
-  const paths = [
-    `/api/v1/data-tables/${leadsTableId}/rows?filter=${filter}&limit=100`,
-    `/api/v1/projects/${projectId}/data-tables/${leadsTableId}/rows?filter=${filter}&limit=100`
-  ]
+  try {
+    return await listLeadRows('owner', owner, 'updatedAt:desc')
+  } catch (error: unknown) {
+    const message = errorText(error)
+    if (/sort/i.test(message)) {
+      return await listLeadRows('owner', owner, '')
+    }
+    const status = errorStatus(error)
+    const scopeHint = status === 401 || status === 403
+      ? ' The key needs the dataTableRow:read scope. Sync does not use N8N_STUDIO_SECRET.'
+      : ''
+    throw createError({
+      statusCode: status >= 400 && status < 600 ? status : 502,
+      message: `${message}${scopeHint}`
+    })
+  }
+}
 
-  for (const path of paths) {
-    try {
-      return extractTableRows(await n8nFetch(path))
-    } catch {
-      // try next
+export async function writeN8nLeadFeedback(placeId: string, owner: string, feedback: string) {
+  const { leadsTableId, apiKey } = n8nConfig()
+  if (!apiKey) {
+    return {
+      ok: false,
+      warning: 'N8N_API_KEY is not configured, so feedback was not written to the leads table before n8n started. WF-7 must save last_feedback before WF-2 loads the lead.'
     }
   }
 
-  return []
+  try {
+    await n8nFetch(`/api/v1/data-tables/${leadsTableId}/rows/update`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        filter: {
+          type: 'and',
+          filters: [
+            { columnName: 'place_id', condition: 'eq', value: placeId },
+            { columnName: 'owner', condition: 'eq', value: owner }
+          ]
+        },
+        data: { last_feedback: feedback },
+        returnData: false
+      })
+    })
+    return { ok: true, warning: null as string | null }
+  } catch (error: unknown) {
+    const status = errorStatus(error)
+    const scopeHint = status === 401 || status === 403
+      ? ' The key needs dataTableRow:update as well as dataTableRow:read.'
+      : ''
+    return {
+      ok: false,
+      warning: `Could not write feedback onto the n8n lead before the revision started (${errorText(error)}).${scopeHint} WF-7 must upsert last_feedback and finish before it calls WF-2.`
+    }
+  }
 }
 
 export function verifyStudioSecret(event: Parameters<typeof getHeader>[0]) {
@@ -254,26 +361,15 @@ function pickMatchingLead(rows: Record<string, unknown>[], placeId: string) {
 
 export async function getN8nLeadByPlaceId(placeId: string) {
   if (!placeId) return null
-  const { leadsTableId, projectId, apiKey } = n8nConfig()
+  const { apiKey } = n8nConfig()
   if (!apiKey) return null
 
-  const filter = dataTableFilter('place_id', placeId)
-  const paths = [
-    `/api/v1/data-tables/${leadsTableId}/rows?filter=${filter}&limit=20`,
-    `/api/v1/projects/${projectId}/data-tables/${leadsTableId}/rows?filter=${filter}&limit=20`,
-    `/api/v1/data-tables/${leadsTableId}/rows?search=${encodeURIComponent(placeId)}&limit=20`
-  ]
-
-  for (const path of paths) {
-    try {
-      const match = pickMatchingLead(extractTableRows(await n8nFetch(path)), placeId)
-      if (match) return match
-    } catch {
-      // try next
-    }
+  try {
+    const rows = await listLeadRows('place_id', placeId, '')
+    return pickMatchingLead(rows, placeId)
+  } catch {
+    return null
   }
-
-  return null
 }
 
 export async function findRunningFactoryJob(opts: {
@@ -336,7 +432,7 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     if (!lead) return false
 
     const local = await db.execute({
-      sql: 'SELECT status, mockup_url, mockup_version FROM mockups WHERE id = ? AND user_id = ?',
+      sql: 'SELECT status, mockup_url, mockup_version, pitch_version, pitch_draft FROM mockups WHERE id = ? AND user_id = ?',
       args: [mockupId, userId]
     })
     const current = local.rows[0]
@@ -348,15 +444,34 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     const localVersion = Number(current.mockup_version || 0)
     const localUrl = asLeadString(current.mockup_url)
     const localStatus = String(current.status || '')
-
-    if (!mockupUrl && n8nStatus !== 'failed') return false
-
     const busyLocal = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(localStatus)
-    if (busyLocal && mockupUrl && localUrl === mockupUrl && n8nVersion <= localVersion) {
-      const job = await findRunningFactoryJob({ placeId, mockupId })
-      if (job.matched || (job.count > 0 && !job.inspected)) {
-        return false
+
+    // WF-7 answers 200 {ok:true} immediately and never calls callback_url.
+    // The lead row stays on the previous URL and version until the factory finishes,
+    // so an unchanged mockup_ready row is still in progress.
+    if (busyLocal) {
+      const advanced = leadAdvancedWhileBusy({
+        localStatus,
+        localUrl,
+        localVersion,
+        localPitchVersion: Number(current.pitch_version || 0),
+        localPitchDraft: asLeadString(current.pitch_draft),
+        n8nStatus,
+        n8nUrl: mockupUrl,
+        n8nVersion,
+        n8nPitchVersion: Number(lead.pitch_version || 0),
+        n8nPitchDraft: asLeadString(lead.pitch_draft)
+      })
+      if (advanced === 'wait') return false
+      if (advanced === 'failed') {
+        await db.execute({
+          sql: `UPDATE mockups SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND user_id = ?`,
+          args: [mockupId, userId]
+        })
+        return true
       }
+    } else if (!mockupUrl && n8nStatus !== 'failed') {
+      return false
     }
 
     const status = mockupUrl

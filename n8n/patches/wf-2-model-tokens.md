@@ -20,11 +20,11 @@ Keep `options.maxTokens` at 8000 unless a later payload field `research_max_toke
 
 ## 3. Claude Generate HTML (the expensive call)
 
-Current hardcoded: `claude-fable-5`, `maxTokens: 16000`.
+Live on 2026-09-26: `modelId` is still a list value, now `claude-opus-5-5`, and `options.maxTokens` is `32000`. It does not read the Studio payload. Research is still the list value `claude-sonnet-5` at 8000 tokens.
 
 ```
-modelId: {{ $('When Called by WF-1').first().json.model || 'claude-fable-5' }}
-options.maxTokens: {{ Number($('When Called by WF-1').first().json.max_tokens) || 16000 }}
+modelId: {{ $('When Called by WF-1').first().json.model || 'claude-opus-5-5' }}
+options.maxTokens: {{ Number($('When Called by WF-1').first().json.max_tokens) || 32000 }}
 ```
 
 If the LangChain node resource locator will not take an expression, insert a Set node before it named `Resolve Model` with those two fields, then point the Anthropic node at `$json.model` / `$json.max_tokens`.
@@ -49,3 +49,13 @@ JSON body:
 ```
 
 On generate failure, callback `status: failed` so Studio stops polling.
+
+Also send `github_repo` (or `repo_html_url`) from Parse Deployment's `_repo_html_url` / `_full_name`. Update Lead does not store the repo today, so Studio derives `wildcardco/wildcard-mockup-<owner>-<slug>-<hash>` with the same slug and hash as the Prepare node. A callback field is the source of truth if the business is renamed later.
+
+## 5. Feedback is dropped before the model nodes
+
+`Resolve Lead` replaces the trigger item with the data-table row whenever `place_id` is set. That row has no `model`, `max_tokens`, `callback_url`, or `mockup_id`. `last_feedback` is a column, but WF-7 upserts it in parallel with Execute Workflow, so WF-2 can load the lead before the new notes are saved.
+
+Build Generate Request only revises when `_feedback` is non-empty, `_version > 0`, and Fetch Current Mockup HTML returns the current file. Otherwise the notes are ignored and the page is regenerated.
+
+Merge these trigger fields onto the lead before Prepare: `last_feedback`, `model`, `max_tokens`, `pitch_max_tokens`, `research_model`, `callback_url`, `mockup_id`, `mockup_version`. Read them from `$('When Called by WF-1').first().json`, not from the lead row.
