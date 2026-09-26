@@ -1,4 +1,5 @@
 import { db } from '~~/server/utils/db'
+import { businessCategoryFromListing } from '~~/server/utils/openweb-ninja'
 
 function firstString(...values: unknown[]): string | null {
   for (const value of values) {
@@ -94,7 +95,7 @@ export default defineEventHandler(async (event) => {
     const city = firstString(listing.city) || (business.city as string | null)
     const state = firstString(listing.state) || (business.state as string | null)
     const zipCode = firstString(listing.postal_code) || (business.zip_code as string | null)
-    const category = firstString(listing.types?.[0], listing.type) || (business.category as string | null)
+    const category = businessCategoryFromListing(listing) || (business.category as string | null)
     const googleMapsUrl = firstString(listing.google_maps_url) || (business.google_maps_url as string | null)
 
     const facebook = socialUrl(contacts.facebook)

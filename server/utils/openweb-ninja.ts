@@ -1,5 +1,32 @@
 import type { BusinessSearchParams, OpenWebBusiness } from '~~/shared/types'
 
+function categoryString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+function categoryAt(value: unknown, index: number): string | null {
+  if (!Array.isArray(value)) return null
+  return categoryString(value[index])
+}
+
+/**
+ * Category from a Local Business Data listing.
+ * Documented fields are `type` (string) and `subtypes` (string[]).
+ * `types` is not in the documented response; it is only a fallback.
+ */
+export function businessCategoryFromListing(listing: {
+  type?: unknown
+  subtypes?: unknown
+  types?: unknown
+} | null | undefined): string | null {
+  if (!listing || typeof listing !== 'object') return null
+  return categoryString(listing.type)
+    || categoryAt(listing.subtypes, 0)
+    || categoryAt(listing.types, 0)
+}
+
 export async function searchBusinesses(params: BusinessSearchParams): Promise<OpenWebBusiness[]> {
   const config = useRuntimeConfig()
 
@@ -62,7 +89,7 @@ export function transformBusinessData(business: OpenWebBusiness, searchId: strin
     website: business.website || null,
     googleMapsUrl: business.google_maps_url || null,
     placeId: business.place_id || null,
-    category: business.types?.[0] || null,
+    category: businessCategoryFromListing(business),
     rating: business.rating || null,
     reviewCount: business.review_count || null,
     priceLevel: business.price_level || null
