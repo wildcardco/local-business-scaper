@@ -329,6 +329,8 @@ export async function initializeSchema() {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_outreach_logs_user ON outreach_logs(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_outreach_logs_business ON outreach_logs(business_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_email_replies_outreach ON email_replies(outreach_log_id)`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN github_repo TEXT`)
+
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_place ON mockups(place_id)`)

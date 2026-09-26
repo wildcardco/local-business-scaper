@@ -51,6 +51,7 @@ export default defineNuxtConfig({
     resendApiKey: process.env.RESEND_API_KEY,
     resendFrom: process.env.NUXT_RESEND_FROM || process.env.RESEND_FROM || 'Wild Card Creative Co <marketing@outreach.wildcardcreativeco.com>',
     groqApiKey: process.env.GROQ_API,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     n8nWebhookUrl: process.env.N8N_WEBHOOK_URL,
     n8nApiKey: process.env.N8N_API_KEY,
     n8nBaseUrl: process.env.N8N_BASE_URL || 'https://n8n.wildcardcreative.cloud',

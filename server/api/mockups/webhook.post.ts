@@ -1,5 +1,18 @@
 import { db } from '~~/server/utils/db'
 import { verifyStudioSecret } from '~~/server/utils/n8n'
+import { MOCKUP_GITHUB_OWNER } from '~~/shared/mockup-repo'
+
+function githubRepoFromCallback(body: Record<string, unknown>) {
+  const direct = typeof body.github_repo === 'string'
+    ? body.github_repo
+    : (typeof body.repo_full_name === 'string' ? body.repo_full_name : '')
+  if (/^[\w.-]+\/[\w.-]+$/.test(direct)) return direct
+
+  const html = typeof body.repo_html_url === 'string' ? body.repo_html_url : ''
+  const match = html.match(/github\.com\/([\w.-]+\/[\w.-]+)/i)
+  if (match && match[1].startsWith(`${MOCKUP_GITHUB_OWNER}/`)) return match[1]
+  return null
+}
 
 export default defineEventHandler(async (event) => {
   verifyStudioSecret(event)
@@ -47,16 +60,18 @@ export default defineEventHandler(async (event) => {
   const photoUrls = Array.isArray(body.photo_urls)
     ? JSON.stringify(body.photo_urls)
     : (typeof body.photo_urls === 'string' ? body.photo_urls : row.photo_urls)
+  const githubRepo = githubRepoFromCallback(body) || row.github_repo
 
   await db.execute({
     sql: `UPDATE mockups SET
       status = ?, mockup_url = ?, mockup_version = ?, pitch_draft = ?, pitch_subject = ?,
-      pitch_version = ?, last_feedback = ?, photo_urls = ?, n8n_synced_at = datetime('now'),
+      pitch_version = ?, last_feedback = ?, photo_urls = ?, github_repo = COALESCE(?, github_repo),
+      n8n_synced_at = datetime('now'),
       updated_at = datetime('now')
       WHERE id = ?`,
     args: [
       status, mockupUrl, mockupVersion, pitchDraft, pitchSubject,
-      pitchVersion, lastFeedback, photoUrls, row.id
+      pitchVersion, lastFeedback, photoUrls, githubRepo, row.id
     ]
   })
 
