@@ -1,5 +1,10 @@
-// Common Google My Business categories for local business search
+// Popular Google Business Profile categories, grouped for the empty search menu.
+// The full 4,000+ list lives in shared/data/google-business-categories.json.
 // Source: https://daltonluka.com/blog/google-my-business-categories
+
+import { scoreCategoryQuery } from '~~/shared/utils/text-similarity'
+
+export { CLOSE_MATCH_SCORE as CLOSE_CATEGORY_MATCH_SCORE } from '~~/shared/utils/text-similarity'
 
 export const businessCategories = [
   // Food & Dining
@@ -248,6 +253,86 @@ export const businessCategories = [
 
 // Get unique groups for filtering
 export const categoryGroups = [...new Set(businessCategories.map(c => c.group))]
+
+const fallbackCategoryIcon = 'i-lucide-store'
+
+const categoryGroupIcons: Record<string, string> = {
+  'Food & Dining': 'i-lucide-utensils',
+  'Home Services': 'i-lucide-wrench',
+  'Automotive': 'i-lucide-car',
+  'Health & Medical': 'i-lucide-heart-pulse',
+  'Beauty & Personal Care': 'i-lucide-sparkles',
+  'Retail & Shopping': 'i-lucide-shopping-bag',
+  'Professional Services': 'i-lucide-briefcase',
+  'Fitness & Recreation': 'i-lucide-dumbbell',
+  'Education & Childcare': 'i-lucide-graduation-cap',
+  'Lodging & Travel': 'i-lucide-plane',
+  'Events & Entertainment': 'i-lucide-party-popper',
+  'Pet Services': 'i-lucide-paw-print',
+  'Storage & Moving': 'i-lucide-truck',
+  'Financial Services': 'i-lucide-landmark',
+  'Religious Organizations': 'i-lucide-church',
+  'Industrial & Manufacturing': 'i-lucide-factory'
+}
+
+export function categoryIconForGroup(group: string | null | undefined): string {
+  if (!group) return fallbackCategoryIcon
+  return categoryGroupIcons[group] || fallbackCategoryIcon
+}
+
+/** Match a typed or stored category against the preset list (label or value, case-insensitive). */
+export function findBusinessCategory(input: string | null | undefined) {
+  const needle = input?.trim().toLowerCase()
+  if (!needle) return undefined
+  return businessCategories.find(category =>
+    category.value.toLowerCase() === needle || category.label.toLowerCase() === needle
+  )
+}
+
+/**
+ * Search query to submit. Preset categories keep their existing value
+ * ("Restaurant" → "restaurant"). Anything else is the trimmed text the user typed.
+ */
+export function resolveCategoryQuery(input: string | null | undefined): string {
+  const trimmed = input?.trim() ?? ''
+  if (!trimmed) return ''
+  return findBusinessCategory(trimmed)?.value ?? trimmed
+}
+
+/** Label for display. Unknown categories fall back to the text itself, never blank. */
+export function categoryDisplayLabel(input: string | null | undefined): string {
+  const trimmed = input?.trim() ?? ''
+  if (!trimmed) return ''
+  return findBusinessCategory(trimmed)?.label ?? trimmed
+}
+
+/** Icon for a category. Unknown categories use the store fallback. */
+export function categoryDisplayIcon(input: string | null | undefined): string {
+  return categoryIconForGroup(findBusinessCategory(input)?.group)
+}
+
+const SUGGESTION_LIMIT = 8
+const SUGGESTION_MIN_SCORE = 0.48
+
+export interface CategorySuggestion {
+  category: (typeof businessCategories)[number]
+  score: number
+}
+
+/**
+ * Rank the grouped preset categories by similarity to free text.
+ * The open menu uses the full Google list; this stays for the preset subset.
+ */
+export function suggestBusinessCategories(input: string | null | undefined, limit = SUGGESTION_LIMIT): CategorySuggestion[] {
+  const query = input?.trim() ?? ''
+  if (query.length < 2) return []
+
+  return businessCategories
+    .map(category => ({ category, score: scoreCategoryQuery(query, category.label, category.value) }))
+    .filter(row => row.score >= SUGGESTION_MIN_SCORE)
+    .sort((a, b) => b.score - a.score || a.category.label.localeCompare(b.category.label))
+    .slice(0, limit)
+}
 
 // Popular categories for quick access
 export const popularCategories = [

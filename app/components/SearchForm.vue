@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import type { InputMenuItem } from '@nuxt/ui'
-import { businessCategories, categoryGroups } from '~/data/business-categories'
+import {
+  businessCategories,
+  categoryDisplayIcon,
+  categoryDisplayLabel,
+  categoryGroups,
+  categoryIconForGroup,
+  CLOSE_CATEGORY_MATCH_SCORE,
+  resolveCategoryQuery
+} from '~/data/business-categories'
+import { suggestGoogleCategories } from '~~/shared/utils/google-categories'
+import { preferRegionMatches, rankTownSuggestions } from '~~/shared/utils/town-suggestions'
 
 const emit = defineEmits<{
   search: [{ query: string; location: string; limit: number; lat?: number; lng?: number; placeId?: string }]
@@ -11,6 +21,7 @@ defineProps<{
 }>()
 
 const selectedCategory = ref<string>('')
+const categorySearchTerm = ref('')
 const city = ref('')
 const cityPlaceId = ref<string | undefined>()
 const cityLat = ref<number | undefined>()
@@ -20,55 +31,78 @@ const country = ref('us')
 const zipCode = ref('')
 const limit = ref(20)
 
-// Transform categories into InputMenu format with groups
+function categoryMenuItem(cat: { label: string, value: string, group?: string }): InputMenuItem {
+  return {
+    label: cat.label,
+    value: cat.value,
+    icon: categoryIconForGroup(cat.group)
+  }
+}
+
+function exactCategoryItem(raw: string): InputMenuItem {
+  return {
+    label: raw,
+    value: raw.trim(),
+    exactQuery: true,
+    icon: 'i-lucide-search'
+  }
+}
+
+// Full grouped list until the user types. After that, rank by similarity.
+// A close typo leads the list so Enter selects it; the exact typed text sits
+// directly under that match. If nothing is close, the exact text leads instead.
 const categoryItems = computed<InputMenuItem[]>(() => {
-  const items: InputMenuItem[] = []
-
-  categoryGroups.forEach(group => {
-    // Add group label
-    items.push({
-      type: 'label',
-      label: group
+  const raw = categorySearchTerm.value
+  const term = raw.trim()
+  if (!term) {
+    const items: InputMenuItem[] = []
+    categoryGroups.forEach((group) => {
+      items.push({ type: 'label', label: group })
+      businessCategories
+        .filter(cat => cat.group === group)
+        .forEach(cat => items.push(categoryMenuItem(cat)))
+      items.push({ type: 'separator' })
     })
+    return items
+  }
 
-    // Add items in this group
-    businessCategories
-      .filter(cat => cat.group === group)
-      .forEach(cat => {
-        items.push({
-          label: cat.label,
-          value: cat.value,
-          icon: getIconForGroup(cat.group)
-        })
-      })
+  const suggestions = suggestGoogleCategories(term)
+  const presetItems = suggestions.map(row => categoryMenuItem(row))
+  const best = suggestions[0]
+  const exact = exactCategoryItem(raw)
+  const alreadyListed = presetItems.some(item =>
+    typeof item === 'object' && item !== null && item.label === raw
+  )
 
-    // Add separator after each group
-    items.push({ type: 'separator' })
-  })
+  if (best && best.score >= CLOSE_CATEGORY_MATCH_SCORE) {
+    const [match, ...rest] = presetItems
+    if (!match || alreadyListed) return presetItems
+    return [match, exact, ...rest]
+  }
 
-  return items
+  if (alreadyListed) return presetItems
+  return [exact, ...presetItems]
 })
 
-function getIconForGroup(group: string): string {
-  const icons: Record<string, string> = {
-    'Food & Dining': 'i-lucide-utensils',
-    'Home Services': 'i-lucide-wrench',
-    'Automotive': 'i-lucide-car',
-    'Health & Medical': 'i-lucide-heart-pulse',
-    'Beauty & Personal Care': 'i-lucide-sparkles',
-    'Retail & Shopping': 'i-lucide-shopping-bag',
-    'Professional Services': 'i-lucide-briefcase',
-    'Fitness & Recreation': 'i-lucide-dumbbell',
-    'Education & Childcare': 'i-lucide-graduation-cap',
-    'Lodging & Travel': 'i-lucide-plane',
-    'Events & Entertainment': 'i-lucide-party-popper',
-    'Pet Services': 'i-lucide-paw-print',
-    'Storage & Moving': 'i-lucide-truck',
-    'Financial Services': 'i-lucide-landmark',
-    'Religious Organizations': 'i-lucide-church',
-    'Industrial & Manufacturing': 'i-lucide-factory'
+// Autocomplete mode keeps the typed text as the model. Prefer that, and fall
+// back to the live search term so a value is never dropped on submit.
+const categoryQuery = computed(() =>
+  resolveCategoryQuery(selectedCategory.value || categorySearchTerm.value)
+)
+
+const selectedCategoryLabel = computed(() =>
+  categoryDisplayLabel(selectedCategory.value || categorySearchTerm.value)
+)
+
+const selectedCategoryIcon = computed(() =>
+  categoryDisplayIcon(selectedCategory.value || categorySearchTerm.value)
+)
+
+function commitTypedCategory() {
+  const typed = categorySearchTerm.value.trim()
+  if (typed && !selectedCategory.value.trim()) {
+    selectedCategory.value = typed
   }
-  return icons[group] || 'i-lucide-store'
 }
 
 // City autocomplete
@@ -83,6 +117,18 @@ const citySuggestions = ref<CitySuggestion[]>([])
 const isLoadingSuggestions = ref(false)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let cityRequestId = 0
+let cityAbort: AbortController | null = null
+let cityQuery = ''
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  if ('name' in error && error.name === 'AbortError') return true
+  if ('cause' in error && error.cause && typeof error.cause === 'object' && 'name' in error.cause) {
+    return error.cause.name === 'AbortError'
+  }
+  return false
+}
 
 // Get state name for filtering
 const selectedStateName = computed(() => {
@@ -92,24 +138,39 @@ const selectedStateName = computed(() => {
 })
 
 async function onCitySearch(searchTerm: string) {
-  if (!searchTerm || searchTerm.length < 2) {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  cityAbort?.abort()
+
+  const requestId = ++cityRequestId
+  const term = searchTerm.trim()
+  if (term.length < 2) {
+    cityQuery = ''
     citySuggestions.value = []
+    isLoadingSuggestions.value = false
     return
   }
 
-  if (debounceTimer) clearTimeout(debounceTimer)
+  // Drop a list from an unrelated query immediately. A shorter or longer
+  // version of the same text can stay until the new response arrives.
+  if (cityQuery && !term.startsWith(cityQuery) && !cityQuery.startsWith(term)) {
+    citySuggestions.value = []
+  }
+  cityQuery = term
 
   debounceTimer = setTimeout(async () => {
+    const controller = new AbortController()
+    cityAbort = controller
     isLoadingSuggestions.value = true
     try {
-      // Include state in query if selected to get more relevant results
       const queryWithState = state.value && state.value !== 'all'
-        ? `${searchTerm}, ${selectedStateName.value}`
-        : searchTerm
+        ? `${term}, ${selectedStateName.value}`
+        : term
 
       const response = await $fetch('/api/autocomplete', {
-        query: { query: queryWithState, region: country.value }
+        query: { query: queryWithState, region: country.value },
+        signal: controller.signal
       })
+      if (requestId !== cityRequestId) return
 
       let suggestions: CitySuggestion[] = (response.suggestions || []).map((s: CitySuggestion) => ({
         label: s.label,
@@ -119,48 +180,16 @@ async function onCitySearch(searchTerm: string) {
         lng: s.lng
       }))
 
-      // If a state is selected, prioritize results that match that state
       if (state.value && state.value !== 'all') {
-        const stateAbbr = state.value.toUpperCase()
-        const stateName = selectedStateName.value.toLowerCase()
-
-        // Sort to put matching state results first
-        suggestions = suggestions.sort((a, b) => {
-          const aLabel = a.label.toLowerCase()
-          const bLabel = b.label.toLowerCase()
-
-          const aMatchesState = aLabel.includes(stateAbbr.toLowerCase()) ||
-            aLabel.includes(stateName) ||
-            aLabel.includes(`, ${stateAbbr}`)
-          const bMatchesState = bLabel.includes(stateAbbr.toLowerCase()) ||
-            bLabel.includes(stateName) ||
-            bLabel.includes(`, ${stateAbbr}`)
-
-          if (aMatchesState && !bMatchesState) return -1
-          if (!aMatchesState && bMatchesState) return 1
-          return 0
-        })
-
-        // Filter to only show results from selected state if we have matches
-        const stateMatches = suggestions.filter((s) => {
-          const label = s.label.toLowerCase()
-          return label.includes(stateAbbr.toLowerCase()) ||
-            label.includes(stateName) ||
-            label.includes(`, ${stateAbbr}`)
-        })
-
-        // If we have state-specific matches, only show those
-        if (stateMatches.length > 0) {
-          suggestions = stateMatches
-        }
+        suggestions = preferRegionMatches(suggestions, state.value, selectedStateName.value)
       }
-
-      citySuggestions.value = suggestions
+      citySuggestions.value = rankTownSuggestions(term, suggestions)
     } catch (error) {
+      if (requestId !== cityRequestId || isAbortError(error)) return
       console.error('Autocomplete error:', error)
       citySuggestions.value = []
     } finally {
-      isLoadingSuggestions.value = false
+      if (requestId === cityRequestId) isLoadingSuggestions.value = false
     }
   }, 300)
 }
@@ -285,8 +314,8 @@ const locationString = computed(() => {
 })
 
 const canSearch = computed(() =>
-  selectedCategory.value &&
-  (city.value.trim() || (state.value && state.value !== 'all') || zipCode.value.trim())
+  Boolean(categoryQuery.value)
+  && Boolean(city.value.trim() || (state.value && state.value !== 'all') || zipCode.value.trim())
 )
 
 // Reset state when country changes
@@ -316,10 +345,12 @@ watch(city, (newCity) => {
 })
 
 function handleSearch() {
-  if (!canSearch.value) return
+  commitTypedCategory()
+  const query = categoryQuery.value
+  if (!query || !canSearch.value) return
 
   emit('search', {
-    query: selectedCategory.value,
+    query,
     location: locationString.value,
     limit: limit.value,
     lat: cityLat.value,
@@ -343,25 +374,47 @@ function handleSearch() {
       <UFormField label="Business Type / Category">
         <UInputMenu
           v-model="selectedCategory"
+          v-model:search-term="categorySearchTerm"
           :items="categoryItems"
-          value-key="value"
-          placeholder="Search or select a category..."
+          value-key="label"
+          mode="autocomplete"
+          ignore-filter
+          create-item
+          placeholder="Type or select a category..."
           icon="i-lucide-store"
           size="lg"
           open-on-focus
           class="w-full"
+          @blur="commitTypedCategory"
         >
+          <template #item-label="{ item }">
+            <template v-if="typeof item === 'object' && item?.exactQuery">
+              Search for "{{ String(item.label ?? '').trim() }}"
+            </template>
+            <template v-else>
+              {{ typeof item === 'object' && item ? item.label : item }}
+            </template>
+          </template>
+          <template #create-item-label="{ item }">
+            <span class="inline-flex items-center gap-2">
+              <UIcon name="i-lucide-search" class="shrink-0" />
+              Search for "{{ item }}"
+            </span>
+          </template>
           <template #empty>
             <div class="p-4 text-center text-muted">
-              <UIcon name="i-lucide-search-x" class="text-2xl mb-2" />
-              <p>No categories found</p>
+              <p>No similar categories</p>
+              <p class="text-xs mt-1">
+                Search for exactly what you typed
+              </p>
             </div>
           </template>
         </UInputMenu>
 
-        <p v-if="selectedCategory" class="text-xs text-muted mt-1 flex items-center gap-1">
+        <p v-if="categoryQuery" class="text-xs text-muted mt-1 flex items-center gap-1">
+          <UIcon :name="selectedCategoryIcon" class="text-muted" />
           <UIcon name="i-lucide-check" class="text-success" />
-          Selected: {{ businessCategories.find(c => c.value === selectedCategory)?.label || selectedCategory }}
+          Selected: {{ selectedCategoryLabel }}
         </p>
       </UFormField>
 
@@ -396,6 +449,7 @@ function handleSearch() {
             :placeholder="state && state !== 'all' ? `City in ${selectedStateName}...` : 'Start typing...'"
             icon="i-lucide-map-pin"
             size="lg"
+            ignore-filter
             :loading="isLoadingSuggestions"
             create-item
             class="w-full"

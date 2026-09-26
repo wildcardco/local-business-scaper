@@ -42,7 +42,9 @@ export default defineEventHandler(async (event) => {
           lat: item.latitude,
           lng: item.longitude
         }))
-        .slice(0, 8) // Limit to 8 suggestions
+        // The client caps the menu at 8 after state matching. Keep a few
+        // extra here so an in-state town is not cut off before that filter.
+        .slice(0, 12)
 
       return { suggestions }
     }
