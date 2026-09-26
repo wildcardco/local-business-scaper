@@ -22,7 +22,12 @@ export interface OpenWebBusiness {
   rating: number
   review_count: number
   price_level: string
-  types: string[]
+  /** Primary Google category. Documented on /search and /business-details. */
+  type?: string | null
+  /** Extra categories. Documented as a string array. */
+  subtypes?: string[] | null
+  /** Not in the documented response. Read only if type and subtypes[0] are empty. */
+  types?: string[] | null
   emails_and_contacts?: {
     emails?: string[]
     phone_numbers?: string[]
