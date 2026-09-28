@@ -5,6 +5,7 @@ export default defineEventHandler(async (event) => {
   const user = event.context.user
   const owner = ownerSlugFromEmail(user.email)
   const result = await stepSyncJob(user.id, user.email, owner)
+  console.info(result.line)
   return {
     success: true,
     background: true,

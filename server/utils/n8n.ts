@@ -81,7 +81,7 @@ function n8nConfig() {
   }
 }
 
-async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
+async function n8nRequest(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
   const { apiKey, baseUrl } = n8nConfig()
   if (!apiKey) {
     throw createError({
@@ -131,7 +131,12 @@ async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000
     })
   }
 
-  return json
+  return { status: response.status, json }
+}
+
+async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
+  const result = await n8nRequest(path, init, timeoutMs)
+  return result.json
 }
 
 export function studioPlaceId(input: { placeId?: string | null, mockupId: string, userId: string }) {
@@ -257,6 +262,7 @@ export interface N8nLeadPage {
   rows: Record<string, unknown>[]
   nextCursor: string | null
   unsorted: boolean
+  status: number
 }
 
 async function fetchLeadPage(columnName: string, value: string, sortBy: string, cursor: string | null) {
@@ -270,7 +276,7 @@ async function fetchLeadPage(columnName: string, value: string, sortBy: string, 
   if (sortBy) params.set('sortBy', sortBy)
   if (cursor) params.set('cursor', cursor)
 
-  const json = await n8nFetch(
+  const { status, json } = await n8nRequest(
     `/api/v1/data-tables/${leadsTableId}/rows?${params}`,
     {},
     LEAD_PAGE_TIMEOUT_MS
@@ -278,6 +284,7 @@ async function fetchLeadPage(columnName: string, value: string, sortBy: string, 
   const rows = extractTableRows(json)
   const next = nextCursorOf(json)
   return {
+    status,
     rows,
     nextCursor: next && rows.length > 0 && next !== cursor ? next : null
   }
