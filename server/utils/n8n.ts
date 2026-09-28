@@ -9,6 +9,8 @@ import {
   isStudioAiModel
 } from '~~/shared/studio-ai'
 import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
+import { mockupActivityTime } from '~~/shared/mockup-time'
+import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 
 export const N8N_WF_FACTORY = 'jslUBLzcV27vdLIA'
 export const N8N_WF_PITCH = 'wkqEVHfuCV1CsS2a'
@@ -543,6 +545,10 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     const status = mockupUrl
       ? (n8nStatus === 'pitch_ready' ? 'pitch_ready' : 'mockup_ready')
       : 'failed'
+    const activity = mockupActivityTime(lead)
+    const urlChanged = Boolean(mockupUrl) && mockupUrl !== localUrl
+    const versionChanged = n8nVersion > localVersion
+    await ensureMockupLinkColumns()
 
     await db.execute({
       sql: `UPDATE mockups SET
@@ -550,6 +556,10 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
         mockup_version = COALESCE(?, mockup_version),
         pitch_draft = COALESCE(?, pitch_draft),
         pitch_version = COALESCE(?, pitch_version),
+        made_at = CASE
+          WHEN ? = 1 THEN COALESCE(?, datetime('now'))
+          ELSE COALESCE(made_at, ?)
+        END,
         n8n_synced_at = datetime('now'), updated_at = datetime('now')
         WHERE id = ? AND user_id = ?`,
       args: [
@@ -558,6 +568,9 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
         lead.mockup_version != null ? Number(lead.mockup_version) : null,
         asLeadString(lead.pitch_draft),
         lead.pitch_version != null ? Number(lead.pitch_version) : null,
+        urlChanged || versionChanged ? 1 : 0,
+        activity,
+        activity,
         mockupId,
         userId
       ]

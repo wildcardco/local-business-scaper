@@ -8,13 +8,14 @@ const BUSY = `('generating', 'writing_pitch', 'enhancing', 'revising')`
 
 let columnsReady: Promise<void> | null = null
 
-function ensureLinkColumns() {
+export function ensureMockupLinkColumns() {
   if (!columnsReady) {
     columnsReady = (async () => {
       for (const sql of [
         `ALTER TABLE mockups ADD COLUMN deployment_missing INTEGER DEFAULT 0`,
         `ALTER TABLE mockups ADD COLUMN github_missing INTEGER DEFAULT 0`,
-        `ALTER TABLE mockups ADD COLUMN links_checked_at TEXT`
+        `ALTER TABLE mockups ADD COLUMN links_checked_at TEXT`,
+        `ALTER TABLE mockups ADD COLUMN made_at TEXT`
       ]) {
         try {
           await db.execute(sql)
@@ -92,7 +93,7 @@ export async function inspectMockupTarget(input: {
  * Timeouts stay listed and are tried again on the next load.
  */
 export async function checkUserMockupLinks(userId: string, mockupId?: string) {
-  await ensureLinkColumns()
+  await ensureMockupLinkColumns()
   const result = await db.execute({
     sql: `SELECT m.id, m.mockup_url, m.github_repo, m.owner, m.place_id, b.name as business_name
           FROM mockups m

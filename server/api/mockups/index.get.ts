@@ -1,23 +1,20 @@
 import { db } from '~~/server/utils/db'
-import { expireStaleMockups, mapMockup, removeDigestLeadsWithoutMockups, visibleMockupSql } from '~~/server/utils/mockups'
-import { checkUserMockupLinks } from '~~/server/utils/mockup-links'
+import { expireStaleMockups, mapMockup, removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
+import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
+import { mockupListQuery, parseMockupSort } from '~~/server/utils/mockup-list'
 import { applyN8nLeadToMockup } from '~~/server/utils/n8n'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { STUDIO_OWNERS, studioOwnerBySlug } from '~~/shared/studio-owners'
-
-const MOCKUP_SELECT = `
-  SELECT m.*, b.name as b_name, b.website as b_website, b.phone as b_phone, b.email as b_email,
-    b.address as b_address, b.city as b_city, b.state as b_state, b.category as b_category,
-    b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id
-  FROM mockups m
-  LEFT JOIN businesses b ON m.business_id = b.id
-`
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
   const query = getQuery(event)
   const businessId = typeof query.businessId === 'string' ? query.businessId : ''
   const requestedOwner = typeof query.owner === 'string' ? query.owner : ''
+  const search = typeof query.q === 'string' ? query.q : ''
+  const sort = parseMockupSort(query.sort)
+  const limit = typeof query.limit === 'string' ? Number(query.limit) : 0
+  const offset = typeof query.offset === 'string' ? Number(query.offset) : 0
   const viewerOwner = ownerSlugFromEmail(user.email)
   const teammate = requestedOwner && requestedOwner !== 'mine' && requestedOwner !== viewerOwner
     ? studioOwnerBySlug(requestedOwner)
@@ -26,6 +23,8 @@ export default defineEventHandler(async (event) => {
   if (requestedOwner && requestedOwner !== 'mine' && requestedOwner !== viewerOwner && !teammate) {
     throw createError({ statusCode: 400, message: 'Unknown owner. Use mine, ryan, chase, or aaron.' })
   }
+
+  await ensureMockupLinkColumns()
 
   let teammateId = ''
   await removeDigestLeadsWithoutMockups(user.id)
@@ -58,27 +57,34 @@ export default defineEventHandler(async (event) => {
     await checkUserMockupLinks(teammateId)
   }
 
-  const visible = visibleMockupSql('m')
-  const mineCount = await db.execute({
-    sql: `SELECT COUNT(*) as count FROM mockups m WHERE m.user_id = ? AND ${visible}`,
-    args: [user.id]
+  const mine = mockupListQuery({
+    scope: 'user',
+    scopeValue: user.id,
+    sort: 'newest'
   })
+  const mineCount = await db.execute({ sql: mine.countSql, args: mine.countArgs })
 
-  const result = teammate
-    ? await db.execute({
-        sql: `${MOCKUP_SELECT}
-         JOIN users u ON u.id = m.user_id
-         WHERE lower(u.email) = ?
-           AND ${visible}
-         ORDER BY m.updated_at DESC`,
-        args: [teammate.email]
+  const listed = teammate
+    ? mockupListQuery({
+        scope: 'email',
+        scopeValue: teammate.email,
+        sort,
+        search,
+        limit,
+        offset
       })
-    : await db.execute({
-        sql: `${MOCKUP_SELECT}
-         WHERE m.user_id = ? AND ${visible} ${businessId ? 'AND m.business_id = ?' : ''}
-         ORDER BY m.updated_at DESC`,
-        args: businessId ? [user.id, businessId] : [user.id]
+    : mockupListQuery({
+        scope: 'user',
+        scopeValue: user.id,
+        sort,
+        businessId,
+        search,
+        limit,
+        offset
       })
+
+  const result = await db.execute({ sql: listed.listSql, args: listed.listArgs })
+  const filteredCount = await db.execute({ sql: listed.countSql, args: listed.countArgs })
 
   const mockups = result.rows.map((row) => {
     const business = row.b_id
@@ -100,11 +106,14 @@ export default defineEventHandler(async (event) => {
     return mapMockup(row as Record<string, unknown>, business as Record<string, unknown> | null)
   })
 
+  const showing = Number(filteredCount.rows[0]?.count || 0)
+
   return {
     success: true,
     mockups,
     viewerOwner,
     scope: teammate ? teammate.slug : 'mine',
+    sort,
     owners: STUDIO_OWNERS.map(owner => ({
       slug: owner.slug,
       label: owner.label,
@@ -112,7 +121,7 @@ export default defineEventHandler(async (event) => {
     })),
     counts: {
       mine: Number(mineCount.rows[0]?.count || 0),
-      showing: mockups.length
+      showing: limit > 0 ? showing : mockups.length
     }
   }
 })

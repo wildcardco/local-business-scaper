@@ -2,8 +2,9 @@ import { db, generateId } from '~~/server/utils/db'
 import { listN8nLeadPage } from '~~/server/utils/n8n'
 import { isPlaceId, parseUsCityState } from '~~/shared/studio-location'
 import { isVercelMockupUrl, mockupGithubRepo, mockupGithubUrl, storedGithubRepo } from '~~/shared/mockup-repo'
+import { mockupActivityTime } from '~~/shared/mockup-time'
 import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
-import { inspectMockupTarget } from '~~/server/utils/mockup-links'
+import { ensureMockupLinkColumns, inspectMockupTarget } from '~~/server/utils/mockup-links'
 
 type SqlArg = string | number | bigint | null
 
@@ -179,6 +180,7 @@ export async function startSyncJob(userId: string) {
 }
 
 export async function saveLeadPage(userId: string, owner: string, rows: Record<string, unknown>[]) {
+  await ensureMockupLinkColumns()
   const byPlace = new Map<string, Record<string, unknown>>()
   for (const row of rows) {
     const placeId = asString(row.place_id)
@@ -195,7 +197,8 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
   const marks = placeIds.map(() => '?').join(', ')
   const [mockupResult, businessResult] = await db.batch([
     {
-      sql: `SELECT m.id, m.place_id, m.business_id, m.status, b.city as b_city, b.state as b_state,
+      sql: `SELECT m.id, m.place_id, m.business_id, m.status, m.mockup_url, m.mockup_version, m.made_at,
+          b.city as b_city, b.state as b_state,
           b.address as b_address, b.email as b_email, b.category as b_category
         FROM mockups m
         LEFT JOIN businesses b ON b.id = m.business_id
@@ -270,6 +273,11 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const githubMissing = link?.deployment === 'live' && link.githubMissing ? 1 : 0
     const confirmedRepo = link?.deployment === 'live' ? link.githubRepo : githubRepo
     const live = link?.deployment === 'live'
+    const n8nMade = mockupActivityTime(row)
+    const previousUrl = asString(existing?.mockup_url)
+    const previousVersion = Number(existing?.mockup_version || 0)
+    const changed = !existing?.id || mockupUrl !== previousUrl || mockupVersion !== previousVersion
+    const madeAt = changed || !asString(existing?.made_at) ? n8nMade : null
 
     if (existing?.id) {
       writes.push(live
@@ -281,12 +289,13 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               photo_urls = COALESCE(?, photo_urls),
               github_repo = ?, github_missing = ?, deployment_missing = 0,
               links_checked_at = datetime('now'),
+              made_at = COALESCE(?, made_at),
               n8n_synced_at = datetime('now'),
               updated_at = datetime('now')
               WHERE id = ? AND user_id = ?`,
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
-              pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing,
+              pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing, madeAt,
               String(existing.id), userId
             ]
           }
@@ -297,12 +306,13 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
               photo_urls = COALESCE(?, photo_urls),
               github_repo = COALESCE(github_repo, ?),
+              made_at = COALESCE(?, made_at),
               n8n_synced_at = datetime('now'),
               updated_at = datetime('now')
               WHERE id = ? AND user_id = ?`,
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
-              pitchVersion, lastFeedback, photoUrls, githubRepo,
+              pitchVersion, lastFeedback, photoUrls, githubRepo, madeAt,
               String(existing.id), userId
             ]
           })
@@ -353,12 +363,12 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
       sql: `INSERT INTO mockups (
         id, user_id, business_id, place_id, owner, source, status, mockup_url, mockup_version,
         pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, github_missing,
-        deployment_missing, links_checked_at, n8n_synced_at
-      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
+        deployment_missing, made_at, links_checked_at, n8n_synced_at
+      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
       args: [
         generateId(), userId, businessId, placeId, owner, status, mockupUrl,
         mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls,
-        live ? confirmedRepo : githubRepo, githubMissing
+        live ? confirmedRepo : githubRepo, githubMissing, madeAt
       ]
     })
     imported++

@@ -2,7 +2,7 @@ import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
 import { githubRepoForMockup, mockupGithubUrl } from '~~/shared/mockup-repo'
-import { checkUserMockupLinks } from '~~/server/utils/mockup-links'
+import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -95,6 +95,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     photoUrls,
     aiModel: (row.ai_model as string) || null,
     n8nSyncedAt: (row.n8n_synced_at as string) || null,
+    madeAt: (row.made_at as string) || (row.created_at as string) || null,
     createdAt: (row.created_at as string) || null,
     updatedAt: (row.updated_at as string) || null,
     business: business
@@ -317,11 +318,14 @@ export async function fireMockupAction(opts: {
         ? 'revising'
         : 'generating'
   const owner = ownerSlugFromEmail(opts.user.email)
+  const stampActivity = opts.action === 'generate_mockup' || opts.action === 'revise_mockup'
+  await ensureMockupLinkColumns()
 
   await db.execute({
     sql: `UPDATE mockups SET
       place_id = ?, owner = ?, status = ?, last_feedback = COALESCE(?, last_feedback),
       photo_urls = COALESCE(?, photo_urls), ai_model = ?,
+      made_at = CASE WHEN ? = 1 THEN datetime('now') ELSE made_at END,
       updated_at = datetime('now')
       WHERE id = ? AND user_id = ?`,
     args: [
@@ -331,6 +335,7 @@ export async function fireMockupAction(opts: {
       extraPrompt,
       opts.photoUrls ? JSON.stringify(opts.photoUrls) : null,
       model,
+      stampActivity ? 1 : 0,
       mockup.id,
       opts.user.id
     ]

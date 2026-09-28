@@ -1,10 +1,25 @@
 <script setup lang="ts">
 const owner = ref('mine')
+const sort = ref('newest')
+const searchInput = ref('')
+const search = ref('')
 const { running: syncRunning, revision: syncRevision, start: startSync } = useStudioSync()
 
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(searchInput, (value) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    search.value = value.trim()
+  }, 250)
+})
+
 const { data, pending, refresh } = await useFetch('/api/mockups', {
-  query: computed(() => owner.value === 'mine' ? {} : { owner: owner.value }),
-  watch: [owner]
+  query: computed(() => ({
+    ...(owner.value === 'mine' ? {} : { owner: owner.value }),
+    ...(search.value ? { q: search.value } : {}),
+    sort: sort.value
+  })),
+  watch: [owner, search, sort]
 })
 
 const mockups = computed(() => data.value?.mockups || [])
@@ -24,6 +39,12 @@ const ownerOptions = computed(() => {
     ...others.map(item => ({ value: item.slug, label: item.label }))
   ]
 })
+
+const sortOptions = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+  { value: 'name', label: 'Business name A–Z' }
+]
 
 watch(syncRevision, () => {
   refresh()
@@ -73,16 +94,36 @@ function statusColor(status: string) {
       </div>
     </div>
 
-    <UFormField
-      label="Whose mockups"
-      class="max-w-xs"
-    >
-      <USelect
-        v-model="owner"
-        :items="ownerOptions"
-        class="w-full"
-      />
-    </UFormField>
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <UFormField
+        label="Search"
+        class="sm:col-span-2"
+      >
+        <UInput
+          v-model="searchInput"
+          class="w-full"
+          icon="i-lucide-search"
+          placeholder="Business or town"
+          size="lg"
+        />
+      </UFormField>
+      <UFormField label="Sort">
+        <USelect
+          v-model="sort"
+          :items="sortOptions"
+          class="w-full"
+          size="lg"
+        />
+      </UFormField>
+      <UFormField label="Whose mockups">
+        <USelect
+          v-model="owner"
+          :items="ownerOptions"
+          class="w-full"
+          size="lg"
+        />
+      </UFormField>
+    </div>
 
     <div
       v-if="pending"
@@ -101,10 +142,12 @@ function statusColor(status: string) {
           class="mx-auto size-10 text-muted"
         />
         <h2 class="font-display text-lg font-semibold">
-          No mockups yet
+          {{ search ? 'No matching mockups' : 'No mockups yet' }}
         </h2>
         <p class="mx-auto max-w-md text-sm text-muted">
-          Sync keeps rows that already have a Vercel deployment. Leads without one stay off this list. You can still start a mockup by hand.
+          {{ search
+            ? 'Nothing in this list matches that business or town.'
+            : 'Sync keeps rows that already have a live Vercel deployment. Leads without one, and deployments that 404, stay off this list. You can still start a mockup by hand.' }}
         </p>
         <UButton
           class="min-h-11"
@@ -151,7 +194,7 @@ function statusColor(status: string) {
         <p class="mt-2 text-xs text-muted">
           <span v-if="mockup.aiModel">{{ mockup.aiModel }}</span>
           <span v-if="mockup.aiModel"> · </span>
-          <span>{{ mockup.updatedAt }}</span>
+          <span>{{ mockup.madeAt || mockup.createdAt }}</span>
         </p>
         <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <UButton
