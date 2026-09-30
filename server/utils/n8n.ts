@@ -9,6 +9,8 @@ import {
   isStudioAiModel
 } from '~~/shared/studio-ai'
 import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
+import { mockupActivityTime } from '~~/shared/mockup-time'
+import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 
 export const N8N_WF_FACTORY = 'jslUBLzcV27vdLIA'
 export const N8N_WF_PITCH = 'wkqEVHfuCV1CsS2a'
@@ -79,7 +81,7 @@ function n8nConfig() {
   }
 }
 
-async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
+async function n8nRequest(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
   const { apiKey, baseUrl } = n8nConfig()
   if (!apiKey) {
     throw createError({
@@ -129,7 +131,12 @@ async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000
     })
   }
 
-  return json
+  return { status: response.status, json }
+}
+
+async function n8nFetch(path: string, init: RequestInit = {}, timeoutMs = 20_000) {
+  const result = await n8nRequest(path, init, timeoutMs)
+  return result.json
 }
 
 export function studioPlaceId(input: { placeId?: string | null, mockupId: string, userId: string }) {
@@ -255,6 +262,7 @@ export interface N8nLeadPage {
   rows: Record<string, unknown>[]
   nextCursor: string | null
   unsorted: boolean
+  status: number
 }
 
 async function fetchLeadPage(columnName: string, value: string, sortBy: string, cursor: string | null) {
@@ -268,7 +276,7 @@ async function fetchLeadPage(columnName: string, value: string, sortBy: string, 
   if (sortBy) params.set('sortBy', sortBy)
   if (cursor) params.set('cursor', cursor)
 
-  const json = await n8nFetch(
+  const { status, json } = await n8nRequest(
     `/api/v1/data-tables/${leadsTableId}/rows?${params}`,
     {},
     LEAD_PAGE_TIMEOUT_MS
@@ -276,6 +284,7 @@ async function fetchLeadPage(columnName: string, value: string, sortBy: string, 
   const rows = extractTableRows(json)
   const next = nextCursorOf(json)
   return {
+    status,
     rows,
     nextCursor: next && rows.length > 0 && next !== cursor ? next : null
   }
@@ -543,6 +552,10 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     const status = mockupUrl
       ? (n8nStatus === 'pitch_ready' ? 'pitch_ready' : 'mockup_ready')
       : 'failed'
+    const activity = mockupActivityTime(lead)
+    const urlChanged = Boolean(mockupUrl) && mockupUrl !== localUrl
+    const versionChanged = n8nVersion > localVersion
+    await ensureMockupLinkColumns()
 
     await db.execute({
       sql: `UPDATE mockups SET
@@ -550,6 +563,10 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
         mockup_version = COALESCE(?, mockup_version),
         pitch_draft = COALESCE(?, pitch_draft),
         pitch_version = COALESCE(?, pitch_version),
+        made_at = CASE
+          WHEN ? = 1 THEN COALESCE(?, datetime('now'))
+          ELSE COALESCE(made_at, ?)
+        END,
         n8n_synced_at = datetime('now'), updated_at = datetime('now')
         WHERE id = ? AND user_id = ?`,
       args: [
@@ -558,6 +575,9 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
         lead.mockup_version != null ? Number(lead.mockup_version) : null,
         asLeadString(lead.pitch_draft),
         lead.pitch_version != null ? Number(lead.pitch_version) : null,
+        urlChanged || versionChanged ? 1 : 0,
+        activity,
+        activity,
         mockupId,
         userId
       ]

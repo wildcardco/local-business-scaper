@@ -1,8 +1,10 @@
 import { db, generateId } from '~~/server/utils/db'
 import { listN8nLeadPage } from '~~/server/utils/n8n'
 import { isPlaceId, parseUsCityState } from '~~/shared/studio-location'
-import { isVercelMockupUrl, storedGithubRepo } from '~~/shared/mockup-repo'
+import { isVercelMockupUrl, mockupGithubRepo, mockupGithubUrl, storedGithubRepo } from '~~/shared/mockup-repo'
+import { mockupActivityTime } from '~~/shared/mockup-time'
 import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
+import { ensureMockupLinkColumns, inspectMockupTarget } from '~~/server/utils/mockup-links'
 
 type SqlArg = string | number | bigint | null
 
@@ -132,6 +134,18 @@ export async function getSyncJob(userId: string) {
   return viewOf(await latestJob(userId))
 }
 
+async function mapPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  let next = 0
+  async function run() {
+    while (next < items.length) {
+      const index = next
+      next += 1
+      await worker(items[index]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => run()))
+}
+
 function explicitGithubRepo(row: Record<string, unknown>) {
   const stored = storedGithubRepo(asString(row.github_repo) || asString(row.repo_full_name))
   if (stored) return stored
@@ -165,24 +179,65 @@ export async function startSyncJob(userId: string) {
   return viewOf(await latestJob(userId))
 }
 
+export interface LeadPageSave {
+  imported: number
+  refreshed: number
+  kept: number
+  hidden: number
+  unknown: number
+  duplicatePlace: number
+  skipped: { no_place_id: number, not_vercel: number }
+}
+
+function emptyLeadSave(partial: Partial<LeadPageSave> = {}): LeadPageSave {
+  return {
+    imported: 0,
+    refreshed: 0,
+    kept: 0,
+    hidden: 0,
+    unknown: 0,
+    duplicatePlace: 0,
+    skipped: { no_place_id: 0, not_vercel: 0 },
+    ...partial
+  }
+}
+
 export async function saveLeadPage(userId: string, owner: string, rows: Record<string, unknown>[]) {
+  await ensureMockupLinkColumns()
   const byPlace = new Map<string, Record<string, unknown>>()
+  const skipped = { no_place_id: 0, not_vercel: 0 }
+  let duplicatePlace = 0
   for (const row of rows) {
     const placeId = asString(row.place_id)
     const mockupUrl = asString(row.mockup_url)
-    if (placeId && isVercelMockupUrl(mockupUrl)) byPlace.set(placeId, row)
+    if (!placeId) {
+      skipped.no_place_id++
+      continue
+    }
+    if (!isVercelMockupUrl(mockupUrl)) {
+      skipped.not_vercel++
+      continue
+    }
+    if (byPlace.has(placeId)) duplicatePlace++
+    byPlace.set(placeId, row)
   }
 
   let imported = 0
   let refreshed = 0
+  let hidden = 0
+  let unknown = 0
   const writes: Statement[] = []
   const placeIds = [...byPlace.keys()]
-  if (placeIds.length === 0) return { imported, refreshed }
+  const kept = placeIds.length
+  if (placeIds.length === 0) {
+    return emptyLeadSave({ kept, duplicatePlace, skipped })
+  }
 
   const marks = placeIds.map(() => '?').join(', ')
   const [mockupResult, businessResult] = await db.batch([
     {
-      sql: `SELECT m.id, m.place_id, m.business_id, b.city as b_city, b.state as b_state,
+      sql: `SELECT m.id, m.place_id, m.business_id, m.status, m.mockup_url, m.mockup_version, m.made_at,
+          b.city as b_city, b.state as b_state,
           b.address as b_address, b.email as b_email, b.category as b_category
         FROM mockups m
         LEFT JOIN businesses b ON b.id = m.business_id
@@ -199,6 +254,25 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
 
   const mockupsByPlace = new Map(mockupResult.rows.map(row => [String(row.place_id || ''), row]))
   const businessesByPlace = new Map(businessResult.rows.map(row => [String(row.place_id || ''), row]))
+
+  const linkByPlace = new Map<string, { deployment: 'live' | 'missing' | 'unknown', githubMissing: boolean, githubRepo: string | null }>()
+  await mapPool([...byPlace.entries()], 8, async ([placeId, row]) => {
+    const mockupUrl = asString(row.mockup_url) || ''
+    const businessName = asString(row.business_name) || 'Imported lead'
+    const explicitRepo = explicitGithubRepo(row)
+    const repo = mockupGithubRepo({
+      owner,
+      businessName,
+      placeId,
+      stored: explicitRepo
+    })
+    const inspected = await inspectMockupTarget({
+      vercelUrl: mockupUrl,
+      githubUrl: mockupGithubUrl(repo),
+      githubRepo: explicitRepo || repo
+    })
+    linkByPlace.set(placeId, inspected)
+  })
 
   for (const [placeId, row] of byPlace) {
     const businessName = asString(row.business_name) || 'Imported lead'
@@ -220,24 +294,70 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
         : null
     const phone = row.phone != null ? String(row.phone) : null
     const existing = mockupsByPlace.get(placeId)
+    const link = linkByPlace.get(placeId)
+    const busy = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(String(existing?.status || ''))
+
+    if (link?.deployment === 'missing' && !busy) {
+      hidden++
+      if (existing?.id) {
+        writes.push({
+          sql: `UPDATE mockups
+                SET deployment_missing = 1, links_checked_at = datetime('now')
+                WHERE id = ? AND user_id = ?`,
+          args: [String(existing.id), userId]
+        })
+      }
+      continue
+    }
+
+    if (link?.deployment === 'unknown') unknown++
+
+    const githubMissing = link?.deployment === 'live' && link.githubMissing ? 1 : 0
+    const confirmedRepo = link?.deployment === 'live' ? link.githubRepo : githubRepo
+    const live = link?.deployment === 'live'
+    const n8nMade = mockupActivityTime(row)
+    const previousUrl = asString(existing?.mockup_url)
+    const previousVersion = Number(existing?.mockup_version || 0)
+    const changed = !existing?.id || mockupUrl !== previousUrl || mockupVersion !== previousVersion
+    const madeAt = changed || !asString(existing?.made_at) ? n8nMade : null
 
     if (existing?.id) {
-      writes.push({
-        sql: `UPDATE mockups SET
-          owner = ?, status = ?, mockup_url = COALESCE(?, mockup_url),
-          mockup_version = ?, pitch_draft = COALESCE(?, pitch_draft),
-          pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
-          photo_urls = COALESCE(?, photo_urls),
-          github_repo = COALESCE(github_repo, ?),
-          n8n_synced_at = datetime('now'),
-          updated_at = datetime('now')
-          WHERE id = ? AND user_id = ?`,
-        args: [
-          owner, status, mockupUrl, mockupVersion, pitchDraft,
-          pitchVersion, lastFeedback, photoUrls, githubRepo,
-          String(existing.id), userId
-        ]
-      })
+      writes.push(live
+        ? {
+            sql: `UPDATE mockups SET
+              owner = ?, status = ?, mockup_url = COALESCE(?, mockup_url),
+              mockup_version = ?, pitch_draft = COALESCE(?, pitch_draft),
+              pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
+              photo_urls = COALESCE(?, photo_urls),
+              github_repo = ?, github_missing = ?, deployment_missing = 0,
+              links_checked_at = datetime('now'),
+              made_at = COALESCE(?, made_at),
+              n8n_synced_at = datetime('now'),
+              updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+            args: [
+              owner, status, mockupUrl, mockupVersion, pitchDraft,
+              pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing, madeAt,
+              String(existing.id), userId
+            ]
+          }
+        : {
+            sql: `UPDATE mockups SET
+              owner = ?, status = ?, mockup_url = COALESCE(?, mockup_url),
+              mockup_version = ?, pitch_draft = COALESCE(?, pitch_draft),
+              pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
+              photo_urls = COALESCE(?, photo_urls),
+              github_repo = COALESCE(github_repo, ?),
+              made_at = COALESCE(?, made_at),
+              n8n_synced_at = datetime('now'),
+              updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+            args: [
+              owner, status, mockupUrl, mockupVersion, pitchDraft,
+              pitchVersion, lastFeedback, photoUrls, githubRepo, madeAt,
+              String(existing.id), userId
+            ]
+          })
       refreshed++
       if (existing.business_id) {
         const patch = locationPatch({
@@ -284,18 +404,20 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     writes.push({
       sql: `INSERT INTO mockups (
         id, user_id, business_id, place_id, owner, source, status, mockup_url, mockup_version,
-        pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, n8n_synced_at
-      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, github_missing,
+        deployment_missing, made_at, links_checked_at, n8n_synced_at
+      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
       args: [
         generateId(), userId, businessId, placeId, owner, status, mockupUrl,
-        mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls, githubRepo
+        mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls,
+        live ? confirmedRepo : githubRepo, githubMissing, madeAt
       ]
     })
     imported++
   }
 
   if (writes.length > 0) await db.batch(writes, 'write')
-  return { imported, refreshed }
+  return { imported, refreshed, kept, hidden, unknown, duplicatePlace, skipped }
 }
 
 function errorMessage(error: unknown) {
@@ -304,11 +426,96 @@ function errorMessage(error: unknown) {
   return record.data?.message || record.message || record.statusMessage || 'n8n sync failed'
 }
 
-export async function stepSyncJob(userId: string, email: string, owner: string) {
+function n8nStatusOf(error: unknown): number | 'not_called' | 'none' {
+  if (/N8N_API_KEY is not configured/i.test(errorMessage(error))) return 'not_called'
+  if (!error || typeof error !== 'object') return 'none'
+  const status = (error as { statusCode?: number }).statusCode
+  return typeof status === 'number' && status >= 100 && status < 600 ? status : 'none'
+}
+
+function configuredSecrets() {
+  const config = useRuntimeConfig()
+  return [config.n8nApiKey, config.n8nStudioSecret].map(value => String(value || '')).filter(value => value.length >= 8)
+}
+
+/** One line of sync detail. Never includes the API key or row bodies. */
+export function redactSyncLog(value: string, secrets: string[] = []) {
+  let text = value
+  for (const secret of secrets) {
+    if (secret.length >= 8) text = text.split(secret).join('[redacted]')
+  }
+  return text
+    .replace(/(X-N8N-API-KEY|N8N_API_KEY|X-Studio-Secret|Authorization)\s*[:=]\s*\S+/gi, '$1=[redacted]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .slice(0, 180)
+}
+
+function skippedText(saved: LeadPageSave) {
+  const parts: string[] = []
+  if (saved.skipped.no_place_id) parts.push(`no_place_id:${saved.skipped.no_place_id}`)
+  if (saved.skipped.not_vercel) parts.push(`not_vercel:${saved.skipped.not_vercel}`)
+  if (saved.duplicatePlace) parts.push(`duplicate_place:${saved.duplicatePlace}`)
+  return parts.length ? parts.join(',') : 'none'
+}
+
+export interface SyncStepResult {
+  job: StudioSyncJobView | null
+  busy: boolean
+  line: string
+}
+
+function stepLine(input: {
+  jobId: string
+  n8n: number | 'not_called' | 'none'
+  page?: number
+  fetched?: number
+  kept?: number
+  skipped?: string
+  hidden?: number
+  written?: number
+  updated?: number
+  unknown?: number
+  reason?: string
+  status?: string
+  error?: string
+  secrets?: string[]
+}) {
+  const bits = [`[studio-sync] step job=${input.jobId}`, `n8n=${input.n8n}`]
+  if (input.reason) bits.push(`reason=${input.reason}`)
+  if (input.status) bits.push(`status=${input.status}`)
+  if (input.page != null) bits.push(`page=${input.page}`)
+  if (input.fetched != null) {
+    bits.push(
+      `fetched=${input.fetched}`,
+      `kept=${input.kept ?? 0}`,
+      `skipped=${input.skipped || 'none'}`,
+      `hidden=${input.hidden ?? 0}`,
+      `written=${input.written ?? 0}`,
+      `updated=${input.updated ?? 0}`
+    )
+    if (input.unknown) bits.push(`unknown=${input.unknown}`)
+  }
+  if (input.error) bits.push(`error=${redactSyncLog(input.error, input.secrets)}`)
+  return bits.join(' ')
+}
+
+export async function stepSyncJob(userId: string, email: string, owner: string): Promise<SyncStepResult> {
   await ensureMockupSyncTable()
   const current = await latestJob(userId)
   if (!current || String(current.status) !== 'running') {
-    return { job: viewOf(current), busy: false }
+    const job = viewOf(current)
+    return {
+      job,
+      busy: false,
+      line: stepLine({
+        jobId: job?.id || 'none',
+        n8n: 'not_called',
+        reason: 'no_running_job',
+        status: job?.status || 'none'
+      })
+    }
   }
 
   const lock = await db.execute({
@@ -319,18 +526,26 @@ export async function stepSyncJob(userId: string, email: string, owner: string) 
     args: [current.id, userId]
   })
   if (!lock.rowsAffected) {
-    return { job: viewOf(current), busy: true }
+    return {
+      job: viewOf(current),
+      busy: true,
+      line: stepLine({
+        jobId: String(current.id),
+        n8n: 'not_called',
+        reason: 'locked'
+      })
+    }
   }
 
+  const pageNumber = Number(current.pages || 0) + 1
   try {
     const page = await listN8nLeadPage(email, {
       cursor: asString(current.cursor),
       unsorted: Number(current.unsorted || 0) === 1
     })
     const saved = await saveLeadPage(userId, owner, page.rows)
-    const pages = Number(current.pages || 0) + 1
-    const finished = !page.nextCursor || pages >= PAGE_CAP
-    const cursor = finished ? (page.nextCursor && pages >= PAGE_CAP ? page.nextCursor : null) : page.nextCursor
+    const finished = !page.nextCursor || pageNumber >= PAGE_CAP
+    const cursor = finished ? (page.nextCursor && pageNumber >= PAGE_CAP ? page.nextCursor : null) : page.nextCursor
     await db.execute({
       sql: `UPDATE mockup_sync_jobs SET
           status = ?, cursor = ?, unsorted = ?,
@@ -344,19 +559,45 @@ export async function stepSyncJob(userId: string, email: string, owner: string) 
         saved.imported,
         saved.refreshed,
         page.rows.length,
-        pages,
+        pageNumber,
         current.id,
         userId
       ]
     })
+    return {
+      job: viewOf(await latestJob(userId)),
+      busy: false,
+      line: stepLine({
+        jobId: String(current.id),
+        n8n: page.status,
+        page: pageNumber,
+        fetched: page.rows.length,
+        kept: saved.kept,
+        skipped: skippedText(saved),
+        hidden: saved.hidden,
+        written: saved.imported,
+        updated: saved.refreshed,
+        unknown: saved.unknown
+      })
+    }
   } catch (error: unknown) {
+    const message = errorMessage(error).slice(0, 500)
     await db.execute({
       sql: `UPDATE mockup_sync_jobs
             SET status = 'failed', error = ?, locked_at = NULL, updated_at = datetime('now')
             WHERE id = ? AND user_id = ?`,
-      args: [errorMessage(error).slice(0, 500), current.id, userId]
+      args: [message, current.id, userId]
     })
+    return {
+      job: viewOf(await latestJob(userId)),
+      busy: false,
+      line: stepLine({
+        jobId: String(current.id),
+        n8n: n8nStatusOf(error),
+        page: pageNumber,
+        error: message,
+        secrets: configuredSecrets()
+      })
+    }
   }
-
-  return { job: viewOf(await latestJob(userId)), busy: false }
 }
