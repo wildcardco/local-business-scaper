@@ -2,7 +2,7 @@ import { db, generateId } from '~~/server/utils/db'
 import { listN8nLeadPage } from '~~/server/utils/n8n'
 import { isPlaceId, parseUsCityState } from '~~/shared/studio-location'
 import { isVercelMockupUrl, mockupGithubRepo, mockupGithubUrl, storedGithubRepo } from '~~/shared/mockup-repo'
-import { mockupActivityTime } from '~~/shared/mockup-time'
+import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
 import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
 import { ensureMockupLinkColumns, inspectMockupTarget } from '~~/server/utils/mockup-links'
 
@@ -315,6 +315,8 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const githubMissing = link?.deployment === 'live' && link.githubMissing ? 1 : 0
     const confirmedRepo = link?.deployment === 'live' ? link.githubRepo : githubRepo
     const live = link?.deployment === 'live'
+    const createdTime = mockupCreatedTime(row)
+    const updatedTime = mockupUpdatedTime(row)
     const n8nMade = mockupActivityTime(row)
     const previousUrl = asString(existing?.mockup_url)
     const previousVersion = Number(existing?.mockup_version || 0)
@@ -332,12 +334,15 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               github_repo = ?, github_missing = ?, deployment_missing = 0,
               links_checked_at = datetime('now'),
               made_at = COALESCE(?, made_at),
+              n8n_created_at = COALESCE(?, n8n_created_at),
+              n8n_updated_at = COALESCE(?, n8n_updated_at),
               n8n_synced_at = datetime('now'),
               updated_at = datetime('now')
               WHERE id = ? AND user_id = ?`,
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
               pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing, madeAt,
+              createdTime, updatedTime,
               String(existing.id), userId
             ]
           }
@@ -349,12 +354,15 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               photo_urls = COALESCE(?, photo_urls),
               github_repo = COALESCE(github_repo, ?),
               made_at = COALESCE(?, made_at),
+              n8n_created_at = COALESCE(?, n8n_created_at),
+              n8n_updated_at = COALESCE(?, n8n_updated_at),
               n8n_synced_at = datetime('now'),
               updated_at = datetime('now')
               WHERE id = ? AND user_id = ?`,
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
               pitchVersion, lastFeedback, photoUrls, githubRepo, madeAt,
+              createdTime, updatedTime,
               String(existing.id), userId
             ]
           })
@@ -405,12 +413,12 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
       sql: `INSERT INTO mockups (
         id, user_id, business_id, place_id, owner, source, status, mockup_url, mockup_version,
         pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, github_missing,
-        deployment_missing, made_at, links_checked_at, n8n_synced_at
-      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
+        deployment_missing, made_at, n8n_created_at, n8n_updated_at, links_checked_at, n8n_synced_at
+      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
       args: [
         generateId(), userId, businessId, placeId, owner, status, mockupUrl,
         mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls,
-        live ? confirmedRepo : githubRepo, githubMissing, madeAt
+        live ? confirmedRepo : githubRepo, githubMissing, madeAt, createdTime, updatedTime
       ]
     })
     imported++

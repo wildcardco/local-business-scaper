@@ -334,6 +334,8 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE mockups ADD COLUMN github_missing INTEGER DEFAULT 0`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN links_checked_at TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN made_at TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN n8n_created_at TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN n8n_updated_at TEXT`)
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)

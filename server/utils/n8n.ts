@@ -9,7 +9,7 @@ import {
   isStudioAiModel
 } from '~~/shared/studio-ai'
 import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
-import { mockupActivityTime } from '~~/shared/mockup-time'
+import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 
 export const N8N_WF_FACTORY = 'jslUBLzcV27vdLIA'
@@ -553,6 +553,8 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
       ? (n8nStatus === 'pitch_ready' ? 'pitch_ready' : 'mockup_ready')
       : 'failed'
     const activity = mockupActivityTime(lead)
+    const createdTime = mockupCreatedTime(lead)
+    const updatedTime = mockupUpdatedTime(lead)
     const urlChanged = Boolean(mockupUrl) && mockupUrl !== localUrl
     const versionChanged = n8nVersion > localVersion
     await ensureMockupLinkColumns()
@@ -567,6 +569,8 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
           WHEN ? = 1 THEN COALESCE(?, datetime('now'))
           ELSE COALESCE(made_at, ?)
         END,
+        n8n_created_at = COALESCE(?, n8n_created_at),
+        n8n_updated_at = COALESCE(?, n8n_updated_at),
         n8n_synced_at = datetime('now'), updated_at = datetime('now')
         WHERE id = ? AND user_id = ?`,
       args: [
@@ -578,6 +582,8 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
         urlChanged || versionChanged ? 1 : 0,
         activity,
         activity,
+        createdTime,
+        updatedTime,
         mockupId,
         userId
       ]

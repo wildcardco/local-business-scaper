@@ -95,7 +95,9 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     photoUrls,
     aiModel: (row.ai_model as string) || null,
     n8nSyncedAt: (row.n8n_synced_at as string) || null,
-    madeAt: (row.made_at as string) || (row.created_at as string) || null,
+    madeAt: (row.made_at as string) || null,
+    n8nCreatedAt: (row.n8n_created_at as string) || null,
+    n8nUpdatedAt: (row.n8n_updated_at as string) || null,
     createdAt: (row.created_at as string) || null,
     updatedAt: (row.updated_at as string) || null,
     business: business

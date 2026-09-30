@@ -1,7 +1,7 @@
 import { db } from '~~/server/utils/db'
 import { expireStaleMockups, mapMockup, removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
-import { mockupListQuery, parseMockupSort } from '~~/server/utils/mockup-list'
+import { mockupCategoryQuery, mockupListQuery, parseMockupCategory, parseMockupSort } from '~~/server/utils/mockup-list'
 import { applyN8nLeadToMockup } from '~~/server/utils/n8n'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { STUDIO_OWNERS, studioOwnerBySlug } from '~~/shared/studio-owners'
@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
   const businessId = typeof query.businessId === 'string' ? query.businessId : ''
   const requestedOwner = typeof query.owner === 'string' ? query.owner : ''
   const search = typeof query.q === 'string' ? query.q : ''
+  const category = parseMockupCategory(query.category)
   const sort = parseMockupSort(query.sort)
   const limit = typeof query.limit === 'string' ? Number(query.limit) : 0
   const offset = typeof query.offset === 'string' ? Number(query.offset) : 0
@@ -60,7 +61,7 @@ export default defineEventHandler(async (event) => {
   const mine = mockupListQuery({
     scope: 'user',
     scopeValue: user.id,
-    sort: 'newest'
+    sort: 'created'
   })
   const mineCount = await db.execute({ sql: mine.countSql, args: mine.countArgs })
 
@@ -70,6 +71,7 @@ export default defineEventHandler(async (event) => {
         scopeValue: teammate.email,
         sort,
         search,
+        category,
         limit,
         offset
       })
@@ -79,12 +81,20 @@ export default defineEventHandler(async (event) => {
         sort,
         businessId,
         search,
+        category,
         limit,
         offset
       })
+  const categoriesQuery = mockupCategoryQuery(teammate
+    ? { scope: 'email', scopeValue: teammate.email }
+    : { scope: 'user', scopeValue: user.id })
 
   const result = await db.execute({ sql: listed.listSql, args: listed.listArgs })
   const filteredCount = await db.execute({ sql: listed.countSql, args: listed.countArgs })
+  const categoryRows = await db.execute({ sql: categoriesQuery.sql, args: categoriesQuery.args })
+  const categories = categoryRows.rows
+    .map(row => String(row.category || '').trim())
+    .filter(Boolean)
 
   const mockups = result.rows.map((row) => {
     const business = row.b_id
@@ -114,6 +124,8 @@ export default defineEventHandler(async (event) => {
     viewerOwner,
     scope: teammate ? teammate.slug : 'mine',
     sort,
+    category: category || 'all',
+    categories,
     owners: STUDIO_OWNERS.map(owner => ({
       slug: owner.slug,
       label: owner.label,
