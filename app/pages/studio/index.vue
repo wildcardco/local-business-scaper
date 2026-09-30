@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const owner = ref('mine')
-const sort = ref('newest')
+const sort = ref('created')
+const category = ref('all')
 const searchInput = ref('')
 const search = ref('')
 const { running: syncRunning, revision: syncRevision, start: startSync } = useStudioSync()
@@ -17,14 +18,17 @@ const { data, pending, refresh } = await useFetch('/api/mockups', {
   query: computed(() => ({
     ...(owner.value === 'mine' ? {} : { owner: owner.value }),
     ...(search.value ? { q: search.value } : {}),
+    ...(category.value && category.value !== 'all' ? { category: category.value } : {}),
     sort: sort.value
   })),
-  watch: [owner, search, sort]
+  watch: [owner, search, sort, category]
 })
 
 const mockups = computed(() => data.value?.mockups || [])
 const counts = computed(() => data.value?.counts || { mine: 0, showing: 0 })
 const owners = computed(() => data.value?.owners || [])
+const categories = computed(() => data.value?.categories || [])
+const listFiltered = computed(() => Boolean(search.value) || category.value !== 'all')
 const scope = computed(() => data.value?.scope || 'mine')
 const scopeLabel = computed(() => {
   if (scope.value === 'mine') return 'Your mockups'
@@ -41,10 +45,30 @@ const ownerOptions = computed(() => {
 })
 
 const sortOptions = [
-  { value: 'newest', label: 'Newest' },
-  { value: 'oldest', label: 'Oldest' },
+  { value: 'created', label: 'Last created' },
+  { value: 'oldest', label: 'Oldest created' },
+  { value: 'updated', label: 'Last updated' },
   { value: 'name', label: 'Business name A–Z' }
 ]
+
+const categoryOptions = computed(() => [
+  { value: 'all', label: 'All' },
+  ...categories.value.map(item => ({ value: item, label: item }))
+])
+
+watch(categories, (list) => {
+  if (category.value !== 'all' && !list.includes(category.value)) category.value = 'all'
+})
+
+function updatedTime(mockup: { n8nUpdatedAt?: string | null, madeAt?: string | null }) {
+  return mockup.n8nUpdatedAt || mockup.madeAt || ''
+}
+
+function selectOwner(value: unknown) {
+  if (typeof value !== 'string' || !value || value === owner.value) return
+  category.value = 'all'
+  owner.value = value
+}
 
 watch(syncRevision, () => {
   refresh()
@@ -94,16 +118,16 @@ function statusColor(status: string) {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <UFormField
         label="Search"
-        class="sm:col-span-2"
+        class="sm:col-span-2 lg:col-span-3"
       >
         <UInput
           v-model="searchInput"
           class="w-full"
           icon="i-lucide-search"
-          placeholder="Business or town"
+          placeholder="Business, town, or category"
           size="lg"
         />
       </UFormField>
@@ -115,12 +139,21 @@ function statusColor(status: string) {
           size="lg"
         />
       </UFormField>
+      <UFormField label="Category">
+        <USelect
+          v-model="category"
+          :items="categoryOptions"
+          class="w-full"
+          size="lg"
+        />
+      </UFormField>
       <UFormField label="Whose mockups">
         <USelect
-          v-model="owner"
+          :model-value="owner"
           :items="ownerOptions"
           class="w-full"
           size="lg"
+          @update:model-value="selectOwner"
         />
       </UFormField>
     </div>
@@ -142,11 +175,11 @@ function statusColor(status: string) {
           class="mx-auto size-10 text-muted"
         />
         <h2 class="font-display text-lg font-semibold">
-          {{ search ? 'No matching mockups' : 'No mockups yet' }}
+          {{ listFiltered ? 'No matching mockups' : 'No mockups yet' }}
         </h2>
         <p class="mx-auto max-w-md text-sm text-muted">
-          {{ search
-            ? 'Nothing in this list matches that business or town.'
+          {{ listFiltered
+            ? 'Nothing in this list matches that business, town, or category.'
             : 'Sync keeps rows that already have a live Vercel deployment. Leads without one, and deployments that 404, stay off this list. You can still start a mockup by hand.' }}
         </p>
         <UButton
@@ -191,10 +224,13 @@ function statusColor(status: string) {
         >
           {{ mockup.lastFeedback }}
         </p>
-        <p class="mt-2 text-xs text-muted">
+        <p
+          v-if="mockup.aiModel || mockup.n8nCreatedAt || updatedTime(mockup)"
+          class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted"
+        >
           <span v-if="mockup.aiModel">{{ mockup.aiModel }}</span>
-          <span v-if="mockup.aiModel"> · </span>
-          <span>{{ mockup.madeAt || mockup.createdAt }}</span>
+          <span v-if="mockup.n8nCreatedAt">Created {{ mockup.n8nCreatedAt }}</span>
+          <span v-if="updatedTime(mockup)">Updated {{ updatedTime(mockup) }}</span>
         </p>
         <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <UButton

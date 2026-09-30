@@ -15,7 +15,9 @@ export function ensureMockupLinkColumns() {
         `ALTER TABLE mockups ADD COLUMN deployment_missing INTEGER DEFAULT 0`,
         `ALTER TABLE mockups ADD COLUMN github_missing INTEGER DEFAULT 0`,
         `ALTER TABLE mockups ADD COLUMN links_checked_at TEXT`,
-        `ALTER TABLE mockups ADD COLUMN made_at TEXT`
+        `ALTER TABLE mockups ADD COLUMN made_at TEXT`,
+        `ALTER TABLE mockups ADD COLUMN n8n_created_at TEXT`,
+        `ALTER TABLE mockups ADD COLUMN n8n_updated_at TEXT`
       ]) {
         try {
           await db.execute(sql)
