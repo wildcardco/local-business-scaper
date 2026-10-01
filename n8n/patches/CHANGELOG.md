@@ -1,5 +1,7 @@
 # n8n patches — Mockup Studio
 
+HTML system prompts and the visual-reference step are in `n8n/wf-2-studio-prompts/`. They are not applied to live WF-2 (`jslUBLzcV27vdLIA`). Paste from that README. Do not edit the workflow from the repo.
+
 WF-7 Studio Ingress is live: `HPHWqFUK7DXBynWo`, `POST https://n8n.wildcardcreative.cloud/webhook/studio`.
 
 WF-2/3/6 model-token expression patches are still optional. Do not paste `action_secret` or API keys into git.
