@@ -154,10 +154,23 @@ async function writePitch() {
   }
 }
 
+const stockHint = computed(() => {
+  const category = mockup.value?.business?.category?.trim()
+  const city = mockup.value?.business?.city?.trim()
+  if (!category || !city) return ''
+  return `${category} ${city}`.replace(/\s+/g, ' ')
+})
+
 async function handlePhotoUpload(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   if (!file) return
+  if (busy.value) {
+    input.value = ''
+    return
+  }
   if (!file.type.startsWith('image/')) {
+    input.value = ''
     toast.add({ title: 'Upload an image file', color: 'error' })
     return
   }
@@ -192,6 +205,7 @@ async function handlePhotoUpload(event: Event) {
     })
   } finally {
     isUploading.value = false
+    input.value = ''
   }
 }
 
@@ -337,7 +351,7 @@ function statusColor(status: string) {
         </template>
         <UFormField
           label="Revision notes"
-          help="Sends action revise_mockup to the Studio webhook. Photos still go through ImageKit."
+          help="Sends action revise_mockup to the Studio webhook. Photos are added separately."
         >
           <UTextarea
             v-model="notes"
@@ -453,37 +467,54 @@ function statusColor(status: string) {
                 Photos
               </h3>
             </template>
-            <div class="space-y-3">
+            <div class="space-y-4">
               <div
                 v-if="mockup.photoUrls.length"
                 class="grid grid-cols-3 gap-2"
               >
                 <img
-                  v-for="url in mockup.photoUrls"
+                  v-for="(url, index) in mockup.photoUrls"
                   :key="url"
                   :src="url"
-                  alt="Studio photo"
+                  :alt="`Mockup photo ${index + 1}`"
                   class="h-20 w-full object-cover rounded"
                 >
               </div>
-              <input
-                id="studio-photo"
-                type="file"
-                accept="image/*"
-                class="hidden"
-                @change="handlePhotoUpload"
-              >
-              <label for="studio-photo">
-                <UButton
-                  icon="i-lucide-image-plus"
-                  variant="outline"
-                  :loading="isUploading"
-                  as="span"
-                  class="cursor-pointer"
+              <StudioStockPhotos
+                :mockup-id="id"
+                :existing-urls="mockup.photoUrls"
+                :hint-query="stockHint"
+                :disabled="busy"
+                @added="refresh"
+              />
+              <div>
+                <p class="mb-2 text-xs text-muted">
+                  Upload a photo from this device
+                </p>
+                <input
+                  id="studio-photo"
+                  type="file"
+                  accept="image/*"
+                  class="hidden"
+                  :disabled="busy || isUploading"
+                  @change="handlePhotoUpload"
                 >
-                  Add photo
-                </UButton>
-              </label>
+                <label
+                  for="studio-photo"
+                  :class="busy ? 'pointer-events-none opacity-60' : ''"
+                >
+                  <UButton
+                    icon="i-lucide-upload"
+                    variant="outline"
+                    :loading="isUploading"
+                    :disabled="busy"
+                    as="span"
+                    class="cursor-pointer"
+                  >
+                    Upload photo
+                  </UButton>
+                </label>
+              </div>
             </div>
           </UCard>
         </div>
