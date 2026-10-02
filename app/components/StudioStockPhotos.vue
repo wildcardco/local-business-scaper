@@ -1,88 +1,99 @@
 <script setup lang="ts">
+import { upload } from '@imagekit/vue'
+import type { PhotoSlot } from '~~/shared/photo-slots'
+import { slotLabel, slotOrderedPhotoUrls } from '~~/shared/photo-slots'
+import type { JobPhase } from '~~/shared/studio-job'
 import type { StockPhoto, StockProviderNotice } from '~~/shared/stock-photos'
 import { STOCK_PROVIDER_LABEL } from '~~/shared/stock-photos'
 
+export interface ChosenPhoto {
+  id: string
+  url: string
+  thumb: string
+  alt: string
+  provider: StockPhoto['provider'] | 'upload'
+  sourceId: string
+  author: string
+  pageUrl: string
+}
+
 const props = defineProps<{
   mockupId: string
-  existingUrls: string[]
-  hintQuery?: string
+  slots: PhotoSlot[]
+  slotNote: string
+  assignments: Record<number, string>
+  activeIndex: number | null
+  chosen: ChosenPhoto | null
   disabled?: boolean
+  phase: JobPhase
+  detail: string
+  hintQuery?: string
 }>()
 
 const emit = defineEmits<{
-  added: []
+  choose: [photo: ChosenPhoto | null]
+  aim: [index: number]
+  clear: [index: number]
+  apply: [payload: { urls: string[], unsplashIds: string[] }]
 }>()
 
 const toast = useToast()
+const config = useRuntimeConfig()
 const query = ref('')
 const photos = ref<StockPhoto[]>([])
 const notices = ref<StockProviderNotice[]>([])
-const picked = ref<StockPhoto[]>([])
-const slotQueries = ref<string[]>([])
 const isSearching = ref(false)
-const isAdding = ref(false)
+const isUploading = ref(false)
 const searched = ref(false)
+const unsplashByUrl = ref<Record<string, string>>({})
 
-const suggestionQueries = computed(() => {
-  if (slotQueries.value.length) return slotQueries.value
-  const hint = props.hintQuery?.replace(/\s+/g, ' ').trim()
-  return hint ? [hint] : []
+const photoSteps = [
+  { id: 'sending' as const, label: 'Sending to n8n' },
+  { id: 'building' as const, label: 'Building on Vercel' },
+  { id: 'ready' as const, label: 'Ready' },
+  { id: 'failed' as const, label: 'Failed' }
+]
+
+const orderedUrls = computed(() => slotOrderedPhotoUrls(props.slots.map(slot => props.assignments[slot.index] || '')))
+const canSend = computed(() => orderedUrls.value.some(url => url.startsWith('http')))
+
+watch(() => props.activeIndex, (index) => {
+  if (index == null) return
+  const phrase = props.slots.find(slot => slot.index === index)?.query
+  if (phrase && !query.value.trim()) query.value = phrase
 })
 
-const suggestionLabel = computed(() =>
-  slotQueries.value.length ? 'Photo slots on this mockup' : 'Suggested search'
-)
-
-const allSkipped = computed(() =>
-  notices.value.length === 3 && notices.value.every(notice => notice.status === 'skipped')
-)
-
-const showEmpty = computed(() =>
-  searched.value
-  && !isSearching.value
-  && photos.value.length === 0
-  && notices.value.length < 3
-)
-
-onMounted(async () => {
-  try {
-    const result = await $fetch<{ queries: string[] }>(`/api/mockups/${props.mockupId}/photo-queries`)
-    slotQueries.value = result.queries
-  } catch {
-    slotQueries.value = []
-  }
-})
-
-watch(() => props.existingUrls, (urls) => {
-  picked.value = picked.value.filter(photo => !urls.includes(photo.url))
-})
-
-function pickIndex(photo: StockPhoto) {
-  return picked.value.findIndex(item => item.url === photo.url)
+function rememberUnsplash(photo: ChosenPhoto) {
+  if (photo.provider !== 'unsplash' || !photo.sourceId) return
+  unsplashByUrl.value = { ...unsplashByUrl.value, [photo.url]: photo.sourceId }
 }
 
-function alreadyAdded(photo: StockPhoto) {
-  return props.existingUrls.includes(photo.url)
+function chooseStock(photo: StockPhoto) {
+  const chosenPhoto: ChosenPhoto = {
+    id: photo.id,
+    url: photo.url,
+    thumb: photo.thumb,
+    alt: photo.alt,
+    provider: photo.provider,
+    sourceId: photo.sourceId,
+    author: photo.author,
+    pageUrl: photo.pageUrl
+  }
+  rememberUnsplash(chosenPhoto)
+  emit('choose', chosenPhoto)
 }
 
-function toggle(photo: StockPhoto) {
-  if (alreadyAdded(photo)) return
-  const index = pickIndex(photo)
-  if (index === -1) {
-    if (picked.value.length >= 12) {
-      toast.add({ title: 'You can add up to 12 photos at a time', color: 'warning' })
-      return
-    }
-    picked.value = [...picked.value, photo]
-    return
-  }
-  picked.value = picked.value.filter(item => item.url !== photo.url)
+function onDragStart(event: DragEvent, photo: ChosenPhoto) {
+  event.dataTransfer?.setData('text/uri-list', photo.url)
+  event.dataTransfer?.setData('text/plain', photo.url)
+  rememberUnsplash(photo)
+  emit('choose', photo)
 }
 
 async function searchPhotos(nextQuery?: string) {
   const text = (typeof nextQuery === 'string' ? nextQuery : query.value).replace(/\s+/g, ' ').trim()
   if (text.length < 2) {
-    toast.add({ title: 'Enter a search, such as asphalt crew Crown Point', color: 'warning' })
+    toast.add({ title: 'Enter a search of at least two characters', color: 'warning' })
     return
   }
   query.value = text
@@ -105,50 +116,130 @@ async function searchPhotos(nextQuery?: string) {
   }
 }
 
-async function addPicked() {
-  if (props.disabled || isAdding.value) return
-  const urls = picked.value
-    .map(photo => photo.url)
-    .filter(url => url.startsWith('http') && !props.existingUrls.includes(url))
-  if (urls.length === 0) {
-    toast.add({ title: 'Pick a photo that is not already on this mockup', color: 'warning' })
+async function onUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    toast.add({ title: 'Upload an image file', color: 'error' })
     return
   }
-  const unsplashIds = picked.value
-    .filter(photo => photo.provider === 'unsplash' && urls.includes(photo.url))
-    .map(photo => photo.sourceId)
-  isAdding.value = true
+  isUploading.value = true
   try {
-    await $fetch(`/api/mockups/${props.mockupId}/photos`, {
-      method: 'POST',
-      body: { photoUrls: urls }
+    const authResponse = await $fetch('/api/imagekit/auth')
+    const result = await upload({
+      file,
+      fileName: `studio-${props.mockupId}-${Date.now()}.${file.name.split('.').pop()}`,
+      folder: '/studio',
+      useUniqueFileName: true,
+      publicKey: config.public.imageKitPublicKey,
+      authenticator: async () => ({
+        signature: authResponse.signature,
+        expire: authResponse.expire,
+        token: authResponse.token
+      })
     })
-    if (unsplashIds.length) {
-      $fetch('/api/studio/stock-photos/download', {
-        method: 'POST',
-        body: { ids: unsplashIds }
-      }).catch(() => {})
+    if (!result.url?.startsWith('http')) {
+      toast.add({ title: 'Upload did not return a photo URL', color: 'error' })
+      return
     }
-    toast.add({
-      title: urls.length === 1 ? 'Photo added' : `${urls.length} photos added`,
-      color: 'success'
+    emit('choose', {
+      id: `upload:${result.url}`,
+      url: result.url,
+      thumb: result.url,
+      alt: file.name,
+      provider: 'upload',
+      sourceId: '',
+      author: 'Upload',
+      pageUrl: ''
     })
-    picked.value = []
-    emit('added')
+    toast.add({ title: 'Photo ready to place', description: 'Click a slot on the mockup.', color: 'success' })
   } catch (error: unknown) {
     toast.add({
-      title: 'Could not add photos',
+      title: 'Photo upload failed',
       description: readError(error, 'Try again'),
       color: 'error'
     })
   } finally {
-    isAdding.value = false
+    isUploading.value = false
   }
+}
+
+function sendAssigned() {
+  if (!canSend.value || props.disabled) return
+  const urls = orderedUrls.value
+  const unsplashIds = props.slots.flatMap((slot) => {
+    const url = props.assignments[slot.index]
+    const sourceId = url ? unsplashByUrl.value[url] : ''
+    return sourceId ? [sourceId] : []
+  })
+  emit('apply', { urls, unsplashIds: [...new Set(unsplashIds)] })
 }
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-4">
+    <StudioJobStatus
+      :phase="phase"
+      :detail="detail"
+      :steps="photoSteps"
+    />
+
+    <p
+      v-if="slotNote"
+      class="text-sm text-muted"
+    >
+      {{ slotNote }}
+    </p>
+    <ol
+      v-else-if="slots.length"
+      class="space-y-2"
+    >
+      <li
+        v-for="slot in slots"
+        :key="slot.index"
+      >
+        <button
+          type="button"
+          class="flex w-full items-center gap-3 rounded-lg border p-2 text-left"
+          :class="activeIndex === slot.index ? 'border-primary' : 'border-default'"
+          @click="emit('aim', slot.index)"
+        >
+          <img
+            v-if="assignments[slot.index]"
+            :src="assignments[slot.index]"
+            :alt="slot.query"
+            class="h-14 w-14 shrink-0 rounded object-cover"
+          >
+          <span
+            v-else
+            class="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
+          >
+            Empty
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs text-muted">{{ slot.role === 'hero' ? 'Hero' : `Slot ${slot.index + 1}` }}</span>
+            <span class="block truncate text-sm">{{ slot.query }}</span>
+          </span>
+          <span
+            v-if="assignments[slot.index]"
+            class="text-xs text-muted underline"
+            @click.stop="emit('clear', slot.index)"
+          >
+            Clear
+          </span>
+        </button>
+      </li>
+    </ol>
+
+    <p
+      v-if="chosen"
+      class="rounded-lg border border-secondary bg-elevated p-3 text-sm"
+    >
+      Selected {{ chosen.alt }}. Click that photo’s slot on the mockup.
+    </p>
+
     <form
       class="flex flex-col gap-2 sm:flex-row sm:items-end"
       @submit.prevent="searchPhotos()"
@@ -161,7 +252,7 @@ async function addPicked() {
           id="studio-stock-query"
           v-model="query"
           class="w-full"
-          placeholder="asphalt crew Crown Point"
+          placeholder="asphalt crew paving a driveway"
           icon="i-lucide-search"
           autocomplete="off"
         />
@@ -177,66 +268,33 @@ async function addPicked() {
       </UButton>
     </form>
     <p class="text-sm text-muted">
-      Pick several. They are added in this order and fill the hero, then each service slot.
+      Choose a photo, then click its slot on the mockup. The hero is first. Slots you leave empty stay empty.
     </p>
-
-    <div v-if="suggestionQueries.length">
-      <p class="text-xs text-muted">
-        {{ suggestionLabel }}
-      </p>
-      <div class="mt-2 flex flex-wrap gap-2">
-        <UButton
-          v-for="phrase in suggestionQueries"
-          :key="phrase"
-          type="button"
-          size="xs"
-          variant="outline"
-          class="max-w-full"
-          @click="searchPhotos(phrase)"
-        >
-          <span class="truncate">{{ phrase }}</span>
-        </UButton>
-      </div>
-    </div>
-
     <div
-      v-if="picked.length"
-      class="space-y-2"
+      v-if="slots.length"
+      class="flex flex-wrap gap-2"
     >
-      <p class="text-xs text-muted">
-        Selected, in the order they will be added
-      </p>
-      <div class="flex gap-2 overflow-x-auto pb-1">
-        <button
-          v-for="(photo, index) in picked"
-          :key="photo.id"
-          type="button"
-          class="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-secondary"
-          :aria-label="`Remove ${photo.alt}`"
-          @click="toggle(photo)"
-        >
-          <img
-            :src="photo.thumb"
-            :alt="photo.alt"
-            class="h-full w-full object-cover"
-          >
-          <span class="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-xs font-medium text-inverted">
-            {{ index + 1 }}
-          </span>
-        </button>
-      </div>
       <UButton
+        v-for="slot in slots"
+        :key="`search-${slot.index}`"
         type="button"
-        class="min-h-11 w-full justify-center sm:w-auto"
+        size="xs"
         variant="outline"
-        icon="i-lucide-image-plus"
-        :loading="isAdding"
-        :disabled="disabled"
-        @click="addPicked"
+        class="max-w-full"
+        @click="searchPhotos(slot.query)"
       >
-        {{ picked.length === 1 ? 'Add photo' : `Add ${picked.length} photos` }}
+        <span class="truncate">{{ slotLabel(slot) }}</span>
       </UButton>
     </div>
+    <UButton
+      v-else-if="hintQuery"
+      type="button"
+      size="xs"
+      variant="outline"
+      @click="searchPhotos(hintQuery)"
+    >
+      {{ hintQuery }}
+    </UButton>
 
     <ul
       v-if="notices.length"
@@ -256,9 +314,8 @@ async function addPicked() {
         <span>{{ notice.message }}</span>
       </li>
     </ul>
-
     <p
-      v-if="showEmpty && !allSkipped"
+      v-if="searched && !isSearching && !photos.length && notices.length < 3"
       class="text-sm text-muted"
     >
       No photos matched that search.
@@ -266,7 +323,7 @@ async function addPicked() {
 
     <div
       v-if="photos.length"
-      class="grid grid-cols-2 gap-2 sm:grid-cols-3"
+      class="grid grid-cols-2 gap-2"
     >
       <div
         v-for="photo in photos"
@@ -275,11 +332,21 @@ async function addPicked() {
       >
         <button
           type="button"
+          draggable="true"
           class="relative block w-full overflow-hidden rounded-lg border text-left"
-          :class="pickIndex(photo) >= 0 ? 'border-secondary ring-2 ring-secondary' : 'border-default'"
-          :aria-pressed="pickIndex(photo) >= 0"
-          :disabled="alreadyAdded(photo)"
-          @click="toggle(photo)"
+          :class="chosen?.url === photo.url ? 'border-secondary ring-2 ring-secondary' : 'border-default'"
+          :aria-pressed="chosen?.url === photo.url"
+          @click="chooseStock(photo)"
+          @dragstart="onDragStart($event, {
+            id: photo.id,
+            url: photo.url,
+            thumb: photo.thumb,
+            alt: photo.alt,
+            provider: photo.provider,
+            sourceId: photo.sourceId,
+            author: photo.author,
+            pageUrl: photo.pageUrl
+          })"
         >
           <img
             :src="photo.thumb"
@@ -287,18 +354,6 @@ async function addPicked() {
             class="h-24 w-full object-cover"
             loading="lazy"
           >
-          <span
-            v-if="pickIndex(photo) >= 0"
-            class="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-xs font-medium text-inverted"
-          >
-            {{ pickIndex(photo) + 1 }}
-          </span>
-          <span
-            v-else-if="alreadyAdded(photo)"
-            class="absolute left-1 top-1 rounded bg-default/90 px-1.5 py-0.5 text-[10px] text-muted"
-          >
-            Added
-          </span>
           <span class="block truncate px-1.5 py-1 text-[11px] text-muted">
             {{ STOCK_PROVIDER_LABEL[photo.provider] }}
           </span>
@@ -315,5 +370,41 @@ async function addPicked() {
         </p>
       </div>
     </div>
+
+    <div>
+      <input
+        id="studio-photo"
+        type="file"
+        accept="image/*"
+        class="hidden"
+        :disabled="disabled || isUploading"
+        @change="onUpload"
+      >
+      <label
+        for="studio-photo"
+        :class="disabled ? 'pointer-events-none opacity-60' : ''"
+      >
+        <UButton
+          icon="i-lucide-upload"
+          variant="outline"
+          :loading="isUploading"
+          :disabled="disabled"
+          as="span"
+          class="cursor-pointer"
+        >
+          Upload a photo
+        </UButton>
+      </label>
+    </div>
+
+    <UButton
+      type="button"
+      class="min-h-11 w-full justify-center"
+      icon="i-lucide-image-plus"
+      :disabled="disabled || !canSend"
+      @click="sendAssigned"
+    >
+      Send assigned photos
+    </UButton>
   </div>
 </template>

@@ -4,7 +4,8 @@ import {
   mapPexelsPhoto,
   mapPixabayHit,
   mapUnsplashPhoto,
-  extractPhotoQueries,
+  extractPhotoSlots,
+  type PhotoSlot,
   type StockPhoto,
   type StockProvider,
   type StockProviderNotice
@@ -186,9 +187,14 @@ function isFetchableMockupUrl(value: string | null | undefined): string | null {
   return url.toString()
 }
 
-export async function readMockupPhotoQueries(mockupUrl: string | null | undefined): Promise<string[]> {
+const htmlCache = new Map<string, { at: number, html: string }>()
+const HTML_CACHE_MS = 30_000
+
+export async function readMockupHtml(mockupUrl: string | null | undefined): Promise<string | null> {
   const url = isFetchableMockupUrl(mockupUrl)
-  if (!url) return []
+  if (!url) return null
+  const cached = htmlCache.get(url)
+  if (cached && Date.now() - cached.at < HTML_CACHE_MS) return cached.html
   try {
     const response = await fetch(url, {
       redirect: 'follow',
@@ -198,11 +204,26 @@ export async function readMockupPhotoQueries(mockupUrl: string | null | undefine
         'user-agent': 'wildcard-studio'
       }
     })
-    if (!response.ok) return []
-    if (!isFetchableMockupUrl(response.url)) return []
-    const html = await response.text()
-    return extractPhotoQueries(html.slice(0, 1_500_000))
+    if (!response.ok) return null
+    if (!isFetchableMockupUrl(response.url)) return null
+    const type = response.headers.get('content-type') || ''
+    const html = (await response.text()).slice(0, 1_500_000)
+    const looksLikeHtml = /^\s*</.test(html) || /<html[\s>]/i.test(html)
+    if (type && !/text\/html|application\/xhtml/i.test(type) && !looksLikeHtml) return null
+    htmlCache.set(url, { at: Date.now(), html })
+    return html
   } catch {
-    return []
+    return null
   }
+}
+
+export async function readMockupPhotoSlots(mockupUrl: string | null | undefined): Promise<PhotoSlot[]> {
+  const html = await readMockupHtml(mockupUrl)
+  if (!html) return []
+  return extractPhotoSlots(html)
+}
+
+export async function readMockupPhotoQueries(mockupUrl: string | null | undefined): Promise<string[]> {
+  const slots = await readMockupPhotoSlots(mockupUrl)
+  return slots.map(slot => slot.query)
 }

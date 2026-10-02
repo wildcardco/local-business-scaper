@@ -174,26 +174,5 @@ export function normalizeStockQuery(input: unknown): string | null {
   return query.slice(0, 120)
 }
 
-function decodeAttr(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, '\'')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** Pull data-photo-query phrases out of a mockup page, in document order. */
-export function extractPhotoQueries(html: string): string[] {
-  const queries: string[] = []
-  const pattern = /data-photo-query\s*=\s*(?:"([^"]*)"|'([^']*)')/gi
-  for (const match of html.matchAll(pattern)) {
-    const query = decodeAttr(match[1] ?? match[2] ?? '')
-    if (!query || queries.includes(query)) continue
-    queries.push(query)
-    if (queries.length >= 12) break
-  }
-  return queries
-}
+export { extractPhotoQueries, extractPhotoSlots, slotOrderedPhotoUrls, slotLabel } from './photo-slots'
+export type { PhotoSlot } from './photo-slots'
