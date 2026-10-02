@@ -97,7 +97,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | POST | `/api/mockups/generate` `/api/mockups/sync` `/api/mockups/[id]/revise` `pitch` `photos` |
 | GET | `/api/studio/stock-photos` `q` — Pixabay, Pexels, Unsplash. A provider with no key is skipped. |
 | POST | `/api/studio/stock-photos/download` — Unsplash download ping for photos the user added |
-| GET | `/api/mockups/[id]/photo-queries` — `data-photo-query` phrases from the live mockup |
+| GET | `/api/mockups/[id]/photo-queries` — live mockup photo slots (`data-photo-query`, hero first) plus search phrases. `src` is set only when the slot already has an http(s) URL |
 | POST | `/api/mockups/webhook` (public, `X-Studio-Secret`) |
 | GET/POST | `/api/templates` `/api/drafts` `/api/branding` |
 | PATCH/DEL | `/api/templates/[id]` |
