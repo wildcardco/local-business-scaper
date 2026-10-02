@@ -166,6 +166,15 @@ async function onUpload(event: Event) {
   }
 }
 
+function assignSlot(index: number) {
+  if (props.disabled) return
+  if (!props.chosen?.url.startsWith('http')) {
+    toast.add({ title: 'Select a photo, then choose a slot', color: 'warning' })
+    return
+  }
+  emit('aim', index)
+}
+
 function sendAssigned() {
   if (!canSend.value || props.disabled) return
   const urls = orderedUrls.value
@@ -199,10 +208,11 @@ function sendAssigned() {
       <li
         v-for="slot in slots"
         :key="slot.index"
+        class="flex items-stretch gap-2"
       >
         <button
           type="button"
-          class="flex w-full items-center gap-3 rounded-lg border p-2 text-left"
+          class="flex min-w-0 flex-1 items-center gap-3 rounded-lg border p-2 text-left"
           :class="activeIndex === slot.index ? 'border-primary' : 'border-default'"
           @click="emit('aim', slot.index)"
         >
@@ -222,14 +232,28 @@ function sendAssigned() {
             <span class="block text-xs text-muted">{{ slot.role === 'hero' ? 'Hero' : `Slot ${slot.index + 1}` }}</span>
             <span class="block truncate text-sm">{{ slot.query }}</span>
           </span>
-          <span
+        </button>
+        <div class="flex shrink-0 flex-col justify-center gap-1">
+          <UButton
+            type="button"
+            size="xs"
+            variant="outline"
+            :disabled="disabled"
+            @click="assignSlot(slot.index)"
+          >
+            Assign
+          </UButton>
+          <UButton
             v-if="assignments[slot.index]"
-            class="text-xs text-muted underline"
-            @click.stop="emit('clear', slot.index)"
+            type="button"
+            size="xs"
+            variant="ghost"
+            :disabled="disabled"
+            @click="emit('clear', slot.index)"
           >
             Clear
-          </span>
-        </button>
+          </UButton>
+        </div>
       </li>
     </ol>
 
@@ -237,7 +261,7 @@ function sendAssigned() {
       v-if="chosen"
       class="rounded-lg border border-secondary bg-elevated p-3 text-sm"
     >
-      Selected {{ chosen.alt }}. Click that photo’s slot on the mockup.
+      Selected {{ chosen.alt }}. Assign it to a named slot, or click that slot on the mockup.
     </p>
 
     <form
@@ -268,7 +292,7 @@ function sendAssigned() {
       </UButton>
     </form>
     <p class="text-sm text-muted">
-      Choose a photo, then click its slot on the mockup. The hero is first. Slots you leave empty stay empty.
+      Choose a photo, then Assign it to a named slot or click that slot on the mockup. The hero is first. Slots you leave empty stay empty. Save sends the real photo URLs.
     </p>
     <div
       v-if="slots.length"
@@ -400,11 +424,11 @@ function sendAssigned() {
     <UButton
       type="button"
       class="min-h-11 w-full justify-center"
-      icon="i-lucide-image-plus"
+      icon="i-lucide-save"
       :disabled="disabled || !canSend"
       @click="sendAssigned"
     >
-      Send assigned photos
+      Save
     </UButton>
   </div>
 </template>
