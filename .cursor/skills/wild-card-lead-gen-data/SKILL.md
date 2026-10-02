@@ -95,6 +95,9 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | PATCH | `/api/businesses/[id]` |
 | POST | `/api/businesses/delete` `[id]/audit` `[id]/scrape-contacts` `/api/audit/batch` |
 | POST | `/api/mockups/generate` `/api/mockups/sync` `/api/mockups/[id]/revise` `pitch` `photos` |
+| GET | `/api/studio/stock-photos` `q` — Pixabay, Pexels, Unsplash. A provider with no key is skipped. |
+| POST | `/api/studio/stock-photos/download` — Unsplash download ping for photos the user added |
+| GET | `/api/mockups/[id]/photo-queries` — `data-photo-query` phrases from the live mockup |
 | POST | `/api/mockups/webhook` (public, `X-Studio-Secret`) |
 | GET/POST | `/api/templates` `/api/drafts` `/api/branding` |
 | PATCH/DEL | `/api/templates/[id]` |

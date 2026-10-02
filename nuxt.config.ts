@@ -67,7 +67,12 @@ export default defineNuxtConfig({
     imageKitUrl: process.env.IMAGE_KIT_URL,
     imageKitPublicKey: process.env.IMAGE_KIT_PUBLIC_KEY,
     imageKitPrivateKey: process.env.IMAGE_KIT_PRIVATE_KEY,
-    
+
+    // Stock photo search. An empty key skips that provider.
+    pixabayApiKey: process.env.PIXABAY_API_KEY || '',
+    pexelsApiKey: process.env.PEXELS_API_KEY || '',
+    unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || '',
+
     public: {
       imageKitUrl: process.env.IMAGE_KIT_URL,
       imageKitPublicKey: process.env.IMAGE_KIT_PUBLIC_KEY
