@@ -156,7 +156,6 @@ async function addPicked() {
       <UFormField
         label="Search stock photos"
         class="min-w-0 flex-1"
-        help="Pick several. They are added in this order and fill the hero, then each service slot."
       >
         <UInput
           id="studio-stock-query"
@@ -169,7 +168,7 @@ async function addPicked() {
       </UFormField>
       <UButton
         type="submit"
-        class="min-h-11 justify-center"
+        class="min-h-11 w-full justify-center sm:w-auto"
         variant="outline"
         icon="i-lucide-search"
         :loading="isSearching"
@@ -177,6 +176,9 @@ async function addPicked() {
         Search
       </UButton>
     </form>
+    <p class="text-sm text-muted">
+      Pick several. They are added in this order and fill the hero, then each service slot.
+    </p>
 
     <div v-if="suggestionQueries.length">
       <p class="text-xs text-muted">
