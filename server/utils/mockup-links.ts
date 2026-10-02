@@ -17,7 +17,8 @@ export function ensureMockupLinkColumns() {
         `ALTER TABLE mockups ADD COLUMN links_checked_at TEXT`,
         `ALTER TABLE mockups ADD COLUMN made_at TEXT`,
         `ALTER TABLE mockups ADD COLUMN n8n_created_at TEXT`,
-        `ALTER TABLE mockups ADD COLUMN n8n_updated_at TEXT`
+        `ALTER TABLE mockups ADD COLUMN n8n_updated_at TEXT`,
+        `ALTER TABLE mockups ADD COLUMN mockup_cost_ledger TEXT`
       ]) {
         try {
           await db.execute(sql)

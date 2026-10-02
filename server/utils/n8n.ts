@@ -9,6 +9,7 @@ import {
   isStudioAiModel
 } from '~~/shared/studio-ai'
 import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
+import { costActionLabel, foldMockupCost, parseCostLedger } from '~~/shared/mockup-cost'
 import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 
@@ -501,13 +502,91 @@ export async function findRunningFactoryJob(opts: {
   }
 }
 
+export interface StudioRunSnapshot {
+  status: string
+  node: string | null
+  error: string | null
+}
+
+function executionResult(detail: unknown): { node: string | null, error: string | null } {
+  if (!detail || typeof detail !== 'object') return { node: null, error: null }
+  const record = detail as {
+    data?: { resultData?: { lastNodeExecuted?: unknown, error?: unknown } }
+    resultData?: { lastNodeExecuted?: unknown, error?: unknown }
+  }
+  const result = record.data?.resultData || record.resultData
+  const node = typeof result?.lastNodeExecuted === 'string' ? result.lastNodeExecuted : null
+  const err = result?.error
+  if (typeof err === 'string' && err.trim()) return { node, error: err.trim() }
+  if (err && typeof err === 'object' && 'message' in err) {
+    const message = (err as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return { node, error: message.trim() }
+  }
+  return { node, error: null }
+}
+
+function executionStartedMs(row: Record<string, unknown>): number {
+  const raw = row.startedAt || row.started_at
+  const ms = Date.parse(String(raw || ''))
+  return Number.isFinite(ms) ? ms : 0
+}
+
+/** Newest matching n8n run for this lead. Running wins over an older error. */
+export async function inspectStudioRun(opts: {
+  workflowId: string
+  needles: string[]
+  sinceMs: number
+}): Promise<StudioRunSnapshot | null> {
+  const needles = opts.needles.filter(Boolean)
+  const { apiKey } = n8nConfig()
+  if (!apiKey || !needles.length) return null
+
+  let json: unknown
+  try {
+    json = await n8nFetch(`/api/v1/executions?workflowId=${encodeURIComponent(opts.workflowId)}&limit=15`, {}, 8000)
+  } catch {
+    return null
+  }
+
+  const rows = extractExecutionRows(json)
+    .map(row => ({
+      id: row.id,
+      status: String(row.status || ''),
+      startedAt: executionStartedMs(row)
+    }))
+    .filter(row => row.id != null)
+    .filter(row => !opts.sinceMs || !row.startedAt || row.startedAt >= opts.sinceMs - 20_000)
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 4)
+
+  let newestError: StudioRunSnapshot | null = null
+  for (const row of rows) {
+    try {
+      const detail = await n8nFetch(`/api/v1/executions/${row.id}?includeData=true`, {}, 8000)
+      const blob = JSON.stringify(detail)
+      if (!needles.some(needle => blob.includes(needle))) continue
+      const result = executionResult(detail)
+      const snapshot = { status: row.status, node: result.node, error: result.error }
+      if (row.status === 'running' || row.status === 'waiting' || row.status === 'new') return snapshot
+      if (!newestError && (row.status === 'error' || row.status === 'crashed' || row.status === 'canceled')) {
+        newestError = snapshot
+      }
+    } catch {
+      // try the next execution
+    }
+  }
+  return newestError
+}
+
 export async function applyN8nLeadToMockup(userId: string, mockupId: string, placeId: string) {
   try {
     const lead = await getN8nLeadByPlaceId(placeId)
     if (!lead) return false
 
+    await ensureMockupLinkColumns()
     const local = await db.execute({
-      sql: 'SELECT status, mockup_url, mockup_version, pitch_version, pitch_draft FROM mockups WHERE id = ? AND user_id = ?',
+      sql: `SELECT status, mockup_url, mockup_version, pitch_version, pitch_draft, mockup_cost_ledger
+            FROM mockups WHERE id = ? AND user_id = ?`,
       args: [mockupId, userId]
     })
     const current = local.rows[0]
@@ -520,6 +599,30 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     const localUrl = asLeadString(current.mockup_url)
     const localStatus = String(current.status || '')
     const busyLocal = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(localStatus)
+    const leadVersion = Number(lead.mockup_version || 0)
+    const leadPitchVersion = Number(lead.pitch_version || 0)
+    const localVersionForCost = Number(current.mockup_version || 0)
+    const localPitchForCost = Number(current.pitch_version || 0)
+    const costAdvanced = leadVersion > localVersionForCost || leadPitchVersion > localPitchForCost
+    const ledger = parseCostLedger(current.mockup_cost_ledger)
+    const folded = foldMockupCost(ledger, {
+      raw: asLeadString(lead.mockup_cost_usd),
+      version: leadVersion,
+      pitchVersion: leadPitchVersion,
+      busy: busyLocal && !costAdvanced,
+      action: costActionLabel({
+        localStatus,
+        version: leadVersion,
+        pitchVersion: leadPitchVersion,
+        last: ledger.entries[ledger.entries.length - 1]
+      })
+    })
+    if (folded.changed) {
+      await db.execute({
+        sql: `UPDATE mockups SET mockup_cost_ledger = ? WHERE id = ? AND user_id = ?`,
+        args: [JSON.stringify(folded.ledger), mockupId, userId]
+      })
+    }
 
     // WF-7 answers 200 {ok:true} immediately and never calls callback_url.
     // The lead row stays on the previous URL and version until the factory finishes,
@@ -557,7 +660,6 @@ export async function applyN8nLeadToMockup(userId: string, mockupId: string, pla
     const updatedTime = mockupUpdatedTime(lead)
     const urlChanged = Boolean(mockupUrl) && mockupUrl !== localUrl
     const versionChanged = n8nVersion > localVersion
-    await ensureMockupLinkColumns()
 
     await db.execute({
       sql: `UPDATE mockups SET

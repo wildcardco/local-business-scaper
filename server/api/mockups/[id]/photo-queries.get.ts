@@ -1,5 +1,5 @@
 import { getMockupForUser } from '~~/server/utils/mockups'
-import { readMockupPhotoQueries } from '~~/server/utils/stock-photos'
+import { readMockupPhotoSlots } from '~~/server/utils/stock-photos'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -16,6 +16,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Mockup not found' })
   }
 
-  const queries = await readMockupPhotoQueries(mockup.vercelUrl)
-  return { queries }
+  if (!mockup.vercelUrl) {
+    return { queries: [], slots: [], error: 'No live mockup yet.' }
+  }
+
+  const slots = await readMockupPhotoSlots(mockup.vercelUrl)
+  if (!slots.length) {
+    return {
+      queries: [],
+      slots: [],
+      error: 'The live page has no photo slots, or it could not be read.'
+    }
+  }
+
+  return {
+    queries: slots.map(slot => slot.query),
+    slots
+  }
 })

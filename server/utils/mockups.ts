@@ -2,6 +2,7 @@ import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
 import { githubRepoForMockup, mockupGithubUrl } from '~~/shared/mockup-repo'
+import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/mockup-cost'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import {
   callbackUrlFromEvent,
@@ -33,6 +34,19 @@ export interface MockupRow {
   n8n_synced_at: string | null
   created_at: string | null
   updated_at: string | null
+}
+
+function mapMockupCosts(raw: unknown) {
+  const ledger = parseCostLedger(raw)
+  if (!ledger.entries.length) return null
+  return {
+    total: formatUsdFromCents(costTotalCents(ledger)),
+    entries: ledger.entries.map(entry => ({
+      action: entry.action,
+      raw: entry.raw,
+      amount: entry.amountText
+    }))
+  }
 }
 
 export function mapMockup(row: Record<string, unknown>, business?: Record<string, unknown> | null) {
@@ -93,6 +107,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     pitchVersion: Number(row.pitch_version || 0),
     lastFeedback: (row.last_feedback as string) || null,
     photoUrls,
+    costs: mapMockupCosts(row.mockup_cost_ledger),
     aiModel: (row.ai_model as string) || null,
     n8nSyncedAt: (row.n8n_synced_at as string) || null,
     madeAt: (row.made_at as string) || null,
