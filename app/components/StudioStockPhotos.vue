@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { upload } from '@imagekit/vue'
 import type { PhotoSlot } from '~~/shared/photo-slots'
-import { preferredSlotIndex, slotLabel, slotOrderedPhotoUrls } from '~~/shared/photo-slots'
+import { slotLabel, slotOrderedPhotoUrls } from '~~/shared/photo-slots'
 import type { JobPhase } from '~~/shared/studio-job'
 import type { StockPhoto, StockProviderNotice } from '~~/shared/stock-photos'
 import { STOCK_PROVIDER_LABEL } from '~~/shared/stock-photos'
@@ -56,15 +56,6 @@ const photoSteps = [
 
 const orderedUrls = computed(() => slotOrderedPhotoUrls(props.slots.map(slot => props.assignments[slot.index] || '')))
 const canSend = computed(() => orderedUrls.value.some(url => url.startsWith('http')))
-const sheetOpen = ref(false)
-const slotPicker = ref<HTMLButtonElement | null>(null)
-const sheetPanel = ref<HTMLElement | null>(null)
-let lockedScroll: { el: HTMLElement, top: number } | null = null
-
-const targetIndex = computed(() => preferredSlotIndex(props.slots, props.assignments, props.activeIndex))
-const targetSlot = computed(() => props.slots.find(slot => slot.index === targetIndex.value) ?? null)
-const dockLead = computed(() => props.chosen ? 'This photo goes to' : 'Next photo goes to')
-const sheetTitle = computed(() => props.chosen ? 'Assign this photo to' : 'Choose a slot')
 
 watch(() => props.activeIndex, (index) => {
   if (index == null) return
@@ -188,83 +179,6 @@ function assignSlot(index: number) {
   emit('aim', index)
 }
 
-function dashboardScroller(): HTMLElement | null {
-  const page = document.querySelector('.studio-item')
-  let node = page?.parentElement ?? null
-  while (node) {
-    const overflowY = getComputedStyle(node).overflowY
-    if (overflowY === 'auto' || overflowY === 'scroll') return node
-    node = node.parentElement
-  }
-  return null
-}
-
-function lockBackgroundScroll(lock: boolean) {
-  if (!import.meta.client) return
-  if (lock) {
-    const el = dashboardScroller()
-    if (!el || lockedScroll) return
-    lockedScroll = { el, top: el.scrollTop }
-    el.style.overflowY = 'hidden'
-    el.scrollTop = lockedScroll.top
-    return
-  }
-  if (!lockedScroll) return
-  const { el, top } = lockedScroll
-  el.style.overflowY = ''
-  el.scrollTop = top
-  lockedScroll = null
-}
-
-function openSheet() {
-  if (props.disabled || !props.slots.length) return
-  sheetOpen.value = true
-  lockBackgroundScroll(true)
-  nextTick(() => sheetPanel.value?.focus({ preventScroll: true }))
-}
-
-function closeSheet() {
-  if (!sheetOpen.value) return
-  sheetOpen.value = false
-  lockBackgroundScroll(false)
-  nextTick(() => slotPicker.value?.focus({ preventScroll: true }))
-}
-
-function toggleSheet() {
-  if (sheetOpen.value) closeSheet()
-  else openSheet()
-}
-
-function pickSlot(index: number) {
-  emit('aim', index)
-  closeSheet()
-}
-
-function assignTarget() {
-  if (targetIndex.value == null) return
-  assignSlot(targetIndex.value)
-}
-
-function onSheetKeydown(event: KeyboardEvent) {
-  if (!sheetOpen.value || event.key !== 'Escape') return
-  event.preventDefault()
-  closeSheet()
-}
-
-watch(() => props.disabled, (isDisabled) => {
-  if (isDisabled) closeSheet()
-})
-
-watch(() => props.slots.length, (count) => {
-  if (!count) closeSheet()
-})
-
-onMounted(() => window.addEventListener('keydown', onSheetKeydown))
-onUnmounted(() => {
-  window.removeEventListener('keydown', onSheetKeydown)
-  lockBackgroundScroll(false)
-})
-
 function sendAssigned() {
   if (!canSend.value || props.disabled) return
   const urls = orderedUrls.value
@@ -275,6 +189,8 @@ function sendAssigned() {
   })
   emit('apply', { urls, unsplashIds: [...new Set(unsplashIds)] })
 }
+
+defineExpose({ sendAssigned })
 </script>
 
 <template>
@@ -383,7 +299,7 @@ function sendAssigned() {
       </UButton>
     </form>
     <p class="order-4 text-sm text-muted lg:order-6">
-      Choose a photo, then Assign it to a named slot or click that slot on the mockup. On a phone, the slot and Save stay at the bottom. The hero is first. Empty slots stay empty. Save sends the real photo URLs.
+      Choose a photo, then Assign it to a named slot or click that slot on the mockup. On a phone, open Actions and use that bar while you scroll. Hide it when you are done. The hero is first. Empty slots stay empty. Save sends the real photo URLs.
     </p>
     <div
       v-if="slots.length"
@@ -524,171 +440,5 @@ function sendAssigned() {
         Save
       </UButton>
     </div>
-
-    <Teleport to="#teleports">
-      <div
-        v-if="slots.length"
-        class="lg:hidden"
-      >
-        <div
-          v-if="sheetOpen"
-          class="fixed inset-0 bg-black/60"
-          @click="closeSheet"
-          @touchmove.prevent
-          @wheel.prevent
-        />
-        <div
-          v-if="sheetOpen"
-          id="studio-slot-sheet"
-          ref="sheetPanel"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="studio-slot-sheet-title"
-          tabindex="-1"
-          class="fixed inset-x-0 flex max-h-80 flex-col overflow-hidden rounded-t-2xl border border-default bg-elevated shadow-2xl"
-          :style="{ bottom: 'calc(var(--studio-generate-bar, calc(4.75rem + env(safe-area-inset-bottom, 0px))) + var(--studio-photo-bar, 7.5rem))' }"
-        >
-          <div class="flex items-center justify-between gap-3 px-3 pt-3">
-            <h2
-              id="studio-slot-sheet-title"
-              class="font-display text-sm font-semibold"
-            >
-              {{ sheetTitle }}
-            </h2>
-            <UButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              icon="i-lucide-x"
-              aria-label="Close slot list"
-              @click="closeSheet"
-            />
-          </div>
-          <div class="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
-            <div
-              v-for="slot in slots"
-              :key="`sheet-${slot.index}`"
-              class="flex items-stretch gap-2"
-            >
-              <button
-                type="button"
-                class="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg border p-2 text-left"
-                :class="targetIndex === slot.index ? 'border-primary' : 'border-default'"
-                :aria-current="targetIndex === slot.index ? 'true' : undefined"
-                @click="pickSlot(slot.index)"
-              >
-                <img
-                  v-if="assignments[slot.index]"
-                  :src="assignments[slot.index]"
-                  alt=""
-                  class="h-11 w-11 shrink-0 overflow-hidden rounded object-cover"
-                >
-                <span
-                  v-else
-                  class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
-                >
-                  Empty
-                </span>
-                <span class="min-w-0 flex-1">
-                  <span class="block text-xs text-muted">{{ slot.role === 'hero' ? 'Hero' : `Slot ${slot.index + 1}` }}</span>
-                  <span class="line-clamp-2 text-sm">{{ slot.query }}</span>
-                </span>
-                <UIcon
-                  v-if="targetIndex === slot.index"
-                  name="i-lucide-check"
-                  class="shrink-0 text-primary"
-                />
-              </button>
-              <UButton
-                v-if="assignments[slot.index]"
-                type="button"
-                size="sm"
-                variant="ghost"
-                class="shrink-0 self-center"
-                :disabled="disabled"
-                @click="emit('clear', slot.index)"
-              >
-                Clear
-              </UButton>
-            </div>
-          </div>
-        </div>
-        <div
-          data-studio-photo-dock
-          class="fixed inset-x-0 border-t bg-default shadow-[0_-12px_32px_rgba(0,0,0,0.45)] touch-manipulation"
-          :class="chosen ? 'border-secondary' : 'border-default'"
-          :style="{ bottom: 'var(--studio-generate-bar, calc(4.75rem + env(safe-area-inset-bottom, 0px)))' }"
-          role="region"
-          aria-label="Assign photo"
-        >
-          <div class="flex items-center gap-2 px-3 py-2">
-            <img
-              v-if="chosen"
-              :src="chosen.thumb"
-              :alt="chosen.alt"
-              class="h-11 w-11 shrink-0 overflow-hidden rounded object-cover"
-            >
-            <img
-              v-else-if="targetSlot && assignments[targetSlot.index]"
-              :src="assignments[targetSlot.index]"
-              alt=""
-              class="h-11 w-11 shrink-0 overflow-hidden rounded object-cover"
-            >
-            <span
-              v-else
-              class="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
-            >
-              Empty
-            </span>
-            <button
-              ref="slotPicker"
-              type="button"
-              class="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left"
-              :aria-expanded="sheetOpen"
-              aria-haspopup="dialog"
-              aria-controls="studio-slot-sheet"
-              :disabled="disabled"
-              @click="toggleSheet"
-            >
-              <span class="min-w-0 flex-1">
-                <span class="block text-xs text-muted">{{ dockLead }}</span>
-                <span
-                  class="block truncate text-sm font-medium"
-                  data-studio-slot-target
-                >
-                  {{ targetSlot ? slotLabel(targetSlot) : 'No slots' }}
-                </span>
-              </span>
-              <UIcon
-                name="i-lucide-chevrons-up-down"
-                class="shrink-0 text-muted"
-              />
-            </button>
-          </div>
-          <div class="grid grid-cols-2 gap-2 px-3 pb-3">
-            <UButton
-              type="button"
-              variant="outline"
-              class="min-h-11 justify-center"
-              :disabled="disabled || !chosen"
-              @click="assignTarget"
-            >
-              Assign
-            </UButton>
-            <UButton
-              type="button"
-              class="min-h-11 justify-center"
-              icon="i-lucide-save"
-              data-studio-photo-save
-              :loading="phase === 'sending'"
-              :disabled="disabled || !canSend"
-              @click="sendAssigned"
-            >
-              Save
-            </UButton>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
