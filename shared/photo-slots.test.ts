@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { extractPhotoSlots, slotOrderedPhotoUrls } from './photo-slots.ts'
+import { extractPhotoSlots, preferredSlotIndex, slotAfterAssign, slotOrderedPhotoUrls } from './photo-slots.ts'
 
 const example = `<!doctype html><html><body>
 <img data-photo-query="asphalt crew paving a residential driveway" alt="hero">
@@ -42,4 +42,27 @@ test('slot order keeps the hero first and leftover slots empty', () => {
     '',
     ''
   ])
+})
+
+test('preferred slot keeps an explicit aim, otherwise the first empty slot', () => {
+  const slots = [{ index: 0 }, { index: 1 }, { index: 2 }]
+  assert.equal(preferredSlotIndex(slots, { 0: 'https://cdn.example.com/a.jpg' }, null), 1)
+  assert.equal(preferredSlotIndex(slots, { 0: 'https://cdn.example.com/a.jpg' }, 2), 2)
+  assert.equal(preferredSlotIndex(slots, {}, 9), 0)
+  assert.equal(preferredSlotIndex([], {}, null), null)
+})
+
+test('after assign, the next open slot follows in order and wraps', () => {
+  const slots = [{ index: 0 }, { index: 1 }, { index: 2 }]
+  assert.equal(slotAfterAssign(slots, { 0: 'https://cdn.example.com/a.jpg' }, 0), 1)
+  assert.equal(slotAfterAssign(slots, {
+    0: '',
+    1: 'https://cdn.example.com/b.jpg',
+    2: 'https://cdn.example.com/c.jpg'
+  }, 1), 0)
+  assert.equal(slotAfterAssign(slots, {
+    0: 'https://cdn.example.com/a.jpg',
+    1: 'https://cdn.example.com/b.jpg',
+    2: 'https://cdn.example.com/c.jpg'
+  }, 2), 2)
 })

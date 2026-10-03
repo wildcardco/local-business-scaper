@@ -110,3 +110,34 @@ export function slotLabel(slot: Pick<PhotoSlot, 'role' | 'query' | 'index'>): st
   if (slot.role === 'hero') return `Hero · ${slot.query}`
   return `Slot ${slot.index + 1} · ${slot.query}`
 }
+
+function hasHttpUrl(value: string | undefined): boolean {
+  return typeof value === 'string' && /^https?:\/\//i.test(value.trim())
+}
+
+/** Slot the next photo should use. An explicit aim wins; otherwise the first empty slot, then the hero. */
+export function preferredSlotIndex(
+  slots: readonly { index: number }[],
+  assignments: Readonly<Record<number, string | undefined>>,
+  activeIndex: number | null
+): number | null {
+  if (!slots.length) return null
+  if (activeIndex != null && slots.some(slot => slot.index === activeIndex)) return activeIndex
+  const open = slots.find(slot => !hasHttpUrl(assignments[slot.index]))
+  return open?.index ?? slots[0].index
+}
+
+/** After a photo lands, aim at the next empty slot in order, wrapping past the hero. */
+export function slotAfterAssign(
+  slots: readonly { index: number }[],
+  assignments: Readonly<Record<number, string | undefined>>,
+  assignedIndex: number
+): number {
+  if (!slots.length) return assignedIndex
+  const start = slots.findIndex(slot => slot.index === assignedIndex)
+  const ordered = start === -1
+    ? [...slots]
+    : [...slots.slice(start + 1), ...slots.slice(0, start)]
+  const next = ordered.find(slot => !hasHttpUrl(assignments[slot.index]))
+  return next?.index ?? assignedIndex
+}

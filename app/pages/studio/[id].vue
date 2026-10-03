@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ChosenPhoto } from '~/components/StudioStockPhotos.vue'
-import type { PhotoSlot } from '~~/shared/photo-slots'
+import { preferredSlotIndex, slotAfterAssign, type PhotoSlot } from '~~/shared/photo-slots'
 import {
   failureDetail,
   feedbackJobView,
@@ -36,6 +36,8 @@ const pitchNode = ref<string | null>(null)
 const pitchExecution = ref<string | null>(null)
 const jobFailure = ref('')
 const seededUrl = ref('')
+const generateBar = ref<HTMLElement | null>(null)
+let barObserver: ResizeObserver | null = null
 
 const busy = computed(() =>
   ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.value?.status || '')
@@ -163,12 +165,63 @@ watch(() => mockup.value?.vercelUrl, () => {
   loadSlots()
 })
 
+function findScroller(): HTMLElement | null {
+  const page = document.querySelector('.studio-item')
+  let node = page?.parentElement ?? null
+  while (node) {
+    const overflowY = getComputedStyle(node).overflowY
+    if (overflowY === 'auto' || overflowY === 'scroll') return node
+    node = node.parentElement
+  }
+  return null
+}
+
+function syncPhotoDock() {
+  if (!import.meta.client) return
+  const desktop = window.matchMedia('(min-width: 64rem)').matches
+  const scroller = findScroller()
+  if (desktop) {
+    document.documentElement.style.setProperty('--studio-generate-bar', '0px')
+    document.documentElement.style.setProperty('--studio-photo-bar', '0px')
+    if (scroller) scroller.style.scrollPaddingBottom = ''
+    return
+  }
+  const generate = generateBar.value?.offsetHeight ?? 0
+  const dock = document.querySelector<HTMLElement>('[data-studio-photo-dock]')
+  const dockHeight = dock?.offsetHeight ?? 0
+  document.documentElement.style.setProperty('--studio-generate-bar', `${generate}px`)
+  document.documentElement.style.setProperty('--studio-photo-bar', `${dockHeight}px`)
+  if (scroller) scroller.style.scrollPaddingBottom = `${generate + dockHeight}px`
+  if (dock && barObserver) barObserver.observe(dock)
+}
+
+function scheduleDockSync() {
+  nextTick(() => {
+    syncPhotoDock()
+    requestAnimationFrame(syncPhotoDock)
+  })
+}
+
 onMounted(() => {
   if (busy.value) startPoll()
   loadSlots()
+  scheduleDockSync()
+  barObserver = new ResizeObserver(() => syncPhotoDock())
+  if (generateBar.value) barObserver.observe(generateBar.value)
+  window.addEventListener('resize', syncPhotoDock)
 })
 
-onUnmounted(() => stopPoll())
+onUnmounted(() => {
+  stopPoll()
+  barObserver?.disconnect()
+  window.removeEventListener('resize', syncPhotoDock)
+  document.documentElement.style.removeProperty('--studio-generate-bar')
+  document.documentElement.style.removeProperty('--studio-photo-bar')
+  const scroller = findScroller()
+  if (scroller) scroller.style.scrollPaddingBottom = ''
+})
+
+watch(slots, () => scheduleDockSync())
 
 function startPoll() {
   if (pollTimer) return
@@ -220,7 +273,10 @@ async function loadSlots() {
     slots.value = result.slots || []
     slotNote.value = result.error || (slots.value.length ? '' : 'The live page has no photo slots.')
     const url = mockup.value.vercelUrl
-    if (seededUrl.value === url) return
+    if (seededUrl.value === url) {
+      ensureActiveSlot()
+      return
+    }
     const next: Record<number, string> = {}
     const saved = mockup.value.photoUrls || []
     for (const slot of slots.value) {
@@ -229,17 +285,31 @@ async function loadSlots() {
     }
     assignments.value = next
     seededUrl.value = url
+    ensureActiveSlot()
   } catch {
     slots.value = []
     slotNote.value = 'The live page could not be read.'
   }
 }
 
+function ensureActiveSlot() {
+  if (!slots.value.length) {
+    activeIndex.value = null
+    return
+  }
+  if (activeIndex.value != null && slots.value.some(slot => slot.index === activeIndex.value)) return
+  activeIndex.value = preferredSlotIndex(slots.value, assignments.value, null)
+}
+
 function placeOnSlot(index: number, url: string) {
-  activeIndex.value = index
-  if (!url.startsWith('http')) return
-  assignments.value = { ...assignments.value, [index]: url }
+  if (!url.startsWith('http')) {
+    activeIndex.value = index
+    return
+  }
+  const next = { ...assignments.value, [index]: url }
+  assignments.value = next
   chosen.value = null
+  activeIndex.value = slotAfterAssign(slots.value, next, index)
 }
 
 function onPickSlot(index: number) {
@@ -261,7 +331,7 @@ function clearSlot(index: number) {
     next[Number(key)] = url
   }
   assignments.value = next
-  if (activeIndex.value === index) activeIndex.value = null
+  activeIndex.value = index
 }
 
 async function sendAssignedPhotos(payload: { urls: string[], unsplashIds: string[] }) {
@@ -379,7 +449,7 @@ function statusColor(status: string) {
 </script>
 
 <template>
-  <div class="min-w-0 space-y-6 overflow-x-hidden pb-28 sm:pb-8">
+  <div class="studio-item min-w-0 space-y-6 overflow-x-clip">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div class="min-w-0">
         <p class="eyebrow">
@@ -692,7 +762,11 @@ function statusColor(status: string) {
       </UCard>
     </template>
 
-    <div class="fixed bottom-0 inset-x-0 z-20 flex justify-center p-4 sm:justify-end">
+    <div
+      ref="generateBar"
+      class="fixed bottom-0 inset-x-0 z-20 flex justify-center px-4 pt-4 sm:justify-end"
+      :style="{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }"
+    >
       <UButton
         class="min-h-11 w-full sm:w-auto"
         size="lg"
