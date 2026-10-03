@@ -762,7 +762,7 @@ function statusColor(status: string) {
         <div
           id="studio-action-toolbar"
           data-studio-action-toolbar
-          class="fixed inset-x-0 bottom-0 z-30 border-t bg-default touch-manipulation"
+          class="fixed inset-x-0 bottom-0 z-40 border-t border-default bg-elevated shadow-[0_-8px_24px_rgba(0,0,0,0.45)] touch-manipulation"
           :class="chosen && toolbarOpen ? 'border-secondary' : 'border-default'"
           :style="{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }"
           role="region"
@@ -772,16 +772,22 @@ function statusColor(status: string) {
             v-if="!toolbarOpen"
             type="button"
             data-studio-actions
-            class="flex min-h-12 w-full items-center justify-center gap-2 px-4 text-sm font-medium"
+            class="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-base font-semibold text-highlighted"
             aria-expanded="false"
             aria-controls="studio-action-toolbar"
             @click="openToolbar"
           >
+            <span class="inline-flex items-center gap-2">
+              <UIcon
+                name="i-lucide-sliders-horizontal"
+                class="size-5 text-primary"
+              />
+              Actions
+            </span>
             <UIcon
-              name="i-lucide-sliders-horizontal"
-              class="size-5"
+              name="i-lucide-chevron-up"
+              class="size-5 text-muted"
             />
-            Actions
           </button>
           <div v-else>
             <div
