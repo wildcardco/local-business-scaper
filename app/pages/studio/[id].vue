@@ -792,8 +792,8 @@ function statusColor(status: string) {
           v-if="!toolbarOpen"
           type="button"
           data-studio-actions
-          class="fixed right-4 z-30 inline-flex min-h-12 items-center gap-2 rounded-full border border-default bg-elevated px-4 text-sm font-medium shadow-lg touch-manipulation"
-          :style="{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }"
+          class="fixed z-30 inline-flex min-h-12 items-center gap-2 rounded-full border border-default bg-elevated px-4 text-sm font-medium shadow-lg touch-manipulation"
+          :style="{ bottom: 'max(1rem, env(safe-area-inset-bottom))', right: '5.5rem' }"
           aria-expanded="false"
           aria-controls="studio-action-toolbar"
           @click="openToolbar"
@@ -809,9 +809,9 @@ function statusColor(status: string) {
           id="studio-action-toolbar"
           ref="toolbarEl"
           data-studio-action-toolbar
-          class="fixed inset-x-0 bottom-0 z-30 border-t bg-default shadow-[0_-8px_24px_rgba(0,0,0,0.35)] touch-manipulation"
+          class="fixed inset-x-0 z-30 border-t bg-default pb-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] touch-manipulation"
           :class="chosen ? 'border-secondary' : 'border-default'"
-          :style="{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }"
+          :style="{ bottom: 'var(--studio-toolbar-bottom)' }"
           role="region"
           aria-label="Photo actions"
         >

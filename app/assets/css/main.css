@@ -304,12 +304,17 @@ h1, h2, h3, h4 {
 }
 
 /*
-  Studio item page. On a phone the action toolbar is closed by default, so the
-  page only clears the small Actions control. Opening the toolbar sets
-  --studio-overlay to that bar's height. Desktop keeps the generate button.
+  Studio item page. The API console button stays at the bottom-right. On a phone
+  the action toolbar sits above it: --studio-toolbar-bottom is that clearance.
+  Opening the toolbar sets --studio-overlay to the bar height. Desktop keeps the
+  generate button.
 */
+:root {
+  --studio-toolbar-bottom: calc(6.25rem + env(safe-area-inset-bottom, 0px));
+}
+
 .studio-item {
-  padding-bottom: var(--studio-overlay, calc(4.5rem + env(safe-area-inset-bottom, 0px)));
+  padding-bottom: calc(var(--studio-overlay, 0px) + var(--studio-toolbar-bottom));
 }
 
 @media (min-width: 64rem) {
@@ -320,7 +325,7 @@ h1, h2, h3, h4 {
 
 @media (max-width: 63.99rem) {
   .studio-photo-grid button {
-    scroll-margin-bottom: calc(var(--studio-overlay, 4.5rem) + 0.75rem);
+    scroll-margin-bottom: calc(var(--studio-overlay, 0px) + var(--studio-toolbar-bottom) + 0.75rem);
   }
 }
 
