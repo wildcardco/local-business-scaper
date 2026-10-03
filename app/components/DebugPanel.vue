@@ -145,7 +145,7 @@ onMounted(() => {
 <template>
   <!-- Toggle Button -->
   <button
-    class="fixed bottom-4 right-4 z-[60] p-3 rounded-full bg-elevated border border-default shadow-lg hover:bg-accented transition-colors"
+    class="fixed bottom-4 right-4 z-[60] rounded-full border border-default bg-elevated p-3 shadow-lg transition-colors hover:bg-accented max-lg:hidden"
     :class="{ 'ring-2 ring-primary-500': logs.length > 0 && !isOpen }"
     @click="isOpen = !isOpen"
     title="Toggle Debug Panel (Ctrl+Shift+D)"
@@ -170,7 +170,7 @@ onMounted(() => {
   >
     <div
       v-if="isOpen"
-      class="fixed bottom-0 right-0 z-50 w-full md:w-[600px] bg-muted border-t md:border-l border-default shadow-2xl font-mono text-sm"
+      class="fixed bottom-0 right-0 z-50 w-full border-t border-default bg-muted font-mono text-sm shadow-2xl max-lg:hidden md:w-[600px] md:border-l"
       :class="isMinimized ? 'h-12' : 'h-80 md:h-96'"
     >
       <!-- Header -->

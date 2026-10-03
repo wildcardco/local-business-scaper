@@ -38,9 +38,7 @@ const jobFailure = ref('')
 const seededUrl = ref('')
 const toolbarOpen = ref(false)
 const slotListOpen = ref(false)
-const toolbarEl = ref<HTMLElement | null>(null)
 const stockPhotos = ref<{ sendAssigned: () => void } | null>(null)
-let toolbarObserver: ResizeObserver | null = null
 
 const busy = computed(() =>
   ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.value?.status || '')
@@ -188,33 +186,13 @@ const generateLabel = computed(() => {
   return 'Generate mockup'
 })
 
-function syncToolbarSpace() {
-  if (!import.meta.client) return
-  const desktop = window.matchMedia('(min-width: 64rem)').matches
-  if (desktop || !toolbarOpen.value) {
-    document.documentElement.style.removeProperty('--studio-overlay')
-    return
-  }
-  const height = toolbarEl.value?.offsetHeight ?? 0
-  if (height > 0) document.documentElement.style.setProperty('--studio-overlay', `${height}px`)
-}
-
 function openToolbar() {
   toolbarOpen.value = true
-  nextTick(() => {
-    const measure = () => {
-      if (toolbarEl.value && toolbarObserver) toolbarObserver.observe(toolbarEl.value)
-      syncToolbarSpace()
-    }
-    measure()
-    requestAnimationFrame(measure)
-  })
 }
 
 function closeToolbar() {
   toolbarOpen.value = false
   slotListOpen.value = false
-  document.documentElement.style.removeProperty('--studio-overlay')
 }
 
 function assignFromToolbar() {
@@ -233,18 +211,11 @@ function saveFromToolbar() {
 onMounted(() => {
   if (busy.value) startPoll()
   loadSlots()
-  toolbarObserver = new ResizeObserver(() => syncToolbarSpace())
-  window.addEventListener('resize', syncToolbarSpace)
 })
 
 onUnmounted(() => {
   stopPoll()
-  toolbarObserver?.disconnect()
-  window.removeEventListener('resize', syncToolbarSpace)
-  document.documentElement.style.removeProperty('--studio-overlay')
 })
-
-watch(slotListOpen, () => nextTick(syncToolbarSpace))
 
 function startPoll() {
   if (pollTimer) return
@@ -788,53 +759,95 @@ function statusColor(status: string) {
 
     <Teleport to="#teleports">
       <div class="lg:hidden">
-        <button
-          v-if="!toolbarOpen"
-          type="button"
-          data-studio-actions
-          class="fixed z-30 inline-flex min-h-12 items-center gap-2 rounded-full border border-default bg-elevated px-4 text-sm font-medium shadow-lg touch-manipulation"
-          :style="{ bottom: 'max(1rem, env(safe-area-inset-bottom))', right: '5.5rem' }"
-          aria-expanded="false"
-          aria-controls="studio-action-toolbar"
-          @click="openToolbar"
-        >
-          <UIcon
-            name="i-lucide-sliders-horizontal"
-            class="size-5"
-          />
-          Actions
-        </button>
         <div
-          v-else
           id="studio-action-toolbar"
-          ref="toolbarEl"
           data-studio-action-toolbar
-          class="fixed inset-x-0 z-30 border-t bg-default pb-3 shadow-[0_-8px_24px_rgba(0,0,0,0.35)] touch-manipulation"
-          :class="chosen ? 'border-secondary' : 'border-default'"
-          :style="{ bottom: 'var(--studio-toolbar-bottom)' }"
+          class="fixed inset-x-0 bottom-0 z-30 border-t bg-default touch-manipulation"
+          :class="chosen && toolbarOpen ? 'border-secondary' : 'border-default'"
+          :style="{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }"
           role="region"
           aria-label="Photo actions"
         >
-          <div
-            v-if="slotListOpen && slots.length"
-            id="studio-toolbar-slots"
-            class="max-h-52 space-y-2 overflow-y-auto overscroll-contain border-b border-default px-3 py-3"
+          <button
+            v-if="!toolbarOpen"
+            type="button"
+            data-studio-actions
+            class="flex min-h-12 w-full items-center justify-center gap-2 px-4 text-sm font-medium"
+            aria-expanded="false"
+            aria-controls="studio-action-toolbar"
+            @click="openToolbar"
           >
+            <UIcon
+              name="i-lucide-sliders-horizontal"
+              class="size-5"
+            />
+            Actions
+          </button>
+          <div v-else>
             <div
-              v-for="slot in slots"
-              :key="`toolbar-slot-${slot.index}`"
-              class="flex items-stretch gap-2"
+              v-if="slotListOpen && slots.length"
+              id="studio-toolbar-slots"
+              class="max-h-52 space-y-2 overflow-y-auto overscroll-contain border-b border-default px-3 py-3"
             >
+              <div
+                v-for="slot in slots"
+                :key="`toolbar-slot-${slot.index}`"
+                class="flex items-stretch gap-2"
+              >
+                <button
+                  type="button"
+                  class="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg border p-2 text-left"
+                  :class="toolbarTargetIndex === slot.index ? 'border-primary' : 'border-default'"
+                  :aria-current="toolbarTargetIndex === slot.index ? 'true' : undefined"
+                  @click="activeIndex = slot.index"
+                >
+                  <img
+                    v-if="assignments[slot.index]"
+                    :src="assignments[slot.index]"
+                    alt=""
+                    class="size-11 shrink-0 rounded object-cover"
+                  >
+                  <span
+                    v-else
+                    class="flex size-11 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
+                  >
+                    Empty
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-xs text-muted">{{ slot.role === 'hero' ? 'Hero' : `Slot ${slot.index + 1}` }}</span>
+                    <span class="line-clamp-2 text-sm">{{ slot.query }}</span>
+                  </span>
+                  <UIcon
+                    v-if="toolbarTargetIndex === slot.index"
+                    name="i-lucide-check"
+                    class="shrink-0 text-primary"
+                  />
+                </button>
+                <UButton
+                  v-if="assignments[slot.index]"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="shrink-0 self-center"
+                  :disabled="photosLocked"
+                  @click="clearSlot(slot.index)"
+                >
+                  Clear
+                </UButton>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 px-3 pt-2">
               <button
                 type="button"
-                class="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg border p-2 text-left"
-                :class="toolbarTargetIndex === slot.index ? 'border-primary' : 'border-default'"
-                :aria-current="toolbarTargetIndex === slot.index ? 'true' : undefined"
-                @click="activeIndex = slot.index"
+                class="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                :aria-expanded="slotListOpen"
+                aria-controls="studio-toolbar-slots"
+                :disabled="!slots.length"
+                @click="slotListOpen = !slotListOpen"
               >
                 <img
-                  v-if="assignments[slot.index]"
-                  :src="assignments[slot.index]"
+                  v-if="toolbarThumb"
+                  :src="toolbarThumb"
                   alt=""
                   class="size-11 shrink-0 rounded object-cover"
                 >
@@ -845,104 +858,61 @@ function statusColor(status: string) {
                   Empty
                 </span>
                 <span class="min-w-0 flex-1">
-                  <span class="block text-xs text-muted">{{ slot.role === 'hero' ? 'Hero' : `Slot ${slot.index + 1}` }}</span>
-                  <span class="line-clamp-2 text-sm">{{ slot.query }}</span>
+                  <span class="block text-xs text-muted">{{ toolbarLead }}</span>
+                  <span
+                    class="block truncate text-sm font-medium"
+                    data-studio-slot-target
+                  >
+                    {{ toolbarTarget ? slotLabel(toolbarTarget) : 'No slots' }}
+                  </span>
                 </span>
                 <UIcon
-                  v-if="toolbarTargetIndex === slot.index"
-                  name="i-lucide-check"
-                  class="shrink-0 text-primary"
+                  name="i-lucide-chevrons-up-down"
+                  class="shrink-0 text-muted"
                 />
               </button>
               <UButton
-                v-if="assignments[slot.index]"
                 type="button"
-                size="sm"
                 variant="ghost"
-                class="shrink-0 self-center"
-                :disabled="photosLocked"
-                @click="clearSlot(slot.index)"
+                class="min-h-11 shrink-0"
+                icon="i-lucide-chevron-down"
+                @click="closeToolbar"
               >
-                Clear
+                Hide
               </UButton>
             </div>
-          </div>
-          <div class="flex items-center gap-2 px-3 pt-2">
-            <button
-              type="button"
-              class="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
-              :aria-expanded="slotListOpen"
-              aria-controls="studio-toolbar-slots"
-              :disabled="!slots.length"
-              @click="slotListOpen = !slotListOpen"
-            >
-              <img
-                v-if="toolbarThumb"
-                :src="toolbarThumb"
-                alt=""
-                class="size-11 shrink-0 rounded object-cover"
+            <div class="grid grid-cols-3 gap-2 px-3 pt-2">
+              <UButton
+                type="button"
+                variant="outline"
+                class="min-h-11 justify-center"
+                :disabled="photosLocked || !chosen"
+                @click="assignFromToolbar"
               >
-              <span
-                v-else
-                class="flex size-11 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
+                Assign
+              </UButton>
+              <UButton
+                type="button"
+                class="min-h-11 justify-center"
+                icon="i-lucide-save"
+                data-studio-photo-save
+                :loading="isSendingPhotos || photoView.phase === 'sending'"
+                :disabled="photosLocked || !canSavePhotos"
+                @click="saveFromToolbar"
               >
-                Empty
-              </span>
-              <span class="min-w-0 flex-1">
-                <span class="block text-xs text-muted">{{ toolbarLead }}</span>
-                <span
-                  class="block truncate text-sm font-medium"
-                  data-studio-slot-target
-                >
-                  {{ toolbarTarget ? slotLabel(toolbarTarget) : 'No slots' }}
-                </span>
-              </span>
-              <UIcon
-                name="i-lucide-chevrons-up-down"
-                class="shrink-0 text-muted"
-              />
-            </button>
-            <UButton
-              type="button"
-              variant="ghost"
-              class="min-h-11 shrink-0"
-              icon="i-lucide-chevron-down"
-              @click="closeToolbar"
-            >
-              Hide
-            </UButton>
-          </div>
-          <div class="grid grid-cols-3 gap-2 px-3 pt-2">
-            <UButton
-              type="button"
-              variant="outline"
-              class="min-h-11 justify-center"
-              :disabled="photosLocked || !chosen"
-              @click="assignFromToolbar"
-            >
-              Assign
-            </UButton>
-            <UButton
-              type="button"
-              class="min-h-11 justify-center"
-              icon="i-lucide-save"
-              data-studio-photo-save
-              :loading="isSendingPhotos || photoView.phase === 'sending'"
-              :disabled="photosLocked || !canSavePhotos"
-              @click="saveFromToolbar"
-            >
-              Save
-            </UButton>
-            <UButton
-              type="button"
-              variant="outline"
-              class="min-h-11 justify-center whitespace-normal px-2 text-center text-xs leading-tight"
-              icon="i-lucide-sparkles"
-              :loading="isGenerating"
-              @click="generate"
-            >
-              {{ generateLabel }}
-            </UButton>
+                Save
+              </UButton>
+              <UButton
+                type="button"
+                variant="outline"
+                class="min-h-11 justify-center whitespace-normal px-2 text-center text-xs leading-tight"
+                icon="i-lucide-sparkles"
+                :loading="isGenerating"
+                @click="generate"
+              >
+                {{ generateLabel }}
+              </UButton>
+            </div>
           </div>
         </div>
       </div>
