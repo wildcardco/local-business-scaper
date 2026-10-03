@@ -174,5 +174,5 @@ export function normalizeStockQuery(input: unknown): string | null {
   return query.slice(0, 120)
 }
 
-export { extractPhotoQueries, extractPhotoSlots, slotOrderedPhotoUrls, slotLabel } from './photo-slots'
+export { extractPhotoQueries, extractPhotoSlots, preferredSlotIndex, slotAfterAssign, slotOrderedPhotoUrls, slotLabel } from './photo-slots'
 export type { PhotoSlot } from './photo-slots'

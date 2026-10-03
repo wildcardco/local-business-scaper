@@ -18,11 +18,16 @@ const src = computed(() => props.mockupUrl ? `/api/mockups/${props.mockupId}/pre
 function paint() {
   const win = frame.value?.contentWindow
   if (!win) return
+  // postMessage cannot clone the reactive assignments proxy.
+  const assignments: Record<number, string> = {}
+  for (const [key, url] of Object.entries(props.assignments)) {
+    if (typeof url === 'string') assignments[Number(key)] = url
+  }
   win.postMessage({
     source: 'studio-parent',
     type: 'paint',
     activeIndex: props.activeIndex,
-    assignments: props.assignments,
+    assignments,
     armed: props.armed
   }, '*')
 }
