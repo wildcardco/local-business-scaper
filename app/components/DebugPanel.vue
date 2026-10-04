@@ -143,12 +143,33 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- Toggle Button -->
+  <!-- Phone: a small tab on the right edge, clear of the bottom Actions bar. -->
+  <button
+    type="button"
+    data-api-console-tab
+    class="fixed right-0 top-28 z-[60] flex w-8 flex-col items-center gap-1 rounded-l-md border border-r-0 border-default bg-elevated py-2 text-toned shadow-sm lg:hidden"
+    title="Toggle Debug Panel (Ctrl+Shift+D)"
+    :aria-expanded="isOpen"
+    @click="isOpen = !isOpen"
+  >
+    <UIcon
+      name="i-lucide-terminal"
+      class="size-4 shrink-0"
+    />
+    <span
+      v-if="logs.length > 0 && !isOpen"
+      class="text-[9px] font-medium leading-none text-primary"
+    >
+      {{ logs.length > 9 ? '9+' : logs.length }}
+    </span>
+  </button>
+
+  <!-- Desktop toggle -->
   <button
     class="fixed bottom-4 right-4 z-[60] rounded-full border border-default bg-elevated p-3 shadow-lg transition-colors hover:bg-accented max-lg:hidden"
     :class="{ 'ring-2 ring-primary-500': logs.length > 0 && !isOpen }"
-    @click="isOpen = !isOpen"
     title="Toggle Debug Panel (Ctrl+Shift+D)"
+    @click="isOpen = !isOpen"
   >
     <UIcon name="i-lucide-terminal" class="text-lg text-toned" />
     <span
@@ -170,7 +191,7 @@ onMounted(() => {
   >
     <div
       v-if="isOpen"
-      class="fixed bottom-0 right-0 z-50 w-full border-t border-default bg-muted font-mono text-sm shadow-2xl max-lg:hidden md:w-[600px] md:border-l"
+      class="fixed bottom-0 right-0 z-50 w-full border-t border-default bg-muted font-mono text-sm shadow-2xl md:w-[600px] md:border-l"
       :class="isMinimized ? 'h-12' : 'h-80 md:h-96'"
     >
       <!-- Header -->
