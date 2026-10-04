@@ -143,26 +143,31 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- Phone: a small tab on the right edge, clear of the bottom Actions bar. -->
-  <button
-    type="button"
-    data-api-console-tab
-    class="fixed right-0 top-28 z-[60] flex w-8 flex-col items-center gap-1 rounded-l-md border border-r-0 border-default bg-elevated py-2 text-toned shadow-sm lg:hidden"
-    title="Toggle Debug Panel (Ctrl+Shift+D)"
-    :aria-expanded="isOpen"
-    @click="isOpen = !isOpen"
-  >
-    <UIcon
-      name="i-lucide-terminal"
-      class="size-4 shrink-0"
-    />
-    <span
-      v-if="logs.length > 0 && !isOpen"
-      class="text-[9px] font-medium leading-none text-primary"
+  <!-- Phone: a small labeled tab stuck to the right edge, clear of the Actions bar. -->
+  <Teleport to="#teleports">
+    <button
+      type="button"
+      data-api-console-tab
+      class="fixed right-0 top-36 z-[60] flex w-10 flex-col items-center gap-1.5 rounded-l-lg border border-r-0 border-secondary bg-elevated py-3 text-highlighted shadow-lg lg:hidden"
+      title="Toggle Debug Panel (Ctrl+Shift+D)"
+      :aria-expanded="isOpen"
+      @click="isOpen = !isOpen"
     >
-      {{ logs.length > 9 ? '9+' : logs.length }}
-    </span>
-  </button>
+      <UIcon
+        name="i-lucide-terminal"
+        class="size-4 shrink-0 text-secondary"
+      />
+      <span class="text-[11px] font-semibold uppercase leading-none tracking-widest [writing-mode:vertical-rl]">
+        API
+      </span>
+      <span
+        v-if="logs.length > 0 && !isOpen"
+        class="text-[10px] font-semibold leading-none text-primary"
+      >
+        {{ logs.length > 9 ? '9+' : logs.length }}
+      </span>
+    </button>
+  </Teleport>
 
   <!-- Desktop toggle -->
   <button
