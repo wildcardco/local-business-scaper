@@ -1,5 +1,6 @@
 import { findOrCreateMockupForBusiness, fireMockupAction, getMockupForUser } from '~~/server/utils/mockups'
 import { db } from '~~/server/utils/db'
+import { generatePhotoWebhookFields } from '~~/shared/photo-slots'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -31,6 +32,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const photoFields = photoFieldsFromBody(body)
+
   const mockup = await fireMockupAction({
     event,
     user: { id: user.id, email: user.email },
@@ -39,8 +42,24 @@ export default defineEventHandler(async (event) => {
     extraPrompt: typeof body.extraPrompt === 'string' ? body.extraPrompt.trim() : undefined,
     model: typeof body.model === 'string' ? body.model : undefined,
     maxTokens: body.maxTokens != null ? Number(body.maxTokens) : undefined,
-    force: body.force === true
+    force: body.force === true,
+    ...(photoFields
+      ? { photoUrls: photoFields.photo_urls, photoSlots: photoFields.photo_slots }
+      : {})
   })
 
   return { success: true, mockup: mockup || await getMockupForUser(targetMockupId, user.id) }
 })
+
+function photoFieldsFromBody(body: Record<string, unknown>) {
+  const raw = body.photo_slots ?? body.photoSlots
+  if (!Array.isArray(raw)) return null
+  return generatePhotoWebhookFields(raw.map((item) => {
+    const row = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+    return {
+      key: typeof row.slot === 'string' ? row.slot : '',
+      label: typeof row.label === 'string' ? row.label : '',
+      url: typeof row.url === 'string' ? row.url : ''
+    }
+  }))
+}
