@@ -304,30 +304,23 @@ h1, h2, h3, h4 {
 }
 
 /*
-  Studio item page. The phone photo dock and the generate bar are fixed, so the
-  scroll content keeps this much room under the last photo. Desktop drops the
-  dock and only needs a short end padding.
+  Studio item page. On a phone the action toolbar is flush with the bottom.
+  Padding clears only the collapsed bar, so opening it does not shift the page.
+  Desktop keeps the generate button.
 */
 .studio-item {
-  padding-bottom: calc(
-    var(--studio-generate-bar, calc(4.75rem + env(safe-area-inset-bottom, 0px)))
-    + var(--studio-photo-bar, 0px)
-  );
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 64rem) {
   .studio-item {
-    padding-bottom: 2rem;
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
 @media (max-width: 63.99rem) {
   .studio-photo-grid button {
-    scroll-margin-bottom: calc(
-      var(--studio-generate-bar, 4.75rem)
-      + var(--studio-photo-bar, 0px)
-      + 0.75rem
-    );
+    scroll-margin-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px) + 0.75rem);
   }
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ChosenPhoto } from '~/components/StudioStockPhotos.vue'
-import { preferredSlotIndex, slotAfterAssign, type PhotoSlot } from '~~/shared/photo-slots'
+import { preferredSlotIndex, slotAfterAssign, slotLabel, slotOrderedPhotoUrls, type PhotoSlot } from '~~/shared/photo-slots'
 import {
   failureDetail,
   feedbackJobView,
@@ -36,8 +36,9 @@ const pitchNode = ref<string | null>(null)
 const pitchExecution = ref<string | null>(null)
 const jobFailure = ref('')
 const seededUrl = ref('')
-const generateBar = ref<HTMLElement | null>(null)
-let barObserver: ResizeObserver | null = null
+const toolbarOpen = ref(false)
+const slotListOpen = ref(false)
+const stockPhotos = ref<{ sendAssigned: () => void } | null>(null)
 
 const busy = computed(() =>
   ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.value?.status || '')
@@ -165,63 +166,56 @@ watch(() => mockup.value?.vercelUrl, () => {
   loadSlots()
 })
 
-function findScroller(): HTMLElement | null {
-  const page = document.querySelector('.studio-item')
-  let node = page?.parentElement ?? null
-  while (node) {
-    const overflowY = getComputedStyle(node).overflowY
-    if (overflowY === 'auto' || overflowY === 'scroll') return node
-    node = node.parentElement
-  }
-  return null
+const toolbarTargetIndex = computed(() => preferredSlotIndex(slots.value, assignments.value, activeIndex.value))
+const toolbarTarget = computed(() => slots.value.find(slot => slot.index === toolbarTargetIndex.value) ?? null)
+const toolbarLead = computed(() => chosen.value ? 'This photo goes to' : 'Next photo goes to')
+const toolbarThumb = computed(() => {
+  if (chosen.value?.thumb) return chosen.value.thumb
+  const index = toolbarTarget.value?.index
+  if (index == null) return ''
+  const url = assignments.value[index]
+  return url?.startsWith('http') ? url : ''
+})
+const canSavePhotos = computed(() =>
+  slotOrderedPhotoUrls(slots.value.map(slot => assignments.value[slot.index] || '')).some(url => url.startsWith('http'))
+)
+const photosLocked = computed(() => busy.value || isSendingPhotos.value)
+const generateLabel = computed(() => {
+  if (mockup.value?.mockupUrl) return 'Regenerate mockup'
+  if (busy.value) return 'Generate again'
+  return 'Generate mockup'
+})
+
+function openToolbar() {
+  toolbarOpen.value = true
 }
 
-function syncPhotoDock() {
-  if (!import.meta.client) return
-  const desktop = window.matchMedia('(min-width: 64rem)').matches
-  const scroller = findScroller()
-  if (desktop) {
-    document.documentElement.style.setProperty('--studio-generate-bar', '0px')
-    document.documentElement.style.setProperty('--studio-photo-bar', '0px')
-    if (scroller) scroller.style.scrollPaddingBottom = ''
+function closeToolbar() {
+  toolbarOpen.value = false
+  slotListOpen.value = false
+}
+
+function assignFromToolbar() {
+  if (photosLocked.value || toolbarTargetIndex.value == null) return
+  if (!chosen.value?.url.startsWith('http')) {
+    toast.add({ title: 'Select a photo, then choose a slot', color: 'warning' })
     return
   }
-  const generate = generateBar.value?.offsetHeight ?? 0
-  const dock = document.querySelector<HTMLElement>('[data-studio-photo-dock]')
-  const dockHeight = dock?.offsetHeight ?? 0
-  document.documentElement.style.setProperty('--studio-generate-bar', `${generate}px`)
-  document.documentElement.style.setProperty('--studio-photo-bar', `${dockHeight}px`)
-  if (scroller) scroller.style.scrollPaddingBottom = `${generate + dockHeight}px`
-  if (dock && barObserver) barObserver.observe(dock)
+  aimSlot(toolbarTargetIndex.value)
 }
 
-function scheduleDockSync() {
-  nextTick(() => {
-    syncPhotoDock()
-    requestAnimationFrame(syncPhotoDock)
-  })
+function saveFromToolbar() {
+  stockPhotos.value?.sendAssigned()
 }
 
 onMounted(() => {
   if (busy.value) startPoll()
   loadSlots()
-  scheduleDockSync()
-  barObserver = new ResizeObserver(() => syncPhotoDock())
-  if (generateBar.value) barObserver.observe(generateBar.value)
-  window.addEventListener('resize', syncPhotoDock)
 })
 
 onUnmounted(() => {
   stopPoll()
-  barObserver?.disconnect()
-  window.removeEventListener('resize', syncPhotoDock)
-  document.documentElement.style.removeProperty('--studio-generate-bar')
-  document.documentElement.style.removeProperty('--studio-photo-bar')
-  const scroller = findScroller()
-  if (scroller) scroller.style.scrollPaddingBottom = ''
 })
-
-watch(slots, () => scheduleDockSync())
 
 function startPoll() {
   if (pollTimer) return
@@ -556,6 +550,7 @@ function statusColor(status: string) {
               </h3>
             </template>
             <StudioStockPhotos
+              ref="stockPhotos"
               :mockup-id="id"
               :slots="slots"
               :slot-note="slotNote"
@@ -762,19 +757,185 @@ function statusColor(status: string) {
       </UCard>
     </template>
 
+    <Teleport to="#teleports">
+      <div class="lg:hidden">
+        <div
+          id="studio-action-toolbar"
+          data-studio-action-toolbar
+          class="fixed inset-x-0 bottom-0 z-40 border-t border-default bg-elevated shadow-[0_-8px_24px_rgba(0,0,0,0.45)] touch-manipulation"
+          :class="chosen && toolbarOpen ? 'border-secondary' : 'border-default'"
+          :style="{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }"
+          role="region"
+          aria-label="Photo actions"
+        >
+          <button
+            v-if="!toolbarOpen"
+            type="button"
+            data-studio-actions
+            class="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-base font-semibold text-highlighted"
+            aria-expanded="false"
+            aria-controls="studio-action-toolbar"
+            @click="openToolbar"
+          >
+            <span class="inline-flex items-center gap-2">
+              <UIcon
+                name="i-lucide-sliders-horizontal"
+                class="size-5 text-primary"
+              />
+              Actions
+            </span>
+            <UIcon
+              name="i-lucide-chevron-up"
+              class="size-5 text-muted"
+            />
+          </button>
+          <div v-else>
+            <div
+              v-if="slotListOpen && slots.length"
+              id="studio-toolbar-slots"
+              class="max-h-52 space-y-2 overflow-y-auto overscroll-contain border-b border-default px-3 py-3"
+            >
+              <div
+                v-for="slot in slots"
+                :key="`toolbar-slot-${slot.index}`"
+                class="flex items-stretch gap-2"
+              >
+                <button
+                  type="button"
+                  class="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg border p-2 text-left"
+                  :class="toolbarTargetIndex === slot.index ? 'border-primary' : 'border-default'"
+                  :aria-current="toolbarTargetIndex === slot.index ? 'true' : undefined"
+                  @click="activeIndex = slot.index"
+                >
+                  <img
+                    v-if="assignments[slot.index]"
+                    :src="assignments[slot.index]"
+                    alt=""
+                    class="size-11 shrink-0 rounded object-cover"
+                  >
+                  <span
+                    v-else
+                    class="flex size-11 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
+                  >
+                    Empty
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-xs text-muted">{{ slot.role === 'hero' ? 'Hero' : `Slot ${slot.index + 1}` }}</span>
+                    <span class="line-clamp-2 text-sm">{{ slot.query }}</span>
+                  </span>
+                  <UIcon
+                    v-if="toolbarTargetIndex === slot.index"
+                    name="i-lucide-check"
+                    class="shrink-0 text-primary"
+                  />
+                </button>
+                <UButton
+                  v-if="assignments[slot.index]"
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="shrink-0 self-center"
+                  :disabled="photosLocked"
+                  @click="clearSlot(slot.index)"
+                >
+                  Clear
+                </UButton>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 px-3 pt-2">
+              <button
+                type="button"
+                class="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left"
+                :aria-expanded="slotListOpen"
+                aria-controls="studio-toolbar-slots"
+                :disabled="!slots.length"
+                @click="slotListOpen = !slotListOpen"
+              >
+                <img
+                  v-if="toolbarThumb"
+                  :src="toolbarThumb"
+                  alt=""
+                  class="size-11 shrink-0 rounded object-cover"
+                >
+                <span
+                  v-else
+                  class="flex size-11 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted"
+                >
+                  Empty
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-xs text-muted">{{ toolbarLead }}</span>
+                  <span
+                    class="block truncate text-sm font-medium"
+                    data-studio-slot-target
+                  >
+                    {{ toolbarTarget ? slotLabel(toolbarTarget) : 'No slots' }}
+                  </span>
+                </span>
+                <UIcon
+                  name="i-lucide-chevrons-up-down"
+                  class="shrink-0 text-muted"
+                />
+              </button>
+              <UButton
+                type="button"
+                variant="ghost"
+                class="min-h-11 shrink-0"
+                icon="i-lucide-chevron-down"
+                @click="closeToolbar"
+              >
+                Hide
+              </UButton>
+            </div>
+            <div class="grid grid-cols-3 gap-2 px-3 pt-2">
+              <UButton
+                type="button"
+                variant="outline"
+                class="min-h-11 justify-center"
+                :disabled="photosLocked || !chosen"
+                @click="assignFromToolbar"
+              >
+                Assign
+              </UButton>
+              <UButton
+                type="button"
+                class="min-h-11 justify-center"
+                icon="i-lucide-save"
+                data-studio-photo-save
+                :loading="isSendingPhotos || photoView.phase === 'sending'"
+                :disabled="photosLocked || !canSavePhotos"
+                @click="saveFromToolbar"
+              >
+                Save
+              </UButton>
+              <UButton
+                type="button"
+                variant="outline"
+                class="min-h-11 justify-center whitespace-normal px-2 text-center text-xs leading-tight"
+                icon="i-lucide-sparkles"
+                :loading="isGenerating"
+                @click="generate"
+              >
+                {{ generateLabel }}
+              </UButton>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <div
-      ref="generateBar"
-      class="fixed bottom-0 inset-x-0 z-20 flex justify-center px-4 pt-4 sm:justify-end"
+      class="fixed bottom-0 inset-x-0 z-20 hidden justify-end px-4 pt-4 lg:flex"
       :style="{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }"
     >
       <UButton
-        class="min-h-11 w-full sm:w-auto"
+        class="min-h-11"
         size="lg"
         icon="i-lucide-sparkles"
         :loading="isGenerating"
         @click="generate"
       >
-        {{ mockup?.mockupUrl ? 'Regenerate mockup' : busy ? 'Generate again' : 'Generate mockup' }}
+        {{ generateLabel }}
       </UButton>
     </div>
   </div>

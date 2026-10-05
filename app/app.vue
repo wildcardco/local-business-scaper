@@ -5,6 +5,9 @@ const { loggedIn, user, clear: logout } = useUserSession()
 const toast = useToast()
 const router = useRouter()
 
+// Build-time gate. Vite inlines NODE_ENV, so production and preview builds omit this.
+const showApiConsole = process.env.NODE_ENV === 'development'
+
 useHead({
   meta: [
     { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }
@@ -198,8 +201,8 @@ async function handleLogout() {
 
       <GenerateMockupModal />
 
-      <!-- Debug Panel for API logging (toggle with Ctrl+Shift+D) -->
-      <ClientOnly>
+      <!-- API console tracker. Local development only. -->
+      <ClientOnly v-if="showApiConsole">
         <DebugPanel />
       </ClientOnly>
     </UApp>
