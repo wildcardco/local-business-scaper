@@ -287,6 +287,7 @@ export async function fireMockupAction(opts: {
   feedback?: string
   extraPrompt?: string
   photoUrls?: string[]
+  photoSlots?: { slot: string, label: string, url: string }[]
   model?: string
   maxTokens?: number
   force?: boolean
@@ -373,6 +374,7 @@ export async function fireMockupAction(opts: {
       last_feedback: extraPrompt || mockup.lastFeedback,
       extra_prompt: extraPrompt,
       photo_urls: opts.photoUrls || mockup.photoUrls,
+      ...(opts.photoSlots?.length ? { photo_slots: opts.photoSlots } : {}),
       model,
       max_tokens: maxTokens,
       pitch_max_tokens: ai.pitchMaxTokens,

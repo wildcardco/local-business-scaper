@@ -4,6 +4,19 @@ export interface PhotoSlot {
   role: 'hero' | 'section'
   open: boolean
   src: string | null
+  /** Present when the mockup HTML sets data-photo-slot. */
+  slot?: string
+}
+
+export interface GeneratePhotoSlotPayload {
+  slot: string
+  label: string
+  url: string
+}
+
+export interface GeneratePhotoWebhookFields {
+  photo_urls: string[]
+  photo_slots: GeneratePhotoSlotPayload[]
 }
 
 const VOID_TAGS = new Set(['img', 'image', 'source', 'br', 'hr', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed', 'wbr'])
@@ -51,9 +64,63 @@ function innerHttpSrc(html: string, from: number, tagName: string): string | nul
   return null
 }
 
+function readAttr(tag: string, name: string): string {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))`, 'i'))
+  return decodeAttr(match?.[1] ?? match?.[2] ?? match?.[3] ?? '')
+}
+
+/** Turn a slot key such as service-1 into "Service 1". */
+export function slotKeyLabel(key: string): string {
+  const words = key.split(/[-_\s]+/).filter(Boolean).map((part) => {
+    if (/^\d+$/.test(part)) return part
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+  })
+  return words.join(' ')
+}
+
+export function slugPhotoSlot(label: string): string {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+  return slug || 'photo'
+}
+
+/** Vague stock search. Services get "<category> service"; other slots get the category. */
+export function defaultPhotoQuery(key: string, category: string): string {
+  const cat = category.replace(/\s+/g, ' ').trim()
+  if (!cat) return ''
+  if (key.startsWith('service')) return `${cat} service`
+  return cat
+}
+
 /**
- * Photo slots in the same order as querySelectorAll('[data-photo-query]').
- * The first slot is the hero. A slot is open when it has no real http(s) src.
+ * Ordered photo fields for generate_mockup.
+ * photo_urls keeps real http(s) URLs only, hero first.
+ * photo_slots keeps every slot, with an empty url when nothing was picked.
+ * Returns null when no slot has a photo, so the webhook stays unchanged.
+ */
+export function generatePhotoWebhookFields(slots: { key: string, label: string, url: string }[]): GeneratePhotoWebhookFields | null {
+  const cleaned: GeneratePhotoSlotPayload[] = []
+  for (const slot of slots) {
+    const key = slot.key.trim().toLowerCase()
+    const label = slot.label.replace(/\s+/g, ' ').trim()
+    if (!key || !label) continue
+    const raw = slot.url.trim()
+    const url = /^https?:\/\//i.test(raw) ? raw : ''
+    cleaned.push({ slot: key, label, url })
+  }
+  if (!cleaned.length) return null
+  const heroIndex = cleaned.findIndex(slot => slot.slot === 'hero')
+  const ordered = heroIndex > 0
+    ? [cleaned[heroIndex]!, ...cleaned.filter((_, index) => index !== heroIndex)]
+    : cleaned
+  const photo_urls = ordered.map(slot => slot.url).filter(url => url.startsWith('http'))
+  if (!photo_urls.length) return null
+  return { photo_urls, photo_slots: ordered }
+}
+
+/**
+ * Photo slots in document order. A data-photo-slot attribute names the slot.
+ * data-photo-query still supplies the search phrase, and is the fallback when
+ * the page has no slot attribute. The first unnamed slot is the hero.
  */
 export function extractPhotoSlots(html: string): PhotoSlot[] {
   const source = readableHtml(html)
@@ -61,9 +128,10 @@ export function extractPhotoSlots(html: string): PhotoSlot[] {
   const tags = /<([a-zA-Z][\w:-]*)\b[^>]*>/g
   for (const match of source.matchAll(tags)) {
     const tag = match[0]
-    if (!/\sdata-photo-query\s*=/i.test(tag)) continue
-    const queryMatch = tag.match(/\sdata-photo-query\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i)
-    const query = decodeAttr(queryMatch?.[1] ?? queryMatch?.[2] ?? queryMatch?.[3] ?? '')
+    const slotKey = readAttr(tag, 'data-photo-slot')
+    const queryAttr = readAttr(tag, 'data-photo-query')
+    if (!slotKey && !queryAttr) continue
+    const query = queryAttr || slotKeyLabel(slotKey)
     if (!query) continue
     const tagName = (match[1] || '').toLowerCase()
     const ownSrc = httpUrl(readSrc(tag))
@@ -74,9 +142,10 @@ export function extractPhotoSlots(html: string): PhotoSlot[] {
     slots.push({
       index: slots.length,
       query,
-      role: slots.length === 0 ? 'hero' : 'section',
+      role: slotKey === 'hero' || (!slotKey && slots.length === 0) ? 'hero' : 'section',
       open: !src,
-      src
+      src,
+      ...(slotKey ? { slot: slotKey } : {})
     })
     if (slots.length >= 24) break
   }
@@ -106,7 +175,12 @@ export function slotOrderedPhotoUrls(input: unknown): string[] {
   })
 }
 
-export function slotLabel(slot: Pick<PhotoSlot, 'role' | 'query' | 'index'>): string {
+export function slotLabel(slot: Pick<PhotoSlot, 'role' | 'query' | 'index' | 'slot'>): string {
+  if (slot.slot) {
+    const name = slotKeyLabel(slot.slot)
+    if (!slot.query || slot.query.toLowerCase() === name.toLowerCase()) return name
+    return `${name} · ${slot.query}`
+  }
   if (slot.role === 'hero') return `Hero · ${slot.query}`
   return `Slot ${slot.index + 1} · ${slot.query}`
 }

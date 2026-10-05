@@ -129,13 +129,14 @@ async function searchUnsplash(query: string, apiKey: string): Promise<ProviderRe
   }
 }
 
-export async function searchStockPhotos(query: string): Promise<{ photos: StockPhoto[], notices: StockProviderNotice[] }> {
+export async function searchStockPhotos(query: string, sources?: StockProvider[]): Promise<{ photos: StockPhoto[], notices: StockProviderNotice[] }> {
   const keys = stockKeys()
-  const results = await Promise.all([
-    searchPixabay(query, keys.pixabay),
-    searchPexels(query, keys.pexels),
-    searchUnsplash(query, keys.unsplash)
-  ])
+  const allow = sources?.length ? new Set(sources) : null
+  const jobs = []
+  if (!allow || allow.has('pixabay')) jobs.push(searchPixabay(query, keys.pixabay))
+  if (!allow || allow.has('pexels')) jobs.push(searchPexels(query, keys.pexels))
+  if (!allow || allow.has('unsplash')) jobs.push(searchUnsplash(query, keys.unsplash))
+  const results = await Promise.all(jobs)
   return {
     photos: interleavePhotos(results.map(result => result.photos)),
     notices: results.flatMap(result => result.notice ? [result.notice] : [])

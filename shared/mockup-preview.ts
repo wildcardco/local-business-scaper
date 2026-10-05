@@ -8,12 +8,17 @@ function escapeAttr(value: string): string {
 const SLOT_STYLE = `<style id="wc-studio-slot-style">
 img[data-photo-query]:not([src]),
 img[data-photo-query][src=""],
-figure[data-photo-query]:not(:has(img[src^="http"])) {
+img[data-photo-slot]:not([src]),
+img[data-photo-slot][src=""],
+figure[data-photo-query]:not(:has(img[src^="http"])),
+figure[data-photo-slot]:not(:has(img[src^="http"])) {
   min-height: 180px;
   background: #201F25;
 }
 img[data-photo-query]:not([src]),
-img[data-photo-query][src=""] {
+img[data-photo-query][src=""],
+img[data-photo-slot]:not([src]),
+img[data-photo-slot][src=""] {
   display: block;
   width: 100%;
 }
@@ -30,10 +35,31 @@ function slotScript(parentOrigin: string): string {
   var state = { activeIndex: null, assignments: {}, armed: false };
   function root() { return document.body || document.documentElement; }
   function list() {
-    return Array.prototype.slice.call(document.querySelectorAll('[data-photo-query]'));
+    return Array.prototype.slice.call(document.querySelectorAll('[data-photo-slot], [data-photo-query]'));
+  }
+  function slotKey(el) {
+    return String(el.getAttribute('data-photo-slot') || '').replace(/\\s+/g, ' ').trim();
   }
   function phrase(el) {
-    return String(el.getAttribute('data-photo-query') || '').replace(/\\s+/g, ' ').trim();
+    var query = String(el.getAttribute('data-photo-query') || '').replace(/\\s+/g, ' ').trim();
+    if (query) return query;
+    return slotName(slotKey(el));
+  }
+  function slotName(key) {
+    return String(key || '').split(/[-_\\s]+/).filter(Boolean).map(function (part) {
+      if (/^\\d+$/.test(part)) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    }).join(' ');
+  }
+  function labelText(el, index) {
+    var key = slotKey(el);
+    var query = String(el.getAttribute('data-photo-query') || '').replace(/\\s+/g, ' ').trim();
+    if (key) {
+      var name = slotName(key);
+      if (!query || query.toLowerCase() === name.toLowerCase()) return name;
+      return name + ' · ' + query;
+    }
+    return (index === 0 ? 'Hero · ' : 'Slot ' + (index + 1) + ' · ') + phrase(el);
   }
   function directSrc(el) {
     if (!el || String(el.tagName).toUpperCase() !== 'IMG') return '';
@@ -62,7 +88,7 @@ function slotScript(parentOrigin: string): string {
   }
   function report() {
     var slots = list().map(function (el, index) {
-      return { index: index, query: phrase(el), open: !currentSrc(el) };
+      return { index: index, query: phrase(el), slot: slotKey(el) || undefined, open: !currentSrc(el) };
     });
     parent.postMessage({ source: 'studio-preview', type: 'slots', slots: slots }, PARENT);
   }
@@ -81,8 +107,9 @@ function slotScript(parentOrigin: string): string {
       var box = document.createElement('button');
       box.type = 'button';
       box.setAttribute('data-studio-slot', String(index));
-      var text = (index === 0 ? 'Hero · ' : 'Slot ' + (index + 1) + ' · ') + phrase(el);
-      box.textContent = open || active || assigned ? text : (index === 0 ? 'Hero' : 'Slot ' + (index + 1));
+      var named = slotKey(el) ? slotName(slotKey(el)) : '';
+      var text = labelText(el, index);
+      box.textContent = open || active || assigned ? text : (named || (index === 0 ? 'Hero' : 'Slot ' + (index + 1)));
       box.setAttribute('style', [
         'position:absolute',
         'pointer-events:auto',

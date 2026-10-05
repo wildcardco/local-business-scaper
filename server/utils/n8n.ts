@@ -40,6 +40,7 @@ export interface StudioLeadPayload {
   last_feedback?: string | null
   extra_prompt?: string | null
   photo_urls?: string[]
+  photo_slots?: { slot: string, label: string, url: string }[]
   model: string
   max_tokens: number
   pitch_max_tokens: number

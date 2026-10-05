@@ -4,6 +4,7 @@ import {
   DEFAULT_AI_MODEL,
   TOKEN_PRESETS
 } from '~~/shared/studio-ai'
+import type { GeneratePhotoWebhookFields } from '~~/shared/photo-slots'
 
 type ListingStatus = 'idle' | 'loading' | 'done' | 'skipped' | 'error'
 
@@ -40,6 +41,7 @@ const form = ref({
 })
 
 const socials = ref<{ label: string, href: string }[]>([])
+const photoPayload = ref<GeneratePhotoWebhookFields | null>(null)
 
 const modelOptions = computed(() => optionsFor(form.value.model))
 
@@ -167,7 +169,13 @@ async function confirm() {
       businessId: businessId.value,
       extraPrompt: form.value.extraPrompt.trim() || undefined,
       model: form.value.model,
-      maxTokens: form.value.maxTokens
+      maxTokens: form.value.maxTokens,
+      ...(photoPayload.value
+        ? {
+            photo_urls: photoPayload.value.photo_urls,
+            photo_slots: photoPayload.value.photo_slots
+          }
+        : {})
     })
     if (!result) return
 
@@ -279,6 +287,12 @@ async function confirm() {
         <p v-else class="text-xs text-muted">
           Facebook, Instagram, and extra emails are pulled from the Google listing and its website when you refresh — not during dashboard search.
         </p>
+
+        <GenerateMockupPhotos
+          :category="form.category"
+          :disabled="isSaving"
+          @update:payload="photoPayload = $event"
+        />
 
         <UFormField label="Add to prompt" help="Optional direction for this mockup — layout, tone, photos to feature, what to avoid.">
           <UTextarea
