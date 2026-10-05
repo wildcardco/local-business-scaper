@@ -148,21 +148,21 @@ onMounted(() => {
     <button
       type="button"
       data-api-console-tab
-      class="fixed right-0 top-36 z-[60] flex w-10 flex-col items-center gap-1.5 rounded-l-lg border border-r-0 border-secondary bg-elevated py-3 text-highlighted shadow-lg lg:hidden"
+      class="fixed right-0 top-36 z-[60] flex w-8 flex-col items-center gap-0.5 rounded-l-md border border-r-0 border-secondary bg-elevated py-1.5 text-highlighted shadow-sm lg:hidden"
       title="Toggle Debug Panel (Ctrl+Shift+D)"
       :aria-expanded="isOpen"
       @click="isOpen = !isOpen"
     >
       <UIcon
         name="i-lucide-terminal"
-        class="size-4 shrink-0 text-secondary"
+        class="size-3 shrink-0 text-secondary"
       />
-      <span class="text-[11px] font-semibold uppercase leading-none tracking-widest [writing-mode:vertical-rl]">
+      <span class="text-[9px] font-semibold uppercase leading-none tracking-wide [writing-mode:vertical-rl]">
         API
       </span>
       <span
         v-if="logs.length > 0 && !isOpen"
-        class="text-[10px] font-semibold leading-none text-primary"
+        class="text-[8px] font-semibold leading-none text-primary"
       >
         {{ logs.length > 9 ? '9+' : logs.length }}
       </span>
