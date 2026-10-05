@@ -105,6 +105,11 @@ async function refreshListing() {
   }
 }
 
+watch(open, (isOpen) => {
+  if (!import.meta.client || !isOpen) return
+  if (window.matchMedia('(max-width: 639px)').matches) window.scrollTo(0, 0)
+})
+
 watch(businessId, async (id) => {
   if (!id) return
   isLoading.value = true
@@ -193,7 +198,13 @@ async function confirm() {
     v-model:open="open"
     title="Generate mockup"
     description="Confirm the listing, add direction for the designer, and pick the model for this run."
-    :ui="{ content: 'sm:max-w-lg max-h-[90vh]' }"
+    :ui="{
+      content: 'generate-mockup-modal sm:max-w-lg sm:max-h-[90vh]',
+      header: 'shrink-0',
+      wrapper: 'pe-10 sm:pe-0',
+      body: 'min-h-0 flex-1 overflow-y-auto overscroll-contain',
+      footer: 'shrink-0'
+    }"
   >
     <template #body>
       <div v-if="isLoading" class="flex justify-center py-10">
