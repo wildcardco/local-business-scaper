@@ -328,6 +328,12 @@ h1, h2, h3, h4 {
   Generate mockup on a phone. 90vh is the large layout viewport, so a centered
   dialog slides under Safari's toolbars. Pin it to the dynamic viewport and
   the safe areas. The header and footer stay put; the body scrolls.
+
+  Tailwind centers the dialog with the individual `translate` property
+  (`-50% -50%`), which is independent of `transform`. The production CSS
+  minifier folds `translate: none` and `transform: none` in one rule into
+  `transform: translate(0)` and drops `translate`, so the -50% offset stays.
+  The second selector keeps `translate: none` in its own rule.
 */
 @media (max-width: 639px) {
   .generate-mockup-modal {
@@ -339,9 +345,14 @@ h1, h2, h3, h4 {
     max-width: none !important;
     height: auto !important;
     max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-    transform: none !important;
-    translate: none !important;
     border-radius: 0 !important;
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    transform: none !important;
+  }
+
+  .generate-mockup-modal.generate-mockup-modal {
+    translate: none !important;
   }
 }
 
