@@ -157,7 +157,7 @@ watch(() => route.query.focus, (focus) => {
   <div class="min-w-0 space-y-5">
     <section
       id="todays-leads"
-      class="gradient-border min-w-0 rounded-2xl bg-muted p-3 sm:p-4"
+      class="min-w-0"
     >
       <div class="mb-3 flex min-w-0 items-start justify-between gap-3">
         <div class="min-w-0">
