@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const toast = useToast()
 const router = useRouter()
+const route = useRoute()
 const { state: auditState, runAudit, closeProgress } = useAudit()
 
 const page = ref(1)
@@ -11,14 +12,36 @@ const isDeleting = ref(false)
 const isProcessing = ref(false)
 const businessTableRef = ref<{ clearSelection: () => void } | null>(null)
 
-const { data, pending, refresh } = await useFetch('/api/businesses', {
-  query: computed(() => ({
+const listQuery = computed(() => {
+  const query: Record<string, string | number> = {
     limit,
     offset: (page.value - 1) * limit,
-    sortBy: 'leadScore',
+    sortBy: 'lead_score',
     sortOrder: 'desc'
-  })),
-  watch: [page]
+  }
+  const category = route.query.category
+  if (typeof category === 'string' && category) query.category = category
+  if (route.query.website === 'none') query.hasWebsite = 'false'
+  if (route.query.website === 'yes') query.hasWebsite = 'true'
+  if (route.query.since === '7d') query.since = '7d'
+  return query
+})
+
+const { data, pending, refresh } = await useFetch('/api/businesses', {
+  query: listQuery,
+  watch: [listQuery]
+})
+
+watch(() => [route.query.category, route.query.website, route.query.since], () => {
+  page.value = 1
+})
+
+const activeFilter = computed(() => {
+  if (route.query.category === 'hot') return 'Hot leads'
+  if (typeof route.query.category === 'string' && route.query.category) return `${route.query.category} leads`
+  if (route.query.website === 'none') return 'No website'
+  if (route.query.since === '7d') return 'New this week'
+  return ''
 })
 
 const businesses = computed(() => data.value?.businesses || [])
@@ -197,7 +220,10 @@ function clearSelection() {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="font-display text-2xl font-semibold tracking-tight">All Businesses</h1>
-        <p class="text-muted">View and manage all discovered business leads.</p>
+        <p class="text-muted">
+          {{ activeFilter ? activeFilter : 'View and manage all discovered business leads.' }}
+          <span v-if="pagination.total"> · {{ pagination.total.toLocaleString() }}</span>
+        </p>
       </div>
       <UButton
         icon="i-lucide-refresh-cw"
@@ -248,7 +274,7 @@ function clearSelection() {
     >
       <div
         v-if="selectedBusinessIds.length > 0"
-        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100vw-2rem)] sm:w-auto"
+        class="leads-selection-bar fixed bottom-6 left-1/2 z-50 w-[calc(100vw-2rem)] -translate-x-1/2 sm:w-auto"
       >
         <div class="bg-muted border border-default rounded-2xl shadow-2xl px-4 py-3 sm:px-6 sm:py-4 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           <!-- Selection count -->

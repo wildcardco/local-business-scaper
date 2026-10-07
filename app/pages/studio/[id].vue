@@ -10,6 +10,8 @@ import {
   type JobPhase
 } from '~~/shared/studio-job'
 
+definePageMeta({ hidePhoneTabs: true })
+
 const route = useRoute()
 const toast = useToast()
 const { open: openGenerateModal, postGenerateMockup } = useGenerateMockup()

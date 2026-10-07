@@ -356,6 +356,24 @@ h1, h2, h3, h4 {
   }
 }
 
+/*
+  Phone tab bar. The bar sits in the safe area. Page content clears it so
+  the last card and its buttons stay tappable. Desktop does not show the bar.
+*/
+.phone-tab-bar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 767px) {
+  .phone-tab-clearance {
+    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .leads-selection-bar {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Truncate multi-line */
 .line-clamp-2 {
   display: -webkit-box;

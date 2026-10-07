@@ -31,6 +31,9 @@ useSeoMeta({
   ogDescription: description
 })
 
+const route = useRoute()
+const showPhoneTabs = computed(() => loggedIn.value && !(route.meta as { hidePhoneTabs?: boolean }).hidePhoneTabs)
+
 const navigation: NavigationMenuItem[][] = [[
   {
     label: 'Dashboard',
@@ -191,11 +194,15 @@ async function handleLogout() {
           </template>
 
           <template #body>
-            <StudioSyncBanner />
-            <NuxtPage />
+            <div :class="showPhoneTabs ? 'phone-tab-clearance' : ''">
+              <StudioSyncBanner />
+              <NuxtPage />
+            </div>
           </template>
         </UDashboardPanel>
       </UDashboardGroup>
+
+      <PhoneTabBar v-if="showPhoneTabs" />
 
       <UToaster />
 
