@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
     category,
     status,
     hasWebsite,
+    since,
     limit = 50,
     offset = 0,
     sortBy = 'lead_score',
@@ -53,9 +54,13 @@ export default defineEventHandler(async (event) => {
   }
 
   if (hasWebsite === 'true') {
-    sql += ` AND b.website IS NOT NULL`
+    sql += ` AND b.website IS NOT NULL AND trim(b.website) != ''`
   } else if (hasWebsite === 'false') {
-    sql += ` AND b.website IS NULL`
+    sql += ` AND (b.website IS NULL OR trim(b.website) = '')`
+  }
+
+  if (since === '7d') {
+    sql += ` AND b.created_at >= datetime('now', '-7 days')`
   }
 
   // Validate and add sorting
@@ -88,9 +93,12 @@ export default defineEventHandler(async (event) => {
       countArgs.push(status as string)
     }
     if (hasWebsite === 'true') {
-      countSql += ` AND website IS NOT NULL`
+      countSql += ` AND website IS NOT NULL AND trim(website) != ''`
     } else if (hasWebsite === 'false') {
-      countSql += ` AND website IS NULL`
+      countSql += ` AND (website IS NULL OR trim(website) = '')`
+    }
+    if (since === '7d') {
+      countSql += ` AND created_at >= datetime('now', '-7 days')`
     }
 
     const countResult = await db.execute({ sql: countSql, args: countArgs })

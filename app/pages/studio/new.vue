@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ hidePhoneTabs: true })
+
 const toast = useToast()
 const router = useRouter()
 const isSaving = ref(false)

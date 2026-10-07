@@ -1,66 +1,117 @@
 <script setup lang="ts">
+import { getTodayCentralTime } from '~~/shared/date-utils'
+
 const toast = useToast()
-const router = useRouter()
-const { state: auditState, runAudit, closeProgress } = useAudit()
+const route = useRoute()
+const { open: openGenerateMockup } = useGenerateMockup()
 
 const isSearching = ref(false)
+const showAdvanced = ref(false)
+const skippingId = ref('')
+const quickSearch = ref<{ focus: () => void } | null>(null)
 const searchResults = ref<{
-  searchId: string
-  businesses: unknown[]
   count: number
+  businesses: {
+    id: string
+    name: string
+    city?: string | null
+    state?: string | null
+    leadCategory?: string | null
+    website?: string | null
+  }[]
 } | null>(null)
-const hideRecent = ref(false)
 
-// Fetch stats
-const { data: stats, refresh: refreshStats } = await useFetch('/api/businesses', {
-  query: { limit: 1000 },
-  transform: (data) => {
-    const businesses = data.businesses || []
-    return {
-      total: businesses.length,
-      hot: businesses.filter((b: { leadCategory: string }) => b.leadCategory === 'hot').length,
-      warm: businesses.filter((b: { leadCategory: string }) => b.leadCategory === 'warm').length,
-      cold: businesses.filter((b: { leadCategory: string }) => b.leadCategory === 'cold').length,
-      noWebsite: businesses.filter((b: { website: string | null }) => !b.website).length,
-      pending: businesses.filter((b: { status: string }) => b.status === 'new').length
-    }
+const today = getTodayCentralTime()
+
+const { data: home, refresh: refreshHome } = await useFetch('/api/dashboard')
+const { data: digestData, refresh: refreshDigest, status: digestStatus } = await useFetch('/api/digests', {
+  query: { date: today }
+})
+
+const counts = computed(() => home.value?.counts || {
+  total: 0,
+  hot: 0,
+  noWebsite: 0,
+  newThisWeek: 0
+})
+
+const formattedDate = computed(() => {
+  const date = new Date(`${today}T00:00:00`)
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric'
+  }).format(date)
+})
+
+const digestLeads = computed(() => digestData.value?.leads || [])
+
+const visibleLeads = computed(() =>
+  digestLeads.value.filter(lead =>
+    lead.business?.status !== 'rejected' && lead.tier?.slug !== 'skip'
+  )
+)
+
+const skipCount = computed(() =>
+  digestLeads.value.filter(lead =>
+    lead.tier?.slug === 'skip' && lead.business?.status !== 'rejected'
+  ).length
+)
+
+const digestLoading = computed(() => digestStatus.value === 'pending' && !digestData.value)
+
+const statTiles = computed(() => [
+  {
+    label: 'Total Leads',
+    value: counts.value.total,
+    to: '/businesses',
+    icon: 'i-lucide-users'
+  },
+  {
+    label: 'Hot',
+    value: counts.value.hot,
+    to: '/businesses?category=hot',
+    icon: 'i-lucide-flame'
+  },
+  {
+    label: 'No Website',
+    value: counts.value.noWebsite,
+    to: '/businesses?website=none',
+    icon: 'i-lucide-globe'
+  },
+  {
+    label: 'New this week',
+    value: counts.value.newThisWeek,
+    to: '/businesses?since=7d',
+    icon: 'i-lucide-calendar-plus'
   }
-})
+])
 
-// Fetch recent businesses
-const { data: recentData, refresh: refreshRecent } = await useFetch('/api/businesses', {
-  query: { limit: 10, sortBy: 'createdAt', sortOrder: 'desc' }
-})
+function placeOf(business: { city?: string | null, state?: string | null }) {
+  return [business.city, business.state].filter(Boolean).join(', ')
+}
 
-const recentBusinesses = computed(() => recentData.value?.businesses || [])
-
-async function handleSearch(params: { query: string; location: string; limit: number; lat?: number; lng?: number; placeId?: string }) {
+async function handleSearch(params: { query: string, location: string, limit: number, lat?: number, lng?: number, placeId?: string }) {
   isSearching.value = true
   try {
     const result = await $fetch('/api/search', {
       method: 'POST',
       body: params
     })
-
     searchResults.value = {
-      searchId: result.search.id,
-      businesses: result.businesses,
-      count: result.count
+      count: result.count,
+      businesses: result.businesses || []
     }
-
     toast.add({
-      title: 'Search Complete',
+      title: 'Search complete',
       description: `Found ${result.count} businesses`,
       color: 'success'
     })
-
-    // Refresh stats and recent, show recent leads again
-    hideRecent.value = false
-    await Promise.all([refreshStats(), refreshRecent()])
+    await Promise.all([refreshHome(), refreshDigest()])
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to search'
     toast.add({
-      title: 'Search Failed',
+      title: 'Search failed',
       description: errorMessage,
       color: 'error'
     })
@@ -69,244 +120,294 @@ async function handleSearch(params: { query: string; location: string; limit: nu
   }
 }
 
-async function handleAudit(id: string) {
-  // Find the business from recent or search results
-  const allBusinesses = [
-    ...recentBusinesses.value,
-    ...(searchResults.value?.businesses || [])
-  ] as { id: string; name: string; website: string | null }[]
-
-  const business = allBusinesses.find(b => b.id === id)
-
-  if (!business) {
-    toast.add({
-      title: 'Error',
-      description: 'Business not found',
-      color: 'error'
-    })
-    return
-  }
-
-  const success = await runAudit({
-    id: business.id,
-    name: business.name,
-    website: business.website
-  })
-
-  if (success) {
-    await Promise.all([refreshStats(), refreshRecent()])
-  }
+function handleGenerate(id: string) {
+  openGenerateMockup(id)
 }
 
-function handleView(id: string) {
-  router.push(`/businesses/${id}`)
-}
-
-async function handleApprove(id: string) {
-  try {
-    await $fetch(`/api/businesses/${id}`, {
-      method: 'PATCH',
-      body: { status: 'approved' }
-    })
-    toast.add({ title: 'Lead approved', color: 'success' })
-    await Promise.all([refreshStats(), refreshRecent()])
-  } catch {
-    toast.add({ title: 'Failed to approve', color: 'error' })
-  }
-}
-
-async function handleReject(id: string) {
+async function handleSkip(id: string) {
+  skippingId.value = id
   try {
     await $fetch(`/api/businesses/${id}`, {
       method: 'PATCH',
       body: { status: 'rejected' }
     })
-    toast.add({ title: 'Lead rejected', color: 'warning' })
-    await Promise.all([refreshStats(), refreshRecent()])
+    toast.add({ title: 'Lead skipped', color: 'warning' })
+    await refreshDigest()
   } catch {
-    toast.add({ title: 'Failed to reject', color: 'error' })
+    toast.add({ title: 'Could not skip that lead', color: 'error' })
+  } finally {
+    skippingId.value = ''
   }
 }
 
-function handleGenerateMockup(id: string) {
-  useGenerateMockup().open(id)
+function rerunSearch(query: string, location: string) {
+  handleSearch({ query, location, limit: 20 })
 }
 
-function handleClearRecent() {
-  hideRecent.value = true
-  toast.add({
-    title: 'Recent Leads Hidden',
-    description: 'Recent leads cleared from view. They are still saved in the database.',
-    color: 'info'
+watch(() => route.query.focus, (focus) => {
+  if (focus !== 'search') return
+  nextTick(() => {
+    document.getElementById('dashboard-search')?.scrollIntoView({ block: 'start' })
+    quickSearch.value?.focus()
   })
-}
-
-function showRecentAgain() {
-  hideRecent.value = false
-}
-
-function clearSearchResults() {
-  searchResults.value = null
-}
-
-const statCards = computed(() => [
-  {
-    label: 'Total Leads',
-    value: stats.value?.total || 0,
-    icon: 'i-lucide-users',
-    color: 'primary'
-  },
-  {
-    label: 'Hot Leads',
-    value: stats.value?.hot || 0,
-    icon: 'i-lucide-flame',
-    color: 'red'
-  },
-  {
-    label: 'No Website',
-    value: stats.value?.noWebsite || 0,
-    icon: 'i-lucide-globe',
-    color: 'amber'
-  },
-  {
-    label: 'Pending Review',
-    value: stats.value?.pending || 0,
-    icon: 'i-lucide-clock',
-    color: 'sky'
-  }
-])
+}, { immediate: true })
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- Page Header -->
-    <div>
-      <h1 class="text-2xl font-bold font-display">Dashboard</h1>
-      <p class="text-muted">Search local businesses, audit their websites, and generate leads.</p>
-    </div>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <UCard v-for="stat in statCards" :key="stat.label">
-        <div class="flex items-center gap-4">
-          <div
-            class="flex items-center justify-center w-12 h-12 rounded-xl"
-            :class="{
-              'bg-primary-500/20 text-primary-400': stat.color === 'primary',
-              'bg-red-500/20 text-red-400': stat.color === 'red',
-              'bg-amber-500/20 text-amber-400': stat.color === 'amber',
-              'bg-sky-500/20 text-sky-400': stat.color === 'sky'
-            }"
-          >
-            <UIcon :name="stat.icon" class="text-2xl" />
-          </div>
-          <div>
-            <p class="text-2xl font-bold">{{ stat.value }}</p>
-            <p class="text-sm text-muted">{{ stat.label }}</p>
-          </div>
+  <div class="min-w-0 space-y-5">
+    <section
+      id="todays-leads"
+      class="gradient-border min-w-0 rounded-2xl bg-muted p-3 sm:p-4"
+    >
+      <div class="mb-3 flex min-w-0 items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="eyebrow mb-1">
+            Today
+          </p>
+          <h1 class="font-display text-2xl font-semibold tracking-tight text-highlighted">
+            Today's Leads
+          </h1>
+          <p class="truncate text-sm text-muted">
+            {{ formattedDate }}
+            <span v-if="digestData?.digest">
+              · {{ visibleLeads.length }} to work
+            </span>
+          </p>
         </div>
-      </UCard>
-    </div>
-
-    <!-- Search Form -->
-    <SearchForm :loading="isSearching" @search="handleSearch" />
-
-    <!-- Search Results -->
-    <UCard v-if="searchResults">
-      <template #header>
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="font-semibold">Search Results</h3>
-          <div class="flex flex-wrap items-center gap-2">
-            <UBadge color="primary" variant="soft">
-              {{ searchResults.count }} found
-            </UBadge>
-            <UButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              @click="clearSearchResults"
-            >
-              Close
-            </UButton>
-          </div>
-        </div>
-      </template>
-
-      <BusinessTable
-        :businesses="searchResults.businesses"
-        @audit="handleAudit"
-        @view="handleView"
-        @approve="handleApprove"
-        @reject="handleReject"
-        @generate="handleGenerateMockup"
-      />
-    </UCard>
-
-    <!-- Recent Businesses -->
-    <UCard v-else-if="recentBusinesses.length > 0 && !hideRecent">
-      <template #header>
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="font-semibold">Recent Leads</h3>
-          <div class="flex flex-wrap items-center gap-2">
-            <UButton
-              icon="i-lucide-eye-off"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              @click="handleClearRecent"
-            >
-              Hide
-            </UButton>
-            <UButton
-              to="/businesses"
-              variant="ghost"
-              size="sm"
-              trailing-icon="i-lucide-arrow-right"
-            >
-              View All
-            </UButton>
-          </div>
-        </div>
-      </template>
-
-      <BusinessTable
-        :businesses="recentBusinesses"
-        @audit="handleAudit"
-        @view="handleView"
-        @approve="handleApprove"
-        @reject="handleReject"
-        @generate="handleGenerateMockup"
-      />
-    </UCard>
-
-    <!-- Hidden Recent - Show button to restore -->
-    <UCard v-else-if="recentBusinesses.length > 0 && hideRecent">
-      <div class="text-center py-6">
-        <UIcon name="i-lucide-eye-off" class="text-3xl text-muted mb-2" />
-        <p class="text-muted mb-4">Recent leads are hidden</p>
         <UButton
-          icon="i-lucide-eye"
-          variant="soft"
-          @click="showRecentAgain"
+          to="/leads/today"
+          size="sm"
+          variant="ghost"
+          class="shrink-0"
+          trailing-icon="i-lucide-arrow-right"
         >
-          Show Recent Leads
+          All
         </UButton>
       </div>
-    </UCard>
 
-    <!-- Empty State -->
-    <UCard v-else>
-      <div class="text-center py-12">
-        <UIcon name="i-lucide-search" class="text-5xl text-muted mb-4" />
-        <h3 class="text-lg font-semibold mb-2">No businesses yet</h3>
-        <p class="text-muted mb-4">
-          Search for local businesses to start generating leads
-        </p>
+      <DashboardQuickSearch
+        ref="quickSearch"
+        :loading="isSearching"
+        @search="handleSearch"
+      />
+      <UButton
+        class="mt-2"
+        size="xs"
+        color="neutral"
+        variant="ghost"
+        :icon="showAdvanced ? 'i-lucide-chevron-up' : 'i-lucide-sliders-horizontal'"
+        @click="showAdvanced = !showAdvanced"
+      >
+        {{ showAdvanced ? 'Hide advanced search' : 'Advanced search' }}
+      </UButton>
+      <div
+        v-show="showAdvanced"
+        class="mt-3 min-w-0"
+      >
+        <SearchForm
+          :loading="isSearching"
+          @search="handleSearch"
+        />
       </div>
-    </UCard>
 
-    <!-- Audit Progress Modal -->
-    <AuditProgress :state="auditState" @close="closeProgress" />
+      <div
+        v-if="searchResults"
+        class="mt-3 min-w-0 rounded-xl border border-default bg-default p-3"
+      >
+        <div class="mb-2 flex min-w-0 items-center justify-between gap-2">
+          <h2 class="truncate text-sm font-semibold">
+            {{ searchResults.count }} found
+          </h2>
+          <UButton
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            @click="searchResults = null"
+          >
+            Close
+          </UButton>
+        </div>
+        <ul class="space-y-2">
+          <li
+            v-for="business in searchResults.businesses.slice(0, 5)"
+            :key="business.id"
+            class="min-w-0"
+          >
+            <NuxtLink
+              :to="`/businesses/${business.id}`"
+              class="block min-w-0 rounded-lg px-1 py-1 hover:bg-elevated"
+            >
+              <span class="line-clamp-2 break-words text-sm font-medium text-highlighted">
+                {{ business.name }}
+              </span>
+              <span class="block truncate text-xs text-muted">
+                {{ placeOf(business) || 'No town' }}
+                <template v-if="!business.website"> · No website</template>
+              </span>
+            </NuxtLink>
+          </li>
+        </ul>
+      </div>
+
+      <div
+        v-if="digestLoading"
+        class="flex justify-center py-10"
+      >
+        <UIcon
+          name="i-lucide-loader-2"
+          class="size-8 animate-spin text-primary"
+        />
+      </div>
+      <p
+        v-else-if="!digestData?.digest"
+        class="py-8 text-center text-sm text-muted"
+      >
+        Today's digest has not come in yet.
+      </p>
+      <div
+        v-else-if="visibleLeads.length === 0"
+        class="py-8 text-center text-sm text-muted"
+      >
+        Nothing left to work from today's list.
+      </div>
+      <div
+        v-else
+        class="mt-3 space-y-3"
+      >
+        <DashboardLeadCard
+          v-for="lead in visibleLeads"
+          :id="lead.id === visibleLeads[0]?.id ? 'todays-lead-card' : undefined"
+          :key="lead.id"
+          :lead="lead"
+          :skipping="skippingId === lead.business.id"
+          @generate="handleGenerate"
+          @skip="handleSkip"
+        />
+      </div>
+      <p
+        v-if="skipCount > 0"
+        class="mt-3 text-sm text-muted"
+      >
+        <NuxtLink
+          to="/leads/today"
+          class="underline"
+        >
+          {{ skipCount }} in the skip tier
+        </NuxtLink>
+      </p>
+    </section>
+
+    <section
+      id="stat-tiles"
+      aria-label="Lead counts"
+    >
+      <div class="grid grid-cols-2 gap-2">
+        <NuxtLink
+          v-for="tile in statTiles"
+          :key="tile.label"
+          :to="tile.to"
+          class="flex min-h-16 min-w-0 items-center gap-2 rounded-xl border border-default bg-elevated px-3 py-2"
+        >
+          <UIcon
+            :name="tile.icon"
+            class="size-5 shrink-0 text-primary"
+          />
+          <span class="min-w-0">
+            <span class="block text-xl font-semibold tabular-nums leading-none">{{ tile.value.toLocaleString() }}</span>
+            <span class="mt-1 block truncate text-xs text-muted">{{ tile.label }}</span>
+          </span>
+        </NuxtLink>
+      </div>
+    </section>
+
+    <section
+      id="recent-activity"
+      class="min-w-0 space-y-3"
+    >
+      <h2 class="font-display text-lg font-semibold">
+        Recent activity
+      </h2>
+
+      <div class="min-w-0 rounded-xl border border-default bg-elevated p-3">
+        <h3 class="mb-2 text-sm font-medium text-muted">
+          Searches
+        </h3>
+        <p
+          v-if="!home?.searches?.length"
+          class="text-sm text-muted"
+        >
+          No searches yet.
+        </p>
+        <ul
+          v-else
+          class="space-y-1"
+        >
+          <li
+            v-for="search in home.searches"
+            :key="`${search.query}-${search.location}`"
+          >
+            <button
+              type="button"
+              class="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg px-1 text-left hover:bg-muted"
+              @click="rerunSearch(search.query, search.location)"
+            >
+              <UIcon
+                name="i-lucide-rotate-cw"
+                class="size-4 shrink-0 text-muted"
+              />
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-medium">{{ search.query }}</span>
+                <span class="block truncate text-xs text-muted">{{ search.location }}</span>
+              </span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="min-w-0 rounded-xl border border-default bg-elevated p-3">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <h3 class="text-sm font-medium text-muted">
+            Studio
+          </h3>
+          <UButton
+            to="/studio"
+            size="xs"
+            variant="ghost"
+            class="shrink-0"
+          >
+            Open
+          </UButton>
+        </div>
+        <p
+          v-if="!home?.mockups?.length"
+          class="text-sm text-muted"
+        >
+          No mockups yet.
+        </p>
+        <ul
+          v-else
+          class="space-y-1"
+        >
+          <li
+            v-for="mockup in home.mockups"
+            :key="mockup.id"
+          >
+            <NuxtLink
+              :to="`/studio/${mockup.id}`"
+              class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1 hover:bg-muted"
+            >
+              <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ mockup.name }}</span>
+              <UBadge
+                class="shrink-0"
+                :color="mockup.activity === 'failed' ? 'error' : mockup.activity === 'ready' ? 'success' : mockup.activity === 'building' ? 'warning' : 'neutral'"
+                variant="soft"
+              >
+                {{ mockup.label }}
+              </UBadge>
+            </NuxtLink>
+          </li>
+        </ul>
+      </div>
+    </section>
   </div>
 </template>

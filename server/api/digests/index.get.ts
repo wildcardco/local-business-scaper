@@ -58,6 +58,7 @@ export default defineEventHandler(async (event) => {
         b.category,
         b.rating,
         b.review_count,
+        b.lead_category,
         b.status,
         m.id as mockup_id,
         m.status as mockup_status,
@@ -120,6 +121,7 @@ export default defineEventHandler(async (event) => {
         category: row.category || null,
         rating: row.rating || null,
         review_count: row.review_count || null,
+        lead_category: row.lead_category || null,
         status: row.status || 'new'
       },
       mockup: row.mockup_id ? {
