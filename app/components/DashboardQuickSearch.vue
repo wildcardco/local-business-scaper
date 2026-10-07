@@ -90,10 +90,10 @@ defineExpose({ focus })
   <form
     id="dashboard-search"
     ref="root"
-    class="flex min-w-0 items-center gap-2"
+    class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]"
     @submit.prevent="submit"
   >
-    <label class="min-w-0 flex-1">
+    <label class="col-span-2 min-w-0 sm:col-span-1">
       <span class="sr-only">Business type</span>
       <UInput
         v-model="query"
@@ -104,7 +104,7 @@ defineExpose({ focus })
         autocomplete="off"
       />
     </label>
-    <label class="min-w-0 flex-1">
+    <label class="min-w-0">
       <span class="sr-only">Town</span>
       <UInputMenu
         v-model="town"

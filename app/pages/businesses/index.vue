@@ -219,7 +219,9 @@ function clearSelection() {
     <!-- Header -->
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="font-display text-2xl font-semibold tracking-tight">All Businesses</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">
+          All Businesses
+        </h1>
         <p class="text-muted">
           {{ activeFilter ? activeFilter : 'View and manage all discovered business leads.' }}
           <span v-if="pagination.total"> · {{ pagination.total.toLocaleString() }}</span>
@@ -228,28 +230,33 @@ function clearSelection() {
       <UButton
         icon="i-lucide-refresh-cw"
         variant="outline"
-        @click="refresh()"
         :loading="pending"
+        @click="refresh()"
       >
         Refresh
       </UButton>
     </div>
 
-    <UCard>
-      <BusinessTable
-        ref="businessTableRef"
-        :businesses="businesses"
-        :loading="pending"
-        :selectable="true"
-        @audit="handleAudit"
-        @view="handleView"
-        @approve="handleApprove"
-        @reject="handleReject"
-        @generate="handleGenerateMockup"
-        @update:selected="handleSelectionChange"
-      />
+    <UCard :ui="{ body: 'overflow-x-auto' }">
+      <div class="min-w-0 overflow-x-auto">
+        <BusinessTable
+          ref="businessTableRef"
+          :businesses="businesses"
+          :loading="pending"
+          :selectable="true"
+          @audit="handleAudit"
+          @view="handleView"
+          @approve="handleApprove"
+          @reject="handleReject"
+          @generate="handleGenerateMockup"
+          @update:selected="handleSelectionChange"
+        />
+      </div>
 
-      <template #footer v-if="pagination.total > limit">
+      <template
+        v-if="pagination.total > limit"
+        #footer
+      >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-muted">
             Showing {{ (page - 1) * limit + 1 }} to {{ Math.min(page * limit, pagination.total) }} of {{ pagination.total }}
@@ -336,7 +343,10 @@ function clearSelection() {
     </Transition>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model:open="showDeleteConfirm" title="Confirm Delete">
+    <UModal
+      v-model:open="showDeleteConfirm"
+      title="Confirm Delete"
+    >
       <template #body>
         <p class="text-muted">
           Are you sure you want to permanently delete
@@ -370,6 +380,9 @@ function clearSelection() {
     </UModal>
 
     <!-- Audit Progress Modal -->
-    <AuditProgress :state="auditState" @close="closeProgress" />
+    <AuditProgress
+      :state="auditState"
+      @close="closeProgress"
+    />
   </div>
 </template>
