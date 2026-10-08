@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ChosenPhoto } from '~/components/StudioStockPhotos.vue'
-import { preferredSlotIndex, slotAfterAssign, slotLabel, slotOrderedPhotoUrls, type PhotoSlot } from '~~/shared/photo-slots'
+import { preferredSlotIndex, slotAfterAssign, slotLabel, slotOrderedPhotoUrls, slugPhotoSlot, type PhotoSlot } from '~~/shared/photo-slots'
 import {
   failureDetail,
   feedbackJobView,
@@ -38,6 +38,7 @@ const pitchNode = ref<string | null>(null)
 const pitchExecution = ref<string | null>(null)
 const jobFailure = ref('')
 const seededUrl = ref('')
+const usingImageSpots = ref(false)
 const toolbarOpen = ref(false)
 const slotListOpen = ref(false)
 const stockPhotos = ref<{ sendAssigned: () => void } | null>(null)
@@ -122,6 +123,8 @@ const showSavedNotes = computed(() => {
   const saved = mockup.value?.lastFeedback || ''
   return Boolean(saved) && !/Studio webhook failed|N8N_STUDIO_SECRET|N8N_API_KEY|X-Studio-Secret|n8n API \d/.test(saved)
 })
+
+const spotPresets = ['Hero', 'Services', 'About', 'Gallery']
 
 const stockHint = computed(() => {
   const category = mockup.value?.business?.category?.trim()
@@ -255,9 +258,25 @@ async function refreshJob() {
   }
 }
 
+function renameSpot(index: number, label: string) {
+  const next = label.replace(/\s+/g, ' ')
+  slots.value = slots.value.map(slot => slot.index === index
+    ? { ...slot, query: next, slot: next.trim() ? slugPhotoSlot(next) : slot.slot }
+    : slot)
+}
+
+function applyPresetNames() {
+  slots.value = slots.value.map((slot, index) => {
+    const label = spotPresets[index]
+    if (!label) return slot
+    return { ...slot, query: label, slot: slugPhotoSlot(label) }
+  })
+}
+
 async function loadSlots() {
   if (!mockup.value?.vercelUrl) {
     slots.value = []
+    usingImageSpots.value = false
     slotNote.value = 'No live mockup yet.'
     return
   }
@@ -266,8 +285,28 @@ async function loadSlots() {
       slots: PhotoSlot[]
       error?: string
     }>(`/api/mockups/${id.value}/photo-queries`)
-    slots.value = result.slots || []
-    slotNote.value = result.error || (slots.value.length ? '' : 'The live page has no photo slots.')
+    if (result.slots?.length) {
+      slots.value = result.slots
+      usingImageSpots.value = false
+      slotNote.value = ''
+    } else {
+      const spots = await $fetch<{
+        spots: { index: number, key: string, label: string, src: string }[]
+        error?: string
+      }>(`/api/mockups/${id.value}/image-spots`)
+      slots.value = (spots.spots || []).map(spot => ({
+        index: spot.index,
+        query: spot.label,
+        role: spot.index === 0 ? 'hero' as const : 'section' as const,
+        open: !spot.src,
+        src: spot.src || null,
+        slot: spot.key
+      }))
+      usingImageSpots.value = slots.value.length > 0
+      slotNote.value = slots.value.length
+        ? ''
+        : (spots.error || 'This page has no photo slots and no images to attach one to. Regenerate builds a new page.')
+    }
     const url = mockup.value.vercelUrl
     if (seededUrl.value === url) {
       ensureActiveSlot()
@@ -335,17 +374,35 @@ async function sendAssignedPhotos(payload: { urls: string[], unsplashIds: string
   photoError.value = ''
   isSendingPhotos.value = true
   try {
-    await $fetch(`/api/mockups/${id.value}/photos`, {
-      method: 'POST',
-      body: { photoUrls: payload.urls, ordered: true }
-    })
+    if (usingImageSpots.value) {
+      await $fetch(`/api/mockups/${id.value}/image-spots`, {
+        method: 'POST',
+        body: {
+          slots: slots.value.map(slot => ({
+            index: slot.index,
+            key: slot.slot || slugPhotoSlot(slot.query),
+            label: slot.query,
+            url: assignments.value[slot.index] || ''
+          }))
+        }
+      })
+    } else {
+      await $fetch(`/api/mockups/${id.value}/photos`, {
+        method: 'POST',
+        body: { photoUrls: payload.urls, ordered: true }
+      })
+    }
     if (payload.unsplashIds.length) {
       await $fetch('/api/studio/stock-photos/download', {
         method: 'POST',
         body: { ids: payload.unsplashIds }
       }).catch(() => {})
     }
-    toast.add({ title: 'Photos sent', color: 'success' })
+    toast.add({
+      title: usingImageSpots.value ? 'Photos saved on this page' : 'Photos sent',
+      description: usingImageSpots.value ? 'Vercel redeploys from the GitHub commit. The copy and layout were not rewritten.' : undefined,
+      color: 'success'
+    })
     await refresh()
   } catch (error: unknown) {
     photoError.value = readError(error, 'n8n did not accept the photos.')
@@ -361,14 +418,15 @@ async function sendAssignedPhotos(payload: { urls: string[], unsplashIds: string
 
 async function generate() {
   focus.value = 'generate'
+  const regenerating = Boolean(mockup.value?.mockupUrl)
   if (mockup.value?.businessId) {
-    openGenerateModal(mockup.value.businessId)
+    openGenerateModal(mockup.value.businessId, regenerating ? 'regenerate' : 'generate')
     return
   }
 
   isGenerating.value = true
   try {
-    const result = await postGenerateMockup({ mockupId: id.value })
+    const result = await postGenerateMockup({ mockupId: id.value, regenerate: regenerating })
     if (!result) return
     toast.add({ title: 'Mockup generation started', color: 'success' })
     await refresh()
@@ -458,14 +516,26 @@ function statusColor(status: string) {
           {{ mockup?.locationLabel || mockup?.business?.category || 'City not on file' }}
         </p>
       </div>
-      <UButton
-        class="min-h-11 w-full justify-center sm:w-auto"
-        to="/studio"
-        variant="ghost"
-        icon="i-lucide-arrow-left"
-      >
-        All mockups
-      </UButton>
+      <div class="flex w-full flex-col gap-2 sm:w-auto">
+        <UButton
+          v-if="mockup"
+          data-regenerate-mockup
+          class="min-h-11 w-full justify-center"
+          icon="i-lucide-sparkles"
+          :loading="isGenerating"
+          @click="generate"
+        >
+          {{ generateLabel }}
+        </UButton>
+        <UButton
+          class="min-h-11 w-full justify-center sm:w-auto"
+          to="/studio"
+          variant="ghost"
+          icon="i-lucide-arrow-left"
+        >
+          All mockups
+        </UButton>
+      </div>
     </div>
 
     <div
@@ -551,6 +621,34 @@ function statusColor(status: string) {
                 Photos
               </h3>
             </template>
+            <div
+              v-if="usingImageSpots"
+              class="mb-4 space-y-2"
+            >
+              <p class="text-sm text-muted">
+                These are images already on the page. Name a spot, assign a photo, and save. The copy and layout stay as they are.
+              </p>
+              <UButton
+                type="button"
+                size="xs"
+                variant="outline"
+                @click="applyPresetNames"
+              >
+                Name them Hero, Services, About, Gallery
+              </UButton>
+              <label
+                v-for="slot in slots"
+                :key="`name-${slot.index}`"
+                class="block"
+              >
+                <span class="mb-1 block text-xs text-muted">Spot {{ slot.index + 1 }}</span>
+                <UInput
+                  :model-value="slot.query"
+                  class="w-full"
+                  @update:model-value="renameSpot(slot.index, String($event || ''))"
+                />
+              </label>
+            </div>
             <StudioStockPhotos
               ref="stockPhotos"
               :mockup-id="id"
