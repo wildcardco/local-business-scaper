@@ -516,7 +516,7 @@ function statusColor(status: string) {
           {{ mockup?.locationLabel || mockup?.business?.category || 'City not on file' }}
         </p>
       </div>
-      <div class="flex w-full flex-col gap-2 sm:w-auto">
+      <div class="flex w-full min-w-0 flex-col gap-2 sm:w-auto">
         <UButton
           v-if="mockup"
           data-regenerate-mockup
@@ -535,6 +535,11 @@ function statusColor(status: string) {
         >
           All mockups
         </UButton>
+        <DeleteMockupDialog
+          v-if="mockup"
+          :mockup-id="mockup.id"
+          :repo="mockup.deleteRepo"
+        />
       </div>
     </div>
 

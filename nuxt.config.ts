@@ -74,6 +74,7 @@ export default defineNuxtConfig({
     pixabayApiKey: process.env.PIXABAY_API_KEY || '',
     pexelsApiKey: process.env.PEXELS_API_KEY || '',
     unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || '',
+    vercelToken: process.env.VERCEL_TOKEN || '',
 
     public: {
       imageKitUrl: process.env.IMAGE_KIT_URL,
