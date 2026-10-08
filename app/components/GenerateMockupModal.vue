@@ -25,6 +25,8 @@ const isLoading = ref(false)
 const isSaving = ref(false)
 const listingStatus = ref<ListingStatus>('idle')
 const listingMessage = ref('')
+const lookupStatus = ref<ListingStatus>('idle')
+const lookupMessage = ref('')
 const hasPlaceId = ref(false)
 
 const form = ref({
@@ -86,6 +88,31 @@ function socialLinks(source: Record<string, unknown>) {
     .map(([label, href]) => ({ label, href: String(href) }))
 }
 
+const detailKeys = ['name', 'category', 'website', 'phone', 'email', 'address', 'city', 'state'] as const
+
+async function lookupPlace() {
+  if (!businessId.value || lookupStatus.value === 'loading') return
+  lookupStatus.value = 'loading'
+  lookupMessage.value = ''
+  try {
+    const result = await $fetch<{ found?: Partial<Record<(typeof detailKeys)[number], string>>, message?: string }>(
+      `/api/businesses/${businessId.value}/lookup-place`,
+      { method: 'POST' }
+    )
+    const found = result.found || {}
+    for (const key of detailKeys) {
+      const value = found[key]
+      if (typeof value === 'string' && value.trim()) form.value[key] = value.trim()
+    }
+    lookupStatus.value = 'done'
+    lookupMessage.value = result.message || 'Lookup finished.'
+  } catch (error: unknown) {
+    lookupStatus.value = 'error'
+    const err = error as { data?: { message?: string } }
+    lookupMessage.value = err.data?.message || 'Could not look up this listing. Type the details. Empty fields stay empty.'
+  }
+}
+
 async function refreshListing() {
   if (!businessId.value || !hasPlaceId.value) {
     listingStatus.value = 'skipped'
@@ -119,6 +146,8 @@ watch(businessId, async (id) => {
   isLoading.value = true
   listingStatus.value = 'idle'
   listingMessage.value = ''
+  lookupStatus.value = 'idle'
+  lookupMessage.value = ''
   socials.value = []
   slotsTouched.value = false
   try {
@@ -268,12 +297,41 @@ async function confirm() {
         </UFormField>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <UFormField label="City">
-            <UInput v-model="form.city" size="lg" class="w-full" />
+            <UInput
+              v-model="form.city"
+              data-lookup-city
+              size="lg"
+              class="w-full"
+            />
           </UFormField>
           <UFormField label="State">
-            <UInput v-model="form.state" size="lg" class="w-full" />
+            <UInput
+              v-model="form.state"
+              size="lg"
+              class="w-full"
+            />
           </UFormField>
         </div>
+        <UButton
+          block
+          size="md"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-map-pin"
+          data-lookup-place
+          :loading="lookupStatus === 'loading'"
+          :disabled="isSaving"
+          @click="lookupPlace"
+        >
+          Look up
+        </UButton>
+        <p
+          v-if="lookupMessage"
+          data-lookup-message
+          class="text-sm text-muted"
+        >
+          {{ lookupMessage }}
+        </p>
 
         <div v-if="socials.length" class="flex flex-wrap gap-2">
           <UButton
