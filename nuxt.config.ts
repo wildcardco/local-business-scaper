@@ -62,7 +62,8 @@ export default defineNuxtConfig({
     allowedEmails: process.env.ALLOWED_EMAILS || 'ryan@wildcardcreativeco.com,aaron@wildcardcreativeco.com,chase@wildcardcreativeco.com',
     n8nCallbackUrl: process.env.N8N_CALLBACK_URL || '',
     digestIngestSecret: process.env.DIGEST_INGEST_SECRET,
-    
+    n8nRerollWebhookUrl: process.env.N8N_REROLL_WEBHOOK_URL || '',
+
     // ImageKit
     imageKitUrl: process.env.IMAGE_KIT_URL,
     imageKitPublicKey: process.env.IMAGE_KIT_PUBLIC_KEY,

@@ -9,6 +9,7 @@ const isLoading = ref(true)
 const loadError = ref('')
 const digest = ref<any>(null)
 const leads = ref<any[]>([])
+const rerollCount = ref(0)
 
 const today = computed(() => getTodayCentralTime())
 
@@ -72,11 +73,13 @@ async function fetchDigest() {
     })
     digest.value = result.digest
     leads.value = result.leads || []
+    rerollCount.value = Number(result.rerollCount || 0)
   } catch (error: unknown) {
     const err = error as { data?: { message?: string } }
     loadError.value = err.data?.message || 'Could not load today\'s leads. Try again.'
     digest.value = null
     leads.value = []
+    rerollCount.value = 0
   } finally {
     isLoading.value = false
   }
@@ -121,6 +124,13 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
         />
       </div>
     </div>
+
+    <DigestReroll
+      v-if="isToday"
+      class="mb-6"
+      :reroll-count="rerollCount"
+      @done="fetchDigest()"
+    />
 
     <div v-if="isLoading" class="flex justify-center py-20">
       <UIcon name="i-lucide-loader-2" class="animate-spin text-4xl text-primary" />
