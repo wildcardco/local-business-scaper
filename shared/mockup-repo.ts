@@ -89,7 +89,7 @@ export function mockupGithubUrl(repo: string | null): string | null {
 export function parseMockupRepo(value: string | null | undefined): { owner: string, name: string } | null {
   const trimmed = String(value || '').trim().toLowerCase()
   const match = /^([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)\/(wildcard-mockup-[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)$/.exec(trimmed)
-  if (!match || match[1] !== MOCKUP_GITHUB_OWNER) return null
+  if (!match?.[1] || match[1] !== MOCKUP_GITHUB_OWNER || !match[2]) return null
   return { owner: match[1], name: match[2] }
 }
 
