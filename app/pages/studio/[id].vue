@@ -458,14 +458,21 @@ function statusColor(status: string) {
           {{ mockup?.locationLabel || mockup?.business?.category || 'City not on file' }}
         </p>
       </div>
-      <UButton
-        class="min-h-11 w-full justify-center sm:w-auto"
-        to="/studio"
-        variant="ghost"
-        icon="i-lucide-arrow-left"
-      >
-        All mockups
-      </UButton>
+      <div class="flex w-full min-w-0 flex-col gap-2 sm:w-auto">
+        <UButton
+          class="min-h-11 w-full justify-center sm:w-auto"
+          to="/studio"
+          variant="ghost"
+          icon="i-lucide-arrow-left"
+        >
+          All mockups
+        </UButton>
+        <DeleteMockupDialog
+          v-if="mockup"
+          :mockup-id="mockup.id"
+          :repo="mockup.deleteRepo"
+        />
+      </div>
     </div>
 
     <div

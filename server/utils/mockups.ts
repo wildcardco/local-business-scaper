@@ -1,7 +1,7 @@
 import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
-import { githubRepoForMockup, mockupGithubUrl } from '~~/shared/mockup-repo'
+import { githubRepoForMockup, mockupDeleteRepo, mockupGithubUrl } from '~~/shared/mockup-repo'
 import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/mockup-cost'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import {
@@ -95,6 +95,12 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     deploymentMissing,
     githubRepo,
     githubUrl: mockupGithubUrl(githubRepo),
+    deleteRepo: mockupDeleteRepo({
+      owner: (row.owner as string) || null,
+      businessName,
+      placeId,
+      stored: (row.github_repo as string) || null
+    }),
     locationLabel: locationLabel({
       city,
       state,
