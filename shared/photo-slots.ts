@@ -95,9 +95,13 @@ export function defaultPhotoQuery(key: string, category: string): string {
  * Ordered photo fields for generate_mockup.
  * photo_urls keeps real http(s) URLs only, hero first.
  * photo_slots keeps every slot, with an empty url when nothing was picked.
- * Returns null when no slot has a photo, so the webhook stays unchanged.
+ * Returns null when no slot has a photo, so a normal generate stays unchanged.
+ * includeEmpty sends the slot list anyway (regenerate after the user named slots).
  */
-export function generatePhotoWebhookFields(slots: { key: string, label: string, url: string }[]): GeneratePhotoWebhookFields | null {
+export function generatePhotoWebhookFields(
+  slots: { key: string, label: string, url: string }[],
+  opts?: { includeEmpty?: boolean }
+): GeneratePhotoWebhookFields | null {
   const cleaned: GeneratePhotoSlotPayload[] = []
   for (const slot of slots) {
     const key = slot.key.trim().toLowerCase()
@@ -113,8 +117,20 @@ export function generatePhotoWebhookFields(slots: { key: string, label: string, 
     ? [cleaned[heroIndex]!, ...cleaned.filter((_, index) => index !== heroIndex)]
     : cleaned
   const photo_urls = ordered.map(slot => slot.url).filter(url => url.startsWith('http'))
-  if (!photo_urls.length) return null
+  if (!photo_urls.length && !opts?.includeEmpty) return null
   return { photo_urls, photo_slots: ordered }
+}
+
+/** What WF-2 should see as last_feedback. A regenerate must be empty so the factory builds a new page. */
+export function factoryFeedback(opts: {
+  clearFeedback?: boolean
+  extraPrompt?: string | null
+  stored?: string | null
+}): string {
+  if (opts.clearFeedback) return ''
+  const extra = opts.extraPrompt?.replace(/\s+/g, ' ').trim()
+  if (extra) return extra
+  return opts.stored?.trim() || ''
 }
 
 /**

@@ -4,6 +4,7 @@ import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-loc
 import { githubRepoForMockup, mockupDeleteRepo, mockupGithubUrl } from '~~/shared/mockup-repo'
 import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/mockup-cost'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
+import { factoryFeedback } from '~~/shared/photo-slots'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -11,6 +12,7 @@ import {
   studioPlaceId,
   applyN8nLeadToMockup,
   findRunningFactoryJob,
+  writeN8nLeadFeedback,
   type StudioAction
 } from '~~/server/utils/n8n'
 
@@ -297,6 +299,8 @@ export async function fireMockupAction(opts: {
   model?: string
   maxTokens?: number
   force?: boolean
+  /** Drop stored revision notes so WF-2 builds a new page instead of editing the current one. */
+  clearFeedback?: boolean
 }) {
   const mockup = await getMockupForUser(opts.mockupId, opts.user.id)
   if (!mockup) {
@@ -326,7 +330,12 @@ export async function fireMockupAction(opts: {
   const ai = await getStudioAiSettings(opts.user.id)
   const model = opts.model || ai.model
   const maxTokens = opts.maxTokens || ai.maxTokens
-  const extraPrompt = opts.extraPrompt || opts.feedback || null
+  const feedbackText = factoryFeedback({
+    clearFeedback: opts.clearFeedback,
+    extraPrompt: opts.extraPrompt || opts.feedback,
+    stored: mockup.lastFeedback
+  })
+  const extraPrompt = opts.clearFeedback ? null : (feedbackText || null)
   const business = mockup.business
   const placeId = studioPlaceId({
     placeId: mockup.placeId || business?.placeId,
@@ -342,6 +351,9 @@ export async function fireMockupAction(opts: {
         ? 'revising'
         : 'generating'
   const owner = ownerSlugFromEmail(opts.user.email)
+  if (opts.clearFeedback && placeId) {
+    await writeN8nLeadFeedback(placeId, owner, '')
+  }
   const stampActivity = opts.action === 'generate_mockup' || opts.action === 'revise_mockup'
   await ensureMockupLinkColumns()
 
@@ -377,8 +389,8 @@ export async function fireMockupAction(opts: {
       category: business?.category,
       rating: business?.rating,
       review_count: business?.reviewCount,
-      last_feedback: extraPrompt || mockup.lastFeedback,
-      extra_prompt: extraPrompt,
+      last_feedback: opts.clearFeedback ? '' : (feedbackText || mockup.lastFeedback),
+      extra_prompt: opts.clearFeedback ? (opts.extraPrompt || opts.feedback || null) : extraPrompt,
       photo_urls: opts.photoUrls || mockup.photoUrls,
       ...(opts.photoSlots?.length ? { photo_slots: opts.photoSlots } : {}),
       model,

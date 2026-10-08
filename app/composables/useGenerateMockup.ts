@@ -21,14 +21,17 @@ export async function postGenerateMockup(body: Record<string, unknown>) {
 
 export function useGenerateMockup() {
   const businessId = useState<string | null>('generate-mockup-business-id', () => null)
+  const intent = useState<'generate' | 'regenerate'>('generate-mockup-intent', () => 'generate')
 
-  function open(id: string) {
+  function open(id: string, next: 'generate' | 'regenerate' = 'generate') {
+    intent.value = next
     businessId.value = id
   }
 
   function close() {
     businessId.value = null
+    intent.value = 'generate'
   }
 
-  return { businessId, open, close, postGenerateMockup }
+  return { businessId, intent, open, close, postGenerateMockup }
 }

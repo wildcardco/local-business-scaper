@@ -11,11 +11,15 @@ import {
 const props = defineProps<{
   category: string
   disabled?: boolean
+  keepEmptySlots?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:payload': [payload: GeneratePhotoWebhookFields | null]
+  'update:touched': [touched: boolean]
 }>()
+
+const slotsTouched = ref(false)
 
 interface DraftSlot {
   key: string
@@ -61,13 +65,16 @@ function applyDefaultQueries() {
 
 watch(() => props.category, applyDefaultQueries, { immediate: true })
 
-watch(slots, () => {
+function emitPayload() {
   emit('update:payload', generatePhotoWebhookFields(slots.value.map(slot => ({
     key: slot.key,
     label: slot.label,
     url: slot.url
-  }))))
-}, { deep: true, immediate: true })
+  })), { includeEmpty: Boolean(props.keepEmptySlots && slotsTouched.value) }))
+}
+
+watch(slots, emitPayload, { deep: true, immediate: true })
+watch(() => props.keepEmptySlots, emitPayload)
 
 function uniqueKey(base: string) {
   const key = base === 'hero' ? 'photo' : base
@@ -78,7 +85,15 @@ function uniqueKey(base: string) {
   return `${key}-${n}`
 }
 
+function touchSlots() {
+  if (slotsTouched.value) return
+  slotsTouched.value = true
+  emit('update:touched', true)
+  emitPayload()
+}
+
 function addSlot() {
+  touchSlots()
   const label = addedLabel.value.replace(/\s+/g, ' ').trim()
   if (!label || props.disabled) return
   if (slots.value.length >= 12) {
@@ -99,6 +114,7 @@ function addSlot() {
 }
 
 function removeSlot(key: string) {
+  touchSlots()
   if (key === 'hero' || props.disabled) return
   slots.value = slots.value.filter(slot => slot.key !== key)
   if (activeKey.value === key) {
@@ -179,7 +195,7 @@ function clearPhoto(slot: DraftSlot) {
           class="min-w-0 flex-1"
           :disabled="disabled"
           :aria-label="`${slot.label} name`"
-          @update:model-value="slot.label = String($event || '')"
+          @update:model-value="slot.label = String($event || ''); touchSlots()"
         />
         <UButton
           v-if="slot.key !== 'hero'"

@@ -8,7 +8,8 @@ import type { GeneratePhotoWebhookFields } from '~~/shared/photo-slots'
 
 type ListingStatus = 'idle' | 'loading' | 'done' | 'skipped' | 'error'
 
-const { businessId, close, postGenerateMockup } = useGenerateMockup()
+const { businessId, intent, close, postGenerateMockup } = useGenerateMockup()
+const isRegenerate = computed(() => intent.value === 'regenerate')
 const { optionsFor, hintFor, source: modelSource } = useStudioModels()
 const toast = useToast()
 const router = useRouter()
@@ -42,6 +43,7 @@ const form = ref({
 
 const socials = ref<{ label: string, href: string }[]>([])
 const photoPayload = ref<GeneratePhotoWebhookFields | null>(null)
+const slotsTouched = ref(false)
 
 const modelOptions = computed(() => optionsFor(form.value.model))
 
@@ -118,6 +120,7 @@ watch(businessId, async (id) => {
   listingStatus.value = 'idle'
   listingMessage.value = ''
   socials.value = []
+  slotsTouched.value = false
   try {
     const [biz, branding] = await Promise.all([
       $fetch(`/api/businesses/${id}`),
@@ -170,6 +173,8 @@ async function confirm() {
       extraPrompt: form.value.extraPrompt.trim() || undefined,
       model: form.value.model,
       maxTokens: form.value.maxTokens,
+      regenerate: isRegenerate.value,
+      includeEmptySlots: isRegenerate.value && slotsTouched.value,
       ...(photoPayload.value
         ? {
             photo_urls: photoPayload.value.photo_urls,
@@ -204,8 +209,8 @@ async function confirm() {
 <template>
   <UModal
     v-model:open="open"
-    title="Generate mockup"
-    description="Confirm the listing, add direction for the designer, and pick the model for this run."
+    :title="isRegenerate ? 'Regenerate mockup' : 'Generate mockup'"
+    description="Confirm the listing. Photos and named slots are optional. A regenerate builds a new page and does not reuse old revision notes."
     :ui="{
       content: 'generate-mockup-modal sm:max-w-lg sm:max-h-[90vh]',
       header: 'shrink-0',
@@ -289,9 +294,12 @@ async function confirm() {
         </p>
 
         <GenerateMockupPhotos
+          :key="businessId || 'none'"
           :category="form.category"
           :disabled="isSaving"
+          :keep-empty-slots="isRegenerate"
           @update:payload="photoPayload = $event"
+          @update:touched="slotsTouched = $event"
         />
 
         <UFormField label="Add to prompt" help="Optional direction for this mockup — layout, tone, photos to feature, what to avoid.">
@@ -338,7 +346,7 @@ async function confirm() {
           :disabled="isLoading || listingStatus === 'loading'"
           @click="confirm"
         >
-          Generate mockup
+          {{ isRegenerate ? 'Regenerate mockup' : 'Generate mockup' }}
         </UButton>
       </div>
     </template>
