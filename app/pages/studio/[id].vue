@@ -398,7 +398,11 @@ async function sendAssignedPhotos(payload: { urls: string[], unsplashIds: string
         body: { ids: payload.unsplashIds }
       }).catch(() => {})
     }
-    toast.add({ title: 'Photos sent', color: 'success' })
+    toast.add({
+      title: usingImageSpots.value ? 'Photos saved on this page' : 'Photos sent',
+      description: usingImageSpots.value ? 'Vercel redeploys from the GitHub commit. The copy and layout were not rewritten.' : undefined,
+      color: 'success'
+    })
     await refresh()
   } catch (error: unknown) {
     photoError.value = readError(error, 'n8n did not accept the photos.')
