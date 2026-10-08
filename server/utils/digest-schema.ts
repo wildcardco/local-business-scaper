@@ -31,7 +31,17 @@ export const DIGEST_SCHEMA_SQL = [
       FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
     )`,
   `CREATE INDEX IF NOT EXISTS idx_digest_leads_digest ON digest_leads(digest_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_digest_leads_business ON digest_leads(business_id)`
+  `CREATE INDEX IF NOT EXISTS idx_digest_leads_business ON digest_leads(business_id)`,
+  `CREATE TABLE IF NOT EXISTS digest_rerolls (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      digest_date TEXT NOT NULL,
+      category TEXT NOT NULL,
+      random INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
+  `CREATE INDEX IF NOT EXISTS idx_digest_rerolls_user_date ON digest_rerolls(user_id, digest_date)`
 ]
 
 let digestTablesReady: Promise<void> | null = null

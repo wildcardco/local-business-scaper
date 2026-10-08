@@ -28,11 +28,14 @@ export default defineEventHandler(async (event) => {
     args: [user.id, date]
   })
 
+  const rerollCount = await countDigestRerolls(String(user.id), date)
+
   const digest = digestResult.rows[0]
   if (!digest) {
     return {
       digest: null,
-      leads: []
+      leads: [],
+      rerollCount
     }
   }
 
@@ -129,6 +132,15 @@ export default defineEventHandler(async (event) => {
         status: row.mockup_status,
         url: row.mockup_url
       } : null
-    }))
+    })),
+    rerollCount
   }
 })
+
+async function countDigestRerolls(userId: string, date: string) {
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM digest_rerolls WHERE user_id = ? AND digest_date = ?`,
+    args: [userId, date]
+  })
+  return Number(result.rows[0]?.n || 0)
+}

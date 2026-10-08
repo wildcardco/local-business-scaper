@@ -185,6 +185,12 @@ watch(() => route.query.focus, (focus) => {
         </UButton>
       </div>
 
+      <DigestReroll
+        class="mb-3"
+        :reroll-count="Number(digestData?.rerollCount || 0)"
+        @done="refreshDigest()"
+      />
+
       <DashboardQuickSearch
         ref="quickSearch"
         :loading="isSearching"
