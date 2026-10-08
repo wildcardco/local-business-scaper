@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const digestResult = await db.execute({
-    sql: `SELECT id, digest_date, search_category, search_location, lead_count, received_at
+    sql: `SELECT id, digest_date, search_category, search_location, lead_count, received_at, updated_at
           FROM digests WHERE user_id = ? AND digest_date = ? LIMIT 1`,
     args: [user.id, date]
   })
@@ -99,7 +99,8 @@ export default defineEventHandler(async (event) => {
         location: digest.search_location
       },
       lead_count: digest.lead_count,
-      received_at: digest.received_at
+      received_at: digest.received_at,
+      updated_at: digest.updated_at
     },
     leads: leadsResult.rows.map(row => ({
       id: row.id,

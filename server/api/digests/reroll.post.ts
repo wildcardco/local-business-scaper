@@ -1,6 +1,6 @@
 import { resolveCategoryQuery } from '~/data/business-categories'
 import { getTodayCentralTime } from '~~/shared/date-utils'
-import { normalizeRerollCategory, rerollNeedsCostWarning, rerollWebhookChoice } from '~~/shared/digest-reroll'
+import { normalizeRerollCategory, REROLL_SECRET_HEADER, rerollNeedsCostWarning, rerollSecretHeader, rerollWebhookChoice, rerollWebhookResult } from '~~/shared/digest-reroll'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { db, generateId } from '~~/server/utils/db'
 import { ensureDigestTables } from '~~/server/utils/digest-schema'
@@ -112,11 +112,19 @@ function rerollWebhookUrl() {
 }
 
 async function postRerollWebhook(url: string, payload: { owner: string, date: string, category: string, random: boolean }) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const secret = rerollSecretHeader(useRuntimeConfig().n8nRerollSecret)
+  if (secret) {
+    headers[REROLL_SECRET_HEADER] = secret
+  } else {
+    console.warn('N8N_REROLL_SECRET is unset. Re-roll webhook sent without X-Reroll-Secret.')
+  }
+
   let response: Response
   try {
     response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS)
     })
@@ -135,13 +143,22 @@ async function postRerollWebhook(url: string, payload: { owner: string, date: st
     })
   }
 
-  if (!response.ok) {
-    const text = (await response.text()).slice(0, 300)
+  const body = await readWebhookBody(response)
+  const result = rerollWebhookResult(response.status, body)
+  if (!result.accepted) {
     throw createError({
-      statusCode: 502,
-      message: text
-        ? `The re-roll webhook returned ${response.status}: ${text}`
-        : `The re-roll webhook returned ${response.status}.`
+      statusCode: result.statusCode,
+      message: result.message
     })
+  }
+}
+
+async function readWebhookBody(response: Response): Promise<unknown> {
+  const text = (await response.text()).trim()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text.slice(0, 300)
   }
 }

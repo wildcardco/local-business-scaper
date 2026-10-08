@@ -63,6 +63,7 @@ export default defineNuxtConfig({
     n8nCallbackUrl: process.env.N8N_CALLBACK_URL || '',
     digestIngestSecret: process.env.DIGEST_INGEST_SECRET,
     n8nRerollWebhookUrl: process.env.N8N_REROLL_WEBHOOK_URL || '',
+    n8nRerollSecret: process.env.N8N_REROLL_SECRET || '',
     githubToken: process.env.GITHUB_TOKEN || '',
 
     // ImageKit
