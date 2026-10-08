@@ -81,7 +81,7 @@ async function confirmDelete() {
             class="text-sm text-muted"
           >
             This removes only this Studio record, its Vercel project, and the GitHub repo
-            <span class="break-all font-medium text-highlighted">{{ repo }}</span>.
+            <span class="break-words font-mono text-xs font-medium text-highlighted">{{ repo }}</span>.
             Other mockups stay.
           </p>
           <p
