@@ -64,7 +64,6 @@ export default defineNuxtConfig({
     digestIngestSecret: process.env.DIGEST_INGEST_SECRET,
     n8nRerollWebhookUrl: process.env.N8N_REROLL_WEBHOOK_URL || '',
     githubToken: process.env.GITHUB_TOKEN || '',
-    vercelToken: process.env.VERCEL_TOKEN || '',
 
     // ImageKit
     imageKitUrl: process.env.IMAGE_KIT_URL,
@@ -75,6 +74,7 @@ export default defineNuxtConfig({
     pixabayApiKey: process.env.PIXABAY_API_KEY || '',
     pexelsApiKey: process.env.PEXELS_API_KEY || '',
     unsplashAccessKey: process.env.UNSPLASH_ACCESS_KEY || '',
+    vercelToken: process.env.VERCEL_TOKEN || '',
 
     public: {
       imageKitUrl: process.env.IMAGE_KIT_URL,
