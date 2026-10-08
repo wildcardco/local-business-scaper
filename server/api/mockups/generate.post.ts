@@ -32,7 +32,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const photoFields = photoFieldsFromBody(body)
+  const regenerate = body.regenerate === true
+  const photoFields = photoFieldsFromBody(body, regenerate && body.includeEmptySlots === true)
 
   const mockup = await fireMockupAction({
     event,
@@ -43,6 +44,7 @@ export default defineEventHandler(async (event) => {
     model: typeof body.model === 'string' ? body.model : undefined,
     maxTokens: body.maxTokens != null ? Number(body.maxTokens) : undefined,
     force: body.force === true,
+    clearFeedback: regenerate,
     ...(photoFields
       ? { photoUrls: photoFields.photo_urls, photoSlots: photoFields.photo_slots }
       : {})
@@ -51,7 +53,7 @@ export default defineEventHandler(async (event) => {
   return { success: true, mockup: mockup || await getMockupForUser(targetMockupId, user.id) }
 })
 
-function photoFieldsFromBody(body: Record<string, unknown>) {
+function photoFieldsFromBody(body: Record<string, unknown>, includeEmpty: boolean) {
   const raw = body.photo_slots ?? body.photoSlots
   if (!Array.isArray(raw)) return null
   return generatePhotoWebhookFields(raw.map((item) => {
@@ -61,5 +63,5 @@ function photoFieldsFromBody(body: Record<string, unknown>) {
       label: typeof row.label === 'string' ? row.label : '',
       url: typeof row.url === 'string' ? row.url : ''
     }
-  }))
+  }), { includeEmpty })
 }

@@ -34,8 +34,31 @@ function slotScript(parentOrigin: string): string {
   layer.setAttribute('style', 'position:fixed;inset:0;z-index:2147483646;pointer-events:none;');
   var state = { activeIndex: null, assignments: {}, armed: false };
   function root() { return document.body || document.documentElement; }
+  function skipImage(el) {
+    var src = String(el.getAttribute('src') || '');
+    var hint = src + ' ' + String(el.getAttribute('alt') || '') + ' ' + String(el.className || '') + ' ' + String(el.id || '');
+    if (/logo|icon|favicon|sprite|pixel|badge|emoji/i.test(hint)) return true;
+    if (/\\.svg(?:$|\\?)/i.test(src) || src.indexOf('data:') === 0) return true;
+    var width = Number(el.getAttribute('width') || 0);
+    var height = Number(el.getAttribute('height') || 0);
+    return width > 0 && width < 48 && height > 0 && height < 48;
+  }
   function list() {
-    return Array.prototype.slice.call(document.querySelectorAll('[data-photo-slot], [data-photo-query]'));
+    var marked = Array.prototype.slice.call(document.querySelectorAll('[data-photo-slot], [data-photo-query]'));
+    if (marked.length) return marked;
+    var spots = [];
+    var nodes = document.querySelectorAll('body *');
+    for (var i = 0; i < nodes.length && spots.length < 24; i++) {
+      var el = nodes[i];
+      if (el.closest('script, style, svg')) continue;
+      if (String(el.tagName).toUpperCase() === 'IMG') {
+        if (!skipImage(el)) spots.push(el);
+        continue;
+      }
+      var style = String(el.getAttribute('style') || '');
+      if (/background(?:-image)?\\s*:[^;]*url\\(\\s*['"]?https?:\\/\\//i.test(style)) spots.push(el);
+    }
+    return spots;
   }
   function slotKey(el) {
     return String(el.getAttribute('data-photo-slot') || '').replace(/\\s+/g, ' ').trim();
