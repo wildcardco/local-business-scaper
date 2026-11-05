@@ -1,6 +1,8 @@
 import { db } from '~~/server/utils/db'
+import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import { verifyStudioSecret } from '~~/server/utils/n8n'
 import { MOCKUP_GITHUB_OWNER } from '~~/shared/mockup-repo'
+import { isWebStackCallback, readWebStackWebhook } from '~~/shared/web-stack'
 
 function githubRepoFromCallback(body: Record<string, unknown>) {
   const direct = typeof body.github_repo === 'string'
@@ -16,6 +18,7 @@ function githubRepoFromCallback(body: Record<string, unknown>) {
 
 export default defineEventHandler(async (event) => {
   verifyStudioSecret(event)
+  await ensureMockupLinkColumns()
   const body = await readBody(event)
 
   const mockupId = typeof body.mockup_id === 'string' ? body.mockup_id : ''
@@ -47,16 +50,27 @@ export default defineEventHandler(async (event) => {
   }
 
   const row = existing.rows[0]
-  const status = typeof body.status === 'string' ? body.status : row.status
-  const errorMessage = typeof body.error === 'string' ? body.error : (typeof body.message === 'string' ? body.message : null)
-  const mockupUrl = body.mockup_url != null ? String(body.mockup_url) : row.mockup_url
+  const webStack = isWebStackCallback(body)
+  const parsed = webStack ? readWebStackWebhook(body) : null
+  const keepWebStack = String(row.build_mode || '') === 'web_stack' && !webStack
+  const errorMessage = typeof body.error === 'string'
+    ? body.error
+    : (typeof body.message === 'string' ? body.message : null)
+  const status = keepWebStack
+    ? row.status
+    : (parsed ? parsed.status : (typeof body.status === 'string' ? body.status : row.status))
+  const mockupUrl = keepWebStack
+    ? row.mockup_url
+    : (body.mockup_url != null ? String(body.mockup_url) : row.mockup_url)
   const mockupVersion = body.mockup_version != null ? Number(body.mockup_version) : row.mockup_version
   const pitchDraft = body.pitch_draft != null ? String(body.pitch_draft) : row.pitch_draft
   const pitchSubject = body.pitch_subject != null ? String(body.pitch_subject) : row.pitch_subject
   const pitchVersion = body.pitch_version != null ? Number(body.pitch_version) : row.pitch_version
   const lastFeedback = body.last_feedback != null
     ? String(body.last_feedback)
-    : (status === 'failed' && errorMessage ? errorMessage : row.last_feedback)
+    : (webStack || keepWebStack
+        ? row.last_feedback
+        : (status === 'failed' && errorMessage ? errorMessage : row.last_feedback))
   const photoUrls = Array.isArray(body.photo_urls)
     ? JSON.stringify(body.photo_urls)
     : (typeof body.photo_urls === 'string' ? body.photo_urls : row.photo_urls)
@@ -66,12 +80,23 @@ export default defineEventHandler(async (event) => {
     sql: `UPDATE mockups SET
       status = ?, mockup_url = ?, mockup_version = ?, pitch_draft = ?, pitch_subject = ?,
       pitch_version = ?, last_feedback = ?, photo_urls = ?, github_repo = COALESCE(?, github_repo),
+      build_mode = CASE WHEN ? = 1 THEN 'web_stack' ELSE build_mode END,
+      agent_id = CASE WHEN ? = 1 THEN COALESCE(?, agent_id) ELSE agent_id END,
+      preview_url = CASE WHEN ? = 1 THEN COALESCE(?, preview_url) ELSE preview_url END,
+      build_status = CASE WHEN ? = 1 THEN COALESCE(?, build_status) ELSE build_status END,
+      build_error = CASE WHEN ? = 1 THEN ? ELSE build_error END,
       n8n_synced_at = datetime('now'),
       updated_at = datetime('now')
       WHERE id = ?`,
     args: [
       status, mockupUrl, mockupVersion, pitchDraft, pitchSubject,
-      pitchVersion, lastFeedback, photoUrls, githubRepo, row.id
+      pitchVersion, lastFeedback, photoUrls, githubRepo,
+      webStack ? 1 : 0,
+      webStack ? 1 : 0, parsed?.agentId || null,
+      webStack ? 1 : 0, parsed?.previewUrl || null,
+      webStack ? 1 : 0, parsed?.rawStatus || null,
+      webStack ? 1 : 0, parsed?.error || null,
+      row.id
     ]
   })
 

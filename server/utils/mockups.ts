@@ -8,6 +8,7 @@ import { factoryFeedback } from '~~/shared/photo-slots'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
+  fireWebStackAction,
   getStudioAiSettings,
   studioPlaceId,
   applyN8nLeadToMockup,
@@ -15,6 +16,14 @@ import {
   writeN8nLeadFeedback,
   type StudioAction
 } from '~~/server/utils/n8n'
+import {
+  BUILD_MODE_WEB_STACK,
+  cursorAgentUrl,
+  httpsUrl,
+  parseBuildMode,
+  WEB_STACK_AGENT_MODEL,
+  type BuildMode
+} from '~~/shared/web-stack'
 
 export interface MockupRow {
   id: string
@@ -117,6 +126,12 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     photoUrls,
     costs: mapMockupCosts(row.mockup_cost_ledger),
     aiModel: (row.ai_model as string) || null,
+    buildMode: row.build_mode === BUILD_MODE_WEB_STACK ? BUILD_MODE_WEB_STACK : 'html' as BuildMode,
+    agentId: cursorAgentUrl(row.agent_id) ? String(row.agent_id) : null,
+    agentUrl: cursorAgentUrl(row.agent_id),
+    previewUrl: httpsUrl(row.preview_url),
+    buildStatus: typeof row.build_status === 'string' && row.build_status ? row.build_status : null,
+    buildError: typeof row.build_error === 'string' && row.build_error ? row.build_error : null,
     n8nSyncedAt: (row.n8n_synced_at as string) || null,
     madeAt: (row.made_at as string) || null,
     n8nCreatedAt: (row.n8n_created_at as string) || null,
@@ -151,16 +166,19 @@ export function visibleMockupSql(alias: string) {
       ${vercel}
       OR COALESCE(${alias}.source, 'studio') != 'digest'
       OR ${alias}.status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+      OR COALESCE(${alias}.build_mode, 'html') = 'web_stack'
     )
     AND COALESCE(${alias}.deployment_missing, 0) = 0
   )`
 }
 
 export async function removeDigestLeadsWithoutMockups(userId: string) {
+  await ensureMockupLinkColumns()
   await db.execute({
     sql: `DELETE FROM mockups
           WHERE user_id = ?
             AND COALESCE(source, 'studio') = 'digest'
+            AND COALESCE(build_mode, 'html') != 'web_stack'
             AND status NOT IN ('generating', 'writing_pitch', 'enhancing', 'revising')
             AND NOT (
               lower(trim(COALESCE(mockup_url, ''))) LIKE 'https://%.vercel.app%'
@@ -184,11 +202,13 @@ export async function removeDigestLeadsWithoutMockups(userId: string) {
 const STALE_MINUTES = 12
 
 export async function expireStaleMockups(userId: string, mockupId?: string) {
+  await ensureMockupLinkColumns()
   await db.execute({
     sql: `UPDATE mockups
           SET status = 'failed', updated_at = datetime('now')
           WHERE user_id = ?
             AND status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+            AND COALESCE(build_mode, 'html') != 'web_stack'
             AND updated_at < datetime('now', '-${STALE_MINUTES} minutes')
             ${mockupId ? 'AND id = ?' : ''}`,
     args: mockupId ? [userId, mockupId] : [userId]
@@ -205,18 +225,22 @@ export async function markMockupFailed(id: string, userId: string, message: stri
 }
 
 export async function getMockupForUser(id: string, userId: string) {
+  await ensureMockupLinkColumns()
   const existing = await db.execute({
-    sql: 'SELECT place_id FROM mockups WHERE id = ? AND user_id = ?',
+    sql: 'SELECT place_id, build_mode FROM mockups WHERE id = ? AND user_id = ?',
     args: [id, userId]
   })
   if (!existing.rows[0]) return null
 
   const placeId = (existing.rows[0].place_id as string) || ''
-  if (placeId) {
+  const buildMode = String(existing.rows[0].build_mode || '')
+  if (placeId && buildMode !== BUILD_MODE_WEB_STACK) {
     await applyN8nLeadToMockup(userId, id, placeId)
   }
   await expireStaleMockups(userId, id)
-  await checkUserMockupLinks(userId, id)
+  if (buildMode !== BUILD_MODE_WEB_STACK) {
+    await checkUserMockupLinks(userId, id)
+  }
 
   const result = await db.execute({
     sql: `
@@ -301,18 +325,29 @@ export async function fireMockupAction(opts: {
   force?: boolean
   /** Drop stored revision notes so WF-2 builds a new page instead of editing the current one. */
   clearFeedback?: boolean
+  /** `web_stack` sends the same lead to the web stack webhook. Anything else stays plain HTML. */
+  buildMode?: unknown
 }) {
   const mockup = await getMockupForUser(opts.mockupId, opts.user.id)
   if (!mockup) {
     throw createError({ statusCode: 404, message: 'Mockup not found' })
   }
 
-  if (!opts.force && (opts.action === 'generate_mockup' || opts.action === 'revise_mockup')) {
+  const buildMode = opts.action === 'generate_mockup' ? parseBuildMode(opts.buildMode) : 'html'
+  const busyLocal = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.status)
+
+  if (buildMode === BUILD_MODE_WEB_STACK) {
+    if (!opts.force && busyLocal && mockup.buildMode === BUILD_MODE_WEB_STACK) {
+      throw createError({
+        statusCode: 409,
+        message: 'A web stack build is already running for this listing. Wait for it to finish, or confirm to start another.'
+      })
+    }
+  } else if (!opts.force && (opts.action === 'generate_mockup' || opts.action === 'revise_mockup')) {
     const running = await findRunningFactoryJob({
       placeId: mockup.placeId || mockup.business?.placeId,
       mockupId: mockup.id
     })
-    const busyLocal = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.status)
     if (running.matched) {
       throw createError({
         statusCode: 409,
@@ -351,16 +386,23 @@ export async function fireMockupAction(opts: {
         ? 'revising'
         : 'generating'
   const owner = ownerSlugFromEmail(opts.user.email)
-  if (opts.clearFeedback && placeId) {
+  if (buildMode !== BUILD_MODE_WEB_STACK && opts.clearFeedback && placeId) {
     await writeN8nLeadFeedback(placeId, owner, '')
   }
   const stampActivity = opts.action === 'generate_mockup' || opts.action === 'revise_mockup'
+  const webStack = buildMode === BUILD_MODE_WEB_STACK
   await ensureMockupLinkColumns()
 
   await db.execute({
     sql: `UPDATE mockups SET
       place_id = ?, owner = ?, status = ?, last_feedback = COALESCE(?, last_feedback),
       photo_urls = COALESCE(?, photo_urls), ai_model = ?,
+      build_mode = CASE WHEN ? = 1 THEN ? ELSE build_mode END,
+      agent_id = CASE WHEN ? = 1 THEN NULL ELSE agent_id END,
+      preview_url = CASE WHEN ? = 1 THEN NULL ELSE preview_url END,
+      build_status = CASE WHEN ? = 1 THEN NULL ELSE build_status END,
+      build_error = CASE WHEN ? = 1 THEN NULL ELSE build_error END,
+      deployment_missing = CASE WHEN ? = 1 THEN 0 ELSE deployment_missing END,
       made_at = CASE WHEN ? = 1 THEN datetime('now') ELSE made_at END,
       updated_at = datetime('now')
       WHERE id = ? AND user_id = ?`,
@@ -370,42 +412,78 @@ export async function fireMockupAction(opts: {
       nextStatus,
       extraPrompt,
       opts.photoUrls ? JSON.stringify(opts.photoUrls) : null,
-      model,
+      webStack ? WEB_STACK_AGENT_MODEL : model,
+      opts.action === 'generate_mockup' ? 1 : 0,
+      buildMode,
+      webStack ? 1 : 0,
+      webStack ? 1 : 0,
+      webStack ? 1 : 0,
+      webStack ? 1 : 0,
+      webStack ? 1 : 0,
       stampActivity ? 1 : 0,
       mockup.id,
       opts.user.id
     ]
   })
 
+  const leadPayload = {
+    action: opts.action,
+    place_id: placeId,
+    owner,
+    business_name: business?.name || 'Untitled business',
+    website: business?.website,
+    phone: business?.phone,
+    address: [business?.address, business?.city, business?.state].filter(Boolean).join(', ') || null,
+    category: business?.category,
+    rating: business?.rating,
+    review_count: business?.reviewCount,
+    last_feedback: opts.clearFeedback ? '' : (feedbackText || mockup.lastFeedback),
+    extra_prompt: opts.clearFeedback ? (opts.extraPrompt || opts.feedback || null) : extraPrompt,
+    photo_urls: opts.photoUrls || mockup.photoUrls,
+    ...(opts.photoSlots?.length ? { photo_slots: opts.photoSlots } : {}),
+    model,
+    max_tokens: maxTokens,
+    pitch_max_tokens: ai.pitchMaxTokens,
+    research_model: model.includes('haiku') ? model : ai.researchModel,
+    callback_url: callbackUrlFromEvent(opts.event),
+    user_email: opts.user.email,
+    mockup_id: mockup.id,
+    business_id: mockup.businessId,
+    mockup_version: mockup.mockupVersion
+  }
+
   try {
-    await fireStudioAction({
-      action: opts.action,
-      place_id: placeId,
-      owner,
-      business_name: business?.name || 'Untitled business',
-      website: business?.website,
-      phone: business?.phone,
-      address: [business?.address, business?.city, business?.state].filter(Boolean).join(', ') || null,
-      category: business?.category,
-      rating: business?.rating,
-      review_count: business?.reviewCount,
-      last_feedback: opts.clearFeedback ? '' : (feedbackText || mockup.lastFeedback),
-      extra_prompt: opts.clearFeedback ? (opts.extraPrompt || opts.feedback || null) : extraPrompt,
-      photo_urls: opts.photoUrls || mockup.photoUrls,
-      ...(opts.photoSlots?.length ? { photo_slots: opts.photoSlots } : {}),
-      model,
-      max_tokens: maxTokens,
-      pitch_max_tokens: ai.pitchMaxTokens,
-      research_model: model.includes('haiku') ? model : ai.researchModel,
-      callback_url: callbackUrlFromEvent(opts.event),
-      user_email: opts.user.email,
-      mockup_id: mockup.id,
-      business_id: mockup.businessId,
-      mockup_version: mockup.mockupVersion
-    })
+    if (webStack) {
+      const result = await fireWebStackAction(leadPayload)
+      await db.execute({
+        sql: `UPDATE mockups SET
+          status = ?, agent_id = ?, preview_url = ?, build_status = ?, build_error = ?,
+          updated_at = datetime('now')
+          WHERE id = ? AND user_id = ?`,
+        args: [
+          result.status,
+          result.agentId,
+          result.previewUrl,
+          result.rawStatus,
+          result.error,
+          mockup.id,
+          opts.user.id
+        ]
+      })
+    } else {
+      await fireStudioAction(leadPayload)
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'n8n did not accept the Studio job'
-    await markMockupFailed(mockup.id, opts.user.id, message)
+    if (webStack) {
+      await db.execute({
+        sql: `UPDATE mockups SET status = 'failed', build_status = 'failed', build_error = ?, updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+        args: [message.slice(0, 500), mockup.id, opts.user.id]
+      })
+    } else {
+      await markMockupFailed(mockup.id, opts.user.id, message)
+    }
     throw error
   }
 

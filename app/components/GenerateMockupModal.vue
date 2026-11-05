@@ -5,6 +5,7 @@ import {
   TOKEN_PRESETS
 } from '~~/shared/studio-ai'
 import type { GeneratePhotoWebhookFields } from '~~/shared/photo-slots'
+import { BUILD_MODE_HTML, BUILD_MODE_WEB_STACK, type BuildMode } from '~~/shared/web-stack'
 
 type ListingStatus = 'idle' | 'loading' | 'done' | 'skipped' | 'error'
 
@@ -40,7 +41,8 @@ const form = ref({
   state: '',
   extraPrompt: '',
   model: DEFAULT_AI_MODEL,
-  maxTokens: DEFAULT_AI_MAX_TOKENS
+  maxTokens: DEFAULT_AI_MAX_TOKENS,
+  buildMode: BUILD_MODE_HTML as BuildMode
 })
 
 const socials = ref<{ label: string, href: string }[]>([])
@@ -156,6 +158,7 @@ watch(businessId, async (id) => {
       $fetch('/api/branding').catch(() => ({ branding: null }))
     ])
     form.value.extraPrompt = ''
+    form.value.buildMode = BUILD_MODE_HTML
     form.value.model = branding.branding?.aiModel || DEFAULT_AI_MODEL
     form.value.maxTokens = branding.branding?.aiMaxTokens || DEFAULT_AI_MAX_TOKENS
     applyBusiness(biz.business as Record<string, unknown>)
@@ -199,6 +202,7 @@ async function confirm() {
 
     const result = await postGenerateMockup({
       businessId: businessId.value,
+      buildMode: form.value.buildMode,
       extraPrompt: form.value.extraPrompt.trim() || undefined,
       model: form.value.model,
       maxTokens: form.value.maxTokens,
@@ -213,10 +217,14 @@ async function confirm() {
     })
     if (!result) return
 
+    const webStack = form.value.buildMode === BUILD_MODE_WEB_STACK
+    const failed = webStack && result.mockup?.status === 'failed'
     toast.add({
-      title: 'Mockup started',
-      description: 'Opening Studio',
-      color: 'success'
+      title: failed ? 'Web stack did not start' : (webStack ? 'Web stack build started' : 'Mockup started'),
+      description: failed
+        ? (result.mockup?.buildError || 'n8n returned an error.')
+        : (webStack ? 'Opening Studio for status, preview, and the agent link.' : 'Opening Studio'),
+      color: failed ? 'error' : 'success'
     })
     const id = result.mockup?.id
     close()
@@ -226,7 +234,9 @@ async function confirm() {
   } catch (error: unknown) {
     toast.add({
       title: 'Could not start mockup',
-      description: readError(error, 'Check the n8n studio webhook and X-Studio-Secret'),
+      description: readError(error, form.value.buildMode === BUILD_MODE_WEB_STACK
+        ? 'Check N8N_WEB_STACK_WEBHOOK_URL. Web stack does not fall back to plain HTML.'
+        : 'Check the n8n studio webhook and X-Studio-Secret'),
       color: 'error'
     })
   } finally {
@@ -360,6 +370,47 @@ async function confirm() {
           @update:touched="slotsTouched = $event"
         />
 
+        <fieldset>
+          <legend class="text-sm font-medium text-highlighted">
+            Build
+          </legend>
+          <div
+            class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
+            role="radiogroup"
+            aria-label="Build"
+          >
+            <label
+              class="flex min-h-11 cursor-pointer flex-col justify-center rounded-lg border px-3 py-2"
+              :class="form.buildMode === BUILD_MODE_HTML ? 'border-primary bg-elevated' : 'border-default'"
+            >
+              <input
+                v-model="form.buildMode"
+                class="sr-only"
+                type="radio"
+                name="mockup-build-mode"
+                :value="BUILD_MODE_HTML"
+              >
+              <span class="text-sm font-medium text-highlighted">Plain HTML</span>
+              <span class="mt-0.5 text-xs text-muted">Current Studio page. This is the default.</span>
+            </label>
+            <label
+              class="flex min-h-11 cursor-pointer flex-col justify-center rounded-lg border px-3 py-2"
+              :class="form.buildMode === BUILD_MODE_WEB_STACK ? 'border-primary bg-elevated' : 'border-default'"
+            >
+              <input
+                v-model="form.buildMode"
+                class="sr-only"
+                type="radio"
+                name="mockup-build-mode"
+                :value="BUILD_MODE_WEB_STACK"
+                data-build-mode="web_stack"
+              >
+              <span class="text-sm font-medium text-highlighted">Web Stack</span>
+              <span class="mt-0.5 text-xs text-muted">React, Vite, and Tailwind on grok-4.7. No on-demand fallback.</span>
+            </label>
+          </div>
+        </fieldset>
+
         <UFormField label="Add to prompt" help="Optional direction for this mockup — layout, tone, photos to feature, what to avoid.">
           <UTextarea
             v-model="form.extraPrompt"
@@ -369,7 +420,17 @@ async function confirm() {
           />
         </UFormField>
 
-        <UFormField label="Claude model" :help="modelHint">
+        <p
+          v-if="form.buildMode === BUILD_MODE_WEB_STACK"
+          class="text-sm text-muted"
+        >
+          Web stack sends this lead to its own n8n webhook. The agent is grok-4.7. The Claude model and token limit stay on plain HTML.
+        </p>
+        <UFormField
+          v-if="form.buildMode === BUILD_MODE_HTML"
+          label="Claude model"
+          :help="modelHint"
+        >
           <USelect
             v-model="form.model"
             :items="modelOptions"
@@ -377,12 +438,19 @@ async function confirm() {
             class="w-full"
           />
         </UFormField>
-        <p class="text-xs text-muted">
+        <p
+          v-if="form.buildMode === BUILD_MODE_HTML"
+          class="text-xs text-muted"
+        >
           {{ modelSource === 'anthropic' ? 'Model list loaded from the Anthropic Models API.' : 'Model list is the verified Anthropic fallback. Set ANTHROPIC_API_KEY to load it live.' }}
           Studio sends the id as model. n8n uses it only after WF-2 reads that field.
         </p>
 
-        <UFormField label="Max tokens" help="Lower this to save money if pages are coming out complete enough.">
+        <UFormField
+          v-if="form.buildMode === BUILD_MODE_HTML"
+          label="Max tokens"
+          help="Lower this to save money if pages are coming out complete enough."
+        >
           <USelect
             v-model="form.maxTokens"
             :items="tokenOptions"

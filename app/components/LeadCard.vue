@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { webStackStatusLabel } from '~~/shared/web-stack'
+
 const props = defineProps<{
   lead: {
     score?: number | null
@@ -20,6 +22,11 @@ const props = defineProps<{
       id: string
       status?: string | null
       url?: string | null
+      buildMode?: string | null
+      previewUrl?: string | null
+      agentUrl?: string | null
+      buildStatus?: string | null
+      buildError?: string | null
     } | null
   }
   tierSlug: string
@@ -151,7 +158,11 @@ function signalLabel(key: string, value: unknown): string {
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="text-sm font-medium text-highlighted mb-1">Mockup</p>
-            <p class="text-xs text-muted capitalize">{{ String(lead.mockup.status || '').replace(/_/g, ' ') }}</p>
+            <p class="text-xs text-muted capitalize">
+              {{ lead.mockup.buildMode === 'web_stack'
+                ? webStackStatusLabel(String(lead.mockup.status || ''), lead.mockup.buildStatus)
+                : String(lead.mockup.status || '').replace(/_/g, ' ') }}
+            </p>
           </div>
           <UButton
             :to="`/studio/${lead.mockup.id}`"
@@ -162,8 +173,15 @@ function signalLabel(key: string, value: unknown): string {
             View
           </UButton>
         </div>
+        <WebStackStatus
+          v-if="lead.mockup.buildMode === 'web_stack'"
+          class="mt-2"
+          :preview-url="lead.mockup.previewUrl"
+          :agent-url="lead.mockup.agentUrl"
+          :error="lead.mockup.buildError"
+        />
         <UButton
-          v-if="lead.mockup.url"
+          v-else-if="lead.mockup.url"
           :to="lead.mockup.url"
           target="_blank"
           size="xs"

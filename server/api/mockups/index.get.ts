@@ -44,6 +44,7 @@ export default defineEventHandler(async (event) => {
     sql: `SELECT id, place_id, status FROM mockups
           WHERE user_id = ?
             AND status IN ('generating', 'writing_pitch', 'enhancing', 'revising')
+            AND COALESCE(build_mode, 'html') != 'web_stack'
             AND place_id IS NOT NULL
             AND place_id != ''`,
     args: [user.id]
