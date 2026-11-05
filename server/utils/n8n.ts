@@ -12,6 +12,14 @@ import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
 import { costActionLabel, foldMockupCost, parseCostLedger } from '~~/shared/mockup-cost'
 import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
+import {
+  leadPayloadForBuild,
+  readWebStackWebhook,
+  WEB_STACK_SECRET_HEADER,
+  webStackSecretHeader,
+  webStackWebhookUrl,
+  type WebStackWebhookFields
+} from '~~/shared/web-stack'
 
 export const N8N_WF_FACTORY = 'jslUBLzcV27vdLIA'
 export const N8N_WF_PITCH = 'wkqEVHfuCV1CsS2a'
@@ -198,6 +206,75 @@ export async function fireStudioAction(payload: StudioLeadPayload) {
     if (error && typeof error === 'object' && 'statusCode' in error) throw error
     return { ok: true }
   }
+}
+
+/**
+ * Starts a React + Vite + Tailwind build on a Cursor Cloud Agent.
+ * Uses N8N_WEB_STACK_WEBHOOK_URL only. Does not call the plain HTML studio webhook.
+ */
+export async function fireWebStackAction(payload: StudioLeadPayload): Promise<WebStackWebhookFields> {
+  const config = useRuntimeConfig()
+  const checked = webStackWebhookUrl(config.n8nWebStackWebhookUrl)
+  if (!checked.ok) {
+    throw createError({ statusCode: 500, message: checked.message })
+  }
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const secret = webStackSecretHeader(config.n8nWebStackSecret)
+  if (secret) headers[WEB_STACK_SECRET_HEADER] = secret
+  else console.warn('N8N_WEB_STACK_SECRET is unset. Web stack webhook sent without X-Web-Stack-Secret.')
+
+  let response: Response
+  try {
+    response = await fetch(checked.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(leadPayloadForBuild(payload, 'web_stack')),
+      signal: AbortSignal.timeout(25_000)
+    })
+  } catch (error: unknown) {
+    const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : ''
+    const message = error instanceof Error ? error.message : 'network error'
+    if (name === 'TimeoutError' || name === 'AbortError' || /timeout/i.test(message)) {
+      throw createError({
+        statusCode: 504,
+        message: 'The web stack webhook did not answer in time. It should respond when the Cursor agent starts, not when the site is finished. Web stack does not fall back to plain HTML.'
+      })
+    }
+    throw createError({
+      statusCode: 502,
+      message: 'The web stack webhook could not be reached. Web stack does not fall back to plain HTML.'
+    })
+  }
+
+  const text = await response.text()
+  let json: unknown = null
+  if (text) {
+    try {
+      json = JSON.parse(text)
+    } catch {
+      json = null
+    }
+  }
+
+  if (!response.ok) {
+    const parsed = readWebStackWebhook(json)
+    const detail = parsed.error || text.replace(/\s+/g, ' ').trim().slice(0, 300) || response.statusText
+    throw createError({
+      statusCode: 502,
+      message: `Web stack webhook failed (${response.status}): ${detail}`
+    })
+  }
+
+  const parsed = readWebStackWebhook(json)
+  const rejected = json && typeof json === 'object' && !Array.isArray(json) && (json as { ok?: unknown }).ok === false
+  if (rejected && !parsed.rawStatus && !parsed.agentId && !parsed.previewUrl) {
+    throw createError({
+      statusCode: 502,
+      message: parsed.error || 'Web stack webhook returned ok:false. No build was started.'
+    })
+  }
+  return parsed
 }
 
 function unwrapLeadRow(row: unknown): Record<string, unknown> {

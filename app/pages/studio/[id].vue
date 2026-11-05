@@ -9,6 +9,7 @@ import {
   pitchJobView,
   type JobPhase
 } from '~~/shared/studio-job'
+import { webStackJobView, webStackStatusLabel } from '~~/shared/web-stack'
 
 definePageMeta({ hidePhoneTabs: true })
 
@@ -55,6 +56,13 @@ const pageSteps: { id: JobPhase, label: string }[] = [
   { id: 'failed', label: 'Failed' }
 ]
 
+const webStackSteps: { id: JobPhase, label: string }[] = [
+  { id: 'sending', label: 'Sending to n8n' },
+  { id: 'building', label: 'Building web stack' },
+  { id: 'ready', label: 'Ready' },
+  { id: 'failed', label: 'Failed' }
+]
+
 const pitchSteps: { id: JobPhase, label: string }[] = [
   { id: 'writing', label: 'Writing the pitch' },
   { id: 'sending', label: 'Sending the pitch' },
@@ -72,10 +80,18 @@ const feedbackSteps: { id: JobPhase, label: string }[] = [
 
 const failedText = computed(() => {
   if (jobFailure.value) return jobFailure.value
+  if (mockup.value?.buildMode === 'web_stack' && mockup.value?.buildError) return mockup.value.buildError
   return failureDetail(mockup.value?.status || '', mockup.value?.lastFeedback)
 })
 
 const headerJob = computed(() => {
+  if (mockup.value?.buildMode === 'web_stack') {
+    return webStackJobView({
+      posting: isGenerating.value,
+      status: mockup.value?.status || '',
+      error: failedText.value
+    })
+  }
   const view = pageJob({
     posting: isGenerating.value || isRevising.value || isPitching.value || isSendingPhotos.value,
     status: mockup.value?.status || ''
@@ -556,11 +572,18 @@ function statusColor(status: string) {
     <template v-else-if="mockup">
       <div class="flex flex-wrap items-center gap-2">
         <UBadge
+          v-if="mockup.buildMode === 'web_stack'"
+          color="neutral"
+          variant="outline"
+        >
+          Web stack
+        </UBadge>
+        <UBadge
           :color="statusColor(mockup.status)"
           variant="subtle"
           class="capitalize"
         >
-          {{ studioStatusLabel(mockup.status) }}
+          {{ mockup.buildMode === 'web_stack' ? webStackStatusLabel(mockup.status, mockup.buildStatus) : studioStatusLabel(mockup.status) }}
         </UBadge>
         <span class="text-xs text-muted">v{{ mockup.mockupVersion }}</span>
         <span
@@ -604,8 +627,31 @@ function statusColor(status: string) {
         :phase="headerJob.phase"
         :label="headerJob.label"
         :detail="headerJob.detail"
-        :steps="pageSteps"
+        :steps="mockup.buildMode === 'web_stack' ? webStackSteps : pageSteps"
       />
+
+      <section
+        v-if="mockup.buildMode === 'web_stack'"
+        class="min-w-0 space-y-3 rounded-2xl border border-default bg-elevated p-4"
+      >
+        <h2 class="font-semibold">
+          Web stack
+        </h2>
+        <p class="text-sm text-muted">
+          React, Vite, and Tailwind, built by a Cursor Cloud Agent on grok-4.7. No on-demand fallback.
+        </p>
+        <WebStackStatus
+          :preview-url="mockup.previewUrl"
+          :agent-url="mockup.agentUrl"
+          :error="mockup.buildError"
+        />
+        <p
+          v-if="!mockup.previewUrl && !mockup.agentUrl && mockup.status === 'generating'"
+          class="text-sm text-muted"
+        >
+          Waiting for n8n to return a preview URL and an agent id.
+        </p>
+      </section>
 
       <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <StudioMockupStage

@@ -314,6 +314,11 @@ export async function initializeSchema() {
       last_feedback TEXT,
       photo_urls TEXT,
       ai_model TEXT,
+      build_mode TEXT DEFAULT 'html',
+      agent_id TEXT,
+      preview_url TEXT,
+      build_status TEXT,
+      build_error TEXT,
       n8n_synced_at TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
@@ -337,6 +342,11 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE mockups ADD COLUMN n8n_created_at TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN n8n_updated_at TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN mockup_cost_ledger TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN build_mode TEXT DEFAULT 'html'`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN agent_id TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN preview_url TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN build_status TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN build_error TEXT`)
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)

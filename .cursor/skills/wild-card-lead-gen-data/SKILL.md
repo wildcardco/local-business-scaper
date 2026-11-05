@@ -40,7 +40,7 @@ Local `dev.db` and production Turso are **separate databases with separate accou
 | `email_replies` | log | inbound (helper not routed) |
 | `email_drafts` | user | |
 | `branding_settings` | user | defaults `#D6293E` / `#2d1818`. Also `ai_model` (default `claude-fable-5`), `ai_max_tokens` (16000), `pitch_max_tokens` (1500) |
-| `mockups` | user | Studio + n8n digest rows. Keyed by `place_id` + owner slug |
+| `mockups` | user | Studio + n8n digest rows. Keyed by `place_id` + owner slug. Web stack adds `build_mode` (`html` default, or `web_stack`), `agent_id`, `preview_url`, `build_status`, `build_error` |
 
 Indexes: businesses(user, search, status, unique user+place), searches(user), outreach_logs(user, business), email_replies(outreach), mockups(user, business, place).
 

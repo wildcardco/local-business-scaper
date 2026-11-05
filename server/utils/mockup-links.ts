@@ -18,7 +18,12 @@ export function ensureMockupLinkColumns() {
         `ALTER TABLE mockups ADD COLUMN made_at TEXT`,
         `ALTER TABLE mockups ADD COLUMN n8n_created_at TEXT`,
         `ALTER TABLE mockups ADD COLUMN n8n_updated_at TEXT`,
-        `ALTER TABLE mockups ADD COLUMN mockup_cost_ledger TEXT`
+        `ALTER TABLE mockups ADD COLUMN mockup_cost_ledger TEXT`,
+        `ALTER TABLE mockups ADD COLUMN build_mode TEXT DEFAULT 'html'`,
+        `ALTER TABLE mockups ADD COLUMN agent_id TEXT`,
+        `ALTER TABLE mockups ADD COLUMN preview_url TEXT`,
+        `ALTER TABLE mockups ADD COLUMN build_status TEXT`,
+        `ALTER TABLE mockups ADD COLUMN build_error TEXT`
       ]) {
         try {
           await db.execute(sql)
@@ -104,6 +109,7 @@ export async function checkUserMockupLinks(userId: string, mockupId?: string) {
           WHERE m.user_id = ?
             ${mockupId ? 'AND m.id = ?' : ''}
             AND m.status NOT IN ${BUSY}
+            AND COALESCE(m.build_mode, 'html') != 'web_stack'
             AND (
               lower(trim(COALESCE(m.mockup_url, ''))) LIKE 'https://%.vercel.app%'
               OR lower(trim(COALESCE(m.mockup_url, ''))) LIKE 'http://%.vercel.app%'

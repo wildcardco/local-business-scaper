@@ -1,14 +1,20 @@
 import { db } from '~~/server/utils/db'
+import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 
 function countOf(value: unknown) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function activityOf(status: string, deploymentMissing: number) {
+function activityOf(status: string, deploymentMissing: number, buildMode: string) {
   const building = ['generating', 'writing_pitch', 'enhancing', 'revising']
+  if (buildMode === 'web_stack') {
+    if (building.includes(status)) return { activity: 'building' as const, label: 'Web stack' }
+    if (status === 'failed') return { activity: 'failed' as const, label: 'Failed' }
+    if (status === 'mockup_ready') return { activity: 'ready' as const, label: 'Web stack' }
+  }
   if (building.includes(status)) return { activity: 'building' as const, label: 'Building' }
-  if (status === 'failed' || deploymentMissing === 1) return { activity: 'failed' as const, label: 'Failed' }
+  if (status === 'failed' || (deploymentMissing === 1 && buildMode !== 'web_stack')) return { activity: 'failed' as const, label: 'Failed' }
   if (status === 'mockup_ready') return { activity: 'ready' as const, label: 'Ready' }
   const words = status.replace(/_/g, ' ').trim()
   const label = words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Draft'
@@ -17,6 +23,7 @@ function activityOf(status: string, deploymentMissing: number) {
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
+  await ensureMockupLinkColumns()
 
   const [countsResult, searchResult, mockupResult] = await db.batch([
     {
@@ -40,6 +47,7 @@ export default defineEventHandler(async (event) => {
     },
     {
       sql: `SELECT m.id, m.status, COALESCE(m.deployment_missing, 0) AS deployment_missing,
+          COALESCE(m.build_mode, 'html') AS build_mode,
           COALESCE(b.name, 'Mockup') AS name
         FROM mockups m
         LEFT JOIN businesses b ON b.id = m.business_id
@@ -66,7 +74,7 @@ export default defineEventHandler(async (event) => {
     })),
     mockups: mockupResult.rows.map((row) => {
       const status = String(row.status || 'draft')
-      const activity = activityOf(status, Number(row.deployment_missing || 0))
+      const activity = activityOf(status, Number(row.deployment_missing || 0), String(row.build_mode || 'html'))
       return {
         id: String(row.id),
         name: String(row.name || 'Mockup'),

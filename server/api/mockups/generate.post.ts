@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
     user: { id: user.id, email: user.email },
     mockupId: targetMockupId,
     action: 'generate_mockup',
+    buildMode: body.buildMode ?? body.build_mode,
     extraPrompt: typeof body.extraPrompt === 'string' ? body.extraPrompt.trim() : undefined,
     model: typeof body.model === 'string' ? body.model : undefined,
     maxTokens: body.maxTokens != null ? Number(body.maxTokens) : undefined,

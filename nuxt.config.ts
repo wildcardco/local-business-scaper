@@ -64,6 +64,9 @@ export default defineNuxtConfig({
     digestIngestSecret: process.env.DIGEST_INGEST_SECRET,
     n8nRerollWebhookUrl: process.env.N8N_REROLL_WEBHOOK_URL || '',
     n8nRerollSecret: process.env.N8N_REROLL_SECRET || '',
+    // Web stack mockups. Server-only. No default URL and no fallback to the Studio HTML webhook.
+    n8nWebStackWebhookUrl: process.env.N8N_WEB_STACK_WEBHOOK_URL || '',
+    n8nWebStackSecret: process.env.N8N_WEB_STACK_SECRET || '',
     githubToken: process.env.GITHUB_TOKEN || '',
 
     // ImageKit

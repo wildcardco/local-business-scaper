@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { webStackStatusLabel } from '~~/shared/web-stack'
+
 const props = defineProps<{
   lead: {
     score?: number | null
@@ -13,7 +15,15 @@ const props = defineProps<{
       website?: string | null
       lead_category?: string | null
     }
-    mockup?: { id: string } | null
+    mockup?: {
+      id: string
+      status?: string | null
+      buildMode?: string | null
+      previewUrl?: string | null
+      agentUrl?: string | null
+      buildStatus?: string | null
+      buildError?: string | null
+    } | null
   }
   skipping?: boolean
 }>()
@@ -110,5 +120,14 @@ const place = computed(() => {
         Skip
       </UButton>
     </div>
+
+    <WebStackStatus
+      v-if="lead.mockup?.buildMode === 'web_stack'"
+      class="mt-3"
+      :status-label="webStackStatusLabel(String(lead.mockup?.status || ''), lead.mockup?.buildStatus)"
+      :preview-url="lead.mockup?.previewUrl"
+      :agent-url="lead.mockup?.agentUrl"
+      :error="lead.mockup?.buildError"
+    />
   </article>
 </template>

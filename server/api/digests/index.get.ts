@@ -1,8 +1,11 @@
 import { db } from '~~/server/utils/db'
 import { ensureDigestTables } from '~~/server/utils/digest-schema'
+import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
+import { cursorAgentUrl, httpsUrl } from '~~/shared/web-stack'
 
 export default defineEventHandler(async (event) => {
   await ensureDigestTables()
+  await ensureMockupLinkColumns()
 
   const user = event.context.user
   if (!user?.id) {
@@ -65,11 +68,16 @@ export default defineEventHandler(async (event) => {
         b.status,
         m.id as mockup_id,
         m.status as mockup_status,
-        m.mockup_url
+        m.mockup_url,
+        m.build_mode,
+        m.agent_id,
+        m.preview_url,
+        m.build_status,
+        m.build_error
       FROM digest_leads dl
       INNER JOIN businesses b ON dl.business_id = b.id
       LEFT JOIN (
-        SELECT id, business_id, status, mockup_url,
+        SELECT id, business_id, status, mockup_url, build_mode, agent_id, preview_url, build_status, build_error,
                ROW_NUMBER() OVER (PARTITION BY business_id ORDER BY updated_at DESC) as rn
         FROM mockups
         WHERE user_id = ?
@@ -128,11 +136,18 @@ export default defineEventHandler(async (event) => {
         lead_category: row.lead_category || null,
         status: row.status || 'new'
       },
-      mockup: row.mockup_id ? {
-        id: row.mockup_id,
-        status: row.mockup_status,
-        url: row.mockup_url
-      } : null
+      mockup: row.mockup_id
+        ? {
+            id: row.mockup_id,
+            status: row.mockup_status,
+            url: row.mockup_url,
+            buildMode: row.build_mode === 'web_stack' ? 'web_stack' : 'html',
+            previewUrl: httpsUrl(row.preview_url),
+            agentUrl: cursorAgentUrl(row.agent_id),
+            buildStatus: typeof row.build_status === 'string' && row.build_status ? row.build_status : null,
+            buildError: typeof row.build_error === 'string' && row.build_error ? row.build_error : null
+          }
+        : null
     })),
     rerollCount
   }
