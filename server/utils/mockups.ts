@@ -8,6 +8,7 @@ import { factoryFeedback } from '~~/shared/photo-slots'
 import { studioSiteResearch } from '~~/shared/studio-site-payload'
 import { outboundLeadPayload } from '~~/shared/website-intake'
 import { gbpPhotosFrom, gbpWebhookFields, photoCountFrom } from '~~/shared/gbp-listing'
+import { siteContract } from '~~/shared/site-discovery'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -168,7 +169,8 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
           zipCode: (business.zip_code as string) || null,
           googleBusinessId: (business.google_business_id as string) || null,
           gbpPhotos: storedPhotos,
-          photoCount: photoCountFrom(business.photo_count, storedPhotos)
+          photoCount: photoCountFrom(business.photo_count, storedPhotos),
+          siteDiscovery: (business.site_discovery as string) || null
         }
       : null
   }
@@ -266,7 +268,7 @@ export async function getMockupForUser(id: string, userId: string) {
         b.category as b_category,
         b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id,
         b.google_business_id as b_google_business_id, b.gbp_photos as b_gbp_photos,
-        b.photo_count as b_photo_count
+        b.photo_count as b_photo_count, b.site_discovery as b_site_discovery
       FROM mockups m
       LEFT JOIN businesses b ON m.business_id = b.id
       WHERE m.id = ? AND m.user_id = ?
@@ -293,7 +295,8 @@ export async function getMockupForUser(id: string, userId: string) {
         place_id: row.b_place_id,
         google_business_id: row.b_google_business_id,
         gbp_photos: row.b_gbp_photos,
-        photo_count: row.b_photo_count
+        photo_count: row.b_photo_count,
+        site_discovery: row.b_site_discovery
       }
     : null
 
@@ -464,12 +467,18 @@ export async function fireMockupAction(opts: {
     reviewCount: business?.reviewCount
   })
 
+  const contract = siteContract({
+    website: site.website,
+    stored: business?.siteDiscovery
+  })
+
   const leadPayload = {
     action: opts.action,
     place_id: placeId,
     owner,
     business_name: business?.name || 'Untitled business',
-    website: site.website,
+    website: contract.website || site.website,
+    site_discovery: contract.site_discovery,
     phone: site.phone,
     address: site.address,
     category: site.category,

@@ -10,6 +10,7 @@ import {
   leadSyncAfterError,
   syncPageIsLast
 } from '~~/shared/studio-sync-leads'
+import { leadWebsiteValue, nextBusinessSite } from '~~/shared/site-discovery'
 import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
 import { ensureMockupLinkColumns, inspectMockupTarget } from '~~/server/utils/mockup-links'
 
@@ -50,6 +51,8 @@ function locationPatch(current: {
   address?: unknown
   email?: unknown
   category?: unknown
+  website?: unknown
+  siteDiscovery?: unknown
 }, input: {
   address: string | null
   city: string | null
@@ -61,6 +64,7 @@ function locationPatch(current: {
   const address = asString(current.address)
   const email = asString(current.email)
   const category = asString(current.category)
+  const site = nextBusinessSite(current, input.row)
   const nextCity = !city || isPlaceId(city) ? input.city : city
   const nextState = !state || isPlaceId(state) ? input.state : state
   const nextAddress = address || input.address
@@ -71,16 +75,38 @@ function locationPatch(current: {
     && nextAddress === address
     && nextEmail === email
     && nextCategory === category
+    && !site.changed
   if (unchanged) return null
-  return { nextCity, nextState, nextAddress, nextEmail, nextCategory }
+  return {
+    nextCity,
+    nextState,
+    nextAddress,
+    nextEmail,
+    nextCategory,
+    nextWebsite: site.nextWebsite,
+    nextDiscovery: site.nextDiscovery
+  }
 }
 
 function businessUpdate(businessId: string, userId: string, patch: NonNullable<ReturnType<typeof locationPatch>>): Statement {
   return {
     sql: `UPDATE businesses SET
-      city = ?, state = ?, address = ?, email = ?, category = ?, updated_at = datetime('now')
+      city = ?, state = ?, address = ?, email = ?, category = ?,
+      website = COALESCE(NULLIF(?, ''), website),
+      site_discovery = ?,
+      updated_at = datetime('now')
       WHERE id = ? AND user_id = ?`,
-    args: [patch.nextCity, patch.nextState, patch.nextAddress, patch.nextEmail, patch.nextCategory, businessId, userId]
+    args: [
+      patch.nextCity,
+      patch.nextState,
+      patch.nextAddress,
+      patch.nextEmail,
+      patch.nextCategory,
+      patch.nextWebsite,
+      patch.nextDiscovery,
+      businessId,
+      userId
+    ]
   }
 }
 
@@ -247,14 +273,15 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
       sql: `SELECT m.id, m.place_id, m.business_id, m.status, m.mockup_url, m.mockup_version, m.made_at,
           m.n8n_created_at, m.n8n_updated_at,
           b.city as b_city, b.state as b_state,
-          b.address as b_address, b.email as b_email, b.category as b_category
+          b.address as b_address, b.email as b_email, b.category as b_category,
+          b.website as b_website, b.site_discovery as b_site_discovery
         FROM mockups m
         LEFT JOIN businesses b ON b.id = m.business_id
         WHERE m.user_id = ? AND m.place_id IN (${marks})`,
       args: [userId, ...placeIds]
     },
     {
-      sql: `SELECT id, place_id, city, state, address, email, category
+      sql: `SELECT id, place_id, city, state, address, email, category, website, site_discovery
         FROM businesses
         WHERE user_id = ? AND place_id IN (${marks})`,
       args: [userId, ...placeIds]
@@ -400,7 +427,9 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
           state: existing.b_state,
           address: existing.b_address,
           email: existing.b_email,
-          category: existing.b_category
+          category: existing.b_category,
+          website: existing.b_website,
+          siteDiscovery: existing.b_site_discovery
         }, { address, city, state, row })
         if (patch) writes.push(businessUpdate(String(existing.business_id), userId, patch))
       }
@@ -410,14 +439,22 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const matched = businessesByPlace.get(placeId)
     let businessId = matched?.id ? String(matched.id) : ''
     if (businessId) {
-      const patch = locationPatch(matched, { address, city, state, row })
+      const patch = locationPatch({
+        city: matched.city,
+        state: matched.state,
+        address: matched.address,
+        email: matched.email,
+        category: matched.category,
+        website: matched.website,
+        siteDiscovery: matched.site_discovery
+      }, { address, city, state, row })
       if (patch) writes.push(businessUpdate(businessId, userId, patch))
     } else {
       businessId = generateId()
       writes.push({
         sql: `INSERT INTO businesses (
-          id, user_id, search_id, name, address, city, state, phone, website, email, place_id, category, rating, review_count, status
-        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')`,
+          id, user_id, search_id, name, address, city, state, phone, website, email, place_id, category, rating, review_count, status, site_discovery
+        ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`,
         args: [
           businessId,
           userId,
@@ -426,12 +463,13 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
           city,
           state,
           phone,
-          asString(row.website),
+          leadWebsiteValue(row),
           asString(row.email),
           placeId,
           asString(row.category),
           asNumber(row.rating),
-          asNumber(row.review_count)
+          asNumber(row.review_count),
+          nextBusinessSite({}, row).nextDiscovery
         ]
       })
     }

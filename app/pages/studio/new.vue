@@ -332,8 +332,8 @@ async function submit() {
             data-page-choice-note
           >
             {{ pageChoice === 'multi_page'
-              ? 'Multi-page sends the website on the existing Web Stack request and does not send the one-page flag. If that webhook is missing, generation stops. It does not build the one-page mockup instead. Navigation and page lists are not invented here.'
-              : 'One-page sends page_intent one_page on the HTML studio webhook. It does not start the multi-page Web Stack.' }}
+              ? 'Multi-page sends the website and any site discovery already on the lead to the Web Stack webhook. It does not send the one-page flag. If that webhook is missing, generation stops and does not build the one-page mockup instead. This screen has not read the live navigation, footer, or pages, so those lists stay empty.'
+              : 'One-page sends page_intent one_page on the HTML studio webhook, with the same website and site discovery. It does not start the multi-page Web Stack.' }}
           </p>
         </fieldset>
         <UCheckbox

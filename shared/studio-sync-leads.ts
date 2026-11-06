@@ -1,5 +1,6 @@
 import { isVercelMockupUrl } from './mockup-repo'
 import { mockupCreatedTime, mockupUpdatedTime } from './mockup-time'
+import { mergeLeadSite } from './site-discovery'
 
 export interface LeadDeployment {
   url: string | null
@@ -81,7 +82,9 @@ export function dedupeLeadsByPlace(rows: Record<string, unknown>[]) {
       continue
     }
     duplicatePlace++
-    byPlace.set(placeId, preferLeadRow(existing, row))
+    const winner = preferLeadRow(existing, row)
+    const other = winner === existing ? row : existing
+    byPlace.set(placeId, mergeLeadSite(winner, other))
   }
   return { rows: [...byPlace.values()], duplicatePlace }
 }

@@ -299,6 +299,7 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE businesses ADD COLUMN google_business_id TEXT`)
   await tryAlter(`ALTER TABLE businesses ADD COLUMN gbp_photos TEXT`)
   await tryAlter(`ALTER TABLE businesses ADD COLUMN photo_count INTEGER`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN site_discovery TEXT`)
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS mockups (

@@ -63,6 +63,18 @@ export interface StudioLeadPayload {
   gbp_photos?: { id: string, url: string, type: string | null, ts: string | null }[]
   /** HTML one-page rebuild. Web stack must not send this. WF-2 ignores it until Normalize copies it. */
   page_intent?: 'one_page'
+  /**
+   * Current-site navigation, footer, pages, and content when a lead already has them.
+   * `unavailable` with null lists means this app did not read the live site.
+   * A generic Home/About/Services/Contact list is never filled in here.
+   */
+  site_discovery?: {
+    status: 'observed' | 'unavailable'
+    navigation: string[] | null
+    footer: string[] | null
+    pages: { name: string, path: string | null }[] | null
+    content: string | null
+  }
 }
 
 export async function getStudioAiSettings(userId: string): Promise<StudioAiSettings> {

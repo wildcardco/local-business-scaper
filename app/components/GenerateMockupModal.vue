@@ -424,7 +424,7 @@ async function confirm() {
           v-if="form.buildMode === BUILD_MODE_WEB_STACK"
           class="text-sm text-muted"
         >
-          Multi-page sends this lead to the Web Stack webhook. The agent is grok-4.7. It does not send the one-page flag, and it does not fall back to the one-page HTML workflow.
+          Multi-page sends this lead, its website, and any stored site discovery to the Web Stack webhook. The agent is grok-4.7. It does not send the one-page flag, and it does not fall back to the one-page HTML workflow. Empty navigation, footer, and page lists stay empty.
         </p>
         <UFormField
           v-if="form.buildMode === BUILD_MODE_HTML"
