@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { fillIntakeFields } from '~~/shared/intake-lookup'
 import type { PlaceDetails } from '~~/shared/place-lookup'
-import { parseWebsiteIntakeUrl } from '~~/shared/website-intake'
+import { pageChoiceRequest, parseWebsiteIntakeUrl, type PageChoice } from '~~/shared/website-intake'
 
 definePageMeta({ hidePhoneTabs: true })
 
@@ -9,6 +9,7 @@ const toast = useToast()
 const router = useRouter()
 const isSaving = ref(false)
 const mode = ref<'website' | 'manual'>('website')
+const pageChoice = ref<PageChoice>('one_page')
 const confirmedHost = ref('')
 
 const form = ref({
@@ -26,6 +27,19 @@ const form = ref({
   zipCode: '',
   rating: null as number | null,
   reviewCount: null as number | null
+})
+
+const generateNowLabel = computed(() => {
+  if (mode.value !== 'website') return 'Generate mockup now'
+  return pageChoice.value === 'multi_page'
+    ? 'Generate the multi-page site now'
+    : 'Generate the one-page mockup now'
+})
+
+const generateButtonLabel = computed(() => {
+  if (!form.value.generateNow) return 'Save business'
+  if (mode.value !== 'website') return 'Generate mockup'
+  return pageChoice.value === 'multi_page' ? 'Generate multi-page site' : 'Generate one-page mockup'
 })
 
 function applyLookup(payload: {
@@ -110,13 +124,19 @@ async function submit() {
         method: 'POST',
         body: {
           mockupId: created.mockup.id,
-          ...(onePage ? { pageIntent: 'one_page' } : {})
+          ...(onePage ? pageChoiceRequest(pageChoice.value) : {})
         }
       })
     }
 
     toast.add({
-      title: form.value.generateNow ? 'Mockup started' : 'Business saved',
+      title: !form.value.generateNow
+        ? 'Business saved'
+        : !onePage
+            ? 'Mockup started'
+            : pageChoice.value === 'multi_page'
+              ? 'Multi-page site started'
+              : 'One-page mockup started',
       color: 'success'
     })
     router.push(`/studio/${created.mockup.id}`)
@@ -217,9 +237,61 @@ async function submit() {
           :disabled="isSaving"
           @apply="applyLookup"
         />
+        <fieldset
+          v-if="mode === 'website'"
+          class="space-y-2"
+        >
+          <legend class="text-sm font-medium text-highlighted">
+            What to build
+          </legend>
+          <div
+            class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            role="radiogroup"
+            aria-label="What to build"
+          >
+            <label
+              class="flex min-h-11 cursor-pointer flex-col justify-center rounded-wc-lg border px-3 py-2"
+              :class="pageChoice === 'one_page' ? 'border-primary bg-elevated' : 'border-default'"
+            >
+              <input
+                v-model="pageChoice"
+                class="sr-only"
+                type="radio"
+                name="new-mockup-page-choice"
+                value="one_page"
+                data-page-choice="one_page"
+              >
+              <span class="text-sm font-medium text-highlighted">One-page</span>
+              <span class="mt-0.5 text-xs text-muted">One polished HTML page from this website. The current Studio workflow.</span>
+            </label>
+            <label
+              class="flex min-h-11 cursor-pointer flex-col justify-center rounded-wc-lg border px-3 py-2"
+              :class="pageChoice === 'multi_page' ? 'border-primary bg-elevated' : 'border-default'"
+            >
+              <input
+                v-model="pageChoice"
+                class="sr-only"
+                type="radio"
+                name="new-mockup-page-choice"
+                value="multi_page"
+                data-page-choice="multi_page"
+              >
+              <span class="text-sm font-medium text-highlighted">Multi-page</span>
+              <span class="mt-0.5 text-xs text-muted">React, Vite, and Tailwind on the Web Stack webhook. Not a one-page page.</span>
+            </label>
+          </div>
+          <p
+            class="text-sm text-muted"
+            data-page-choice-note
+          >
+            {{ pageChoice === 'multi_page'
+              ? 'Multi-page sends the website on the existing Web Stack request and does not send the one-page flag. If that webhook is missing, generation stops. It does not build the one-page mockup instead. Navigation and page lists are not invented here.'
+              : 'One-page sends page_intent one_page on the HTML studio webhook. It does not start the multi-page Web Stack.' }}
+          </p>
+        </fieldset>
         <UCheckbox
           v-model="form.generateNow"
-          :label="mode === 'website' ? 'Generate the one-page mockup now' : 'Generate mockup now'"
+          :label="generateNowLabel"
         />
       </form>
     </UCard>
@@ -234,7 +306,7 @@ async function submit() {
         :style="{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }"
         @click="submit"
       >
-        {{ form.generateNow ? (mode === 'website' ? 'Generate one-page mockup' : 'Generate mockup') : 'Save business' }}
+        {{ generateButtonLabel }}
       </UButton>
     </div>
   </div>

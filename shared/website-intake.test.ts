@@ -6,6 +6,8 @@ import {
   confirmedWebsiteMatch,
   onePageSiteFields,
   outboundLeadPayload,
+  pageChoiceLead,
+  pageChoiceRequest,
   parseWebsiteIntakeUrl,
   websiteInspection,
   websiteIntakeMatches
@@ -135,4 +137,35 @@ test('manual generation and web stack do not receive the one-page flag', () => {
   assert.equal(built.build_mode, 'web_stack')
   assert.equal('page_intent' in built, false)
   assert.equal(built.website, 'https://www.leeps.com/')
+})
+
+test('one-page and multi-page stay on different workflows', () => {
+  const site = {
+    website: 'https://www.leeps.com/',
+    phone: '219-696-1000',
+    address: '100 Washington St, Lowell, IN 46356',
+    category: 'Building materials supplier'
+  }
+
+  const one = pageChoiceLead(site, 'one_page')
+  assert.equal(one.page_intent, 'one_page')
+  assert.equal(one.website, 'https://www.leeps.com/')
+  assert.equal(one.address, '100 Washington St, Lowell, IN 46356')
+  assert.equal('build_mode' in one, false)
+  assert.deepEqual(pageChoiceRequest('one_page'), { pageIntent: 'one_page' })
+  assert.equal('buildMode' in pageChoiceRequest('one_page'), false)
+
+  const multi = pageChoiceLead(site, 'multi_page')
+  assert.equal(multi.build_mode, 'web_stack')
+  assert.equal(multi.stack, 'react-vite-tailwind')
+  assert.equal(multi.agent_model, 'grok-4.7')
+  assert.equal(multi.on_demand_fallback, false)
+  assert.equal(multi.website, 'https://www.leeps.com/')
+  assert.equal(multi.phone, '219-696-1000')
+  assert.equal(multi.address, '100 Washington St, Lowell, IN 46356')
+  assert.equal('page_intent' in multi, false)
+  assert.deepEqual(pageChoiceRequest('multi_page'), { buildMode: 'web_stack' })
+  assert.equal('pageIntent' in pageChoiceRequest('multi_page'), false)
+
+  assert.deepEqual(pageChoiceRequest('a full website'), { pageIntent: 'one_page' })
 })

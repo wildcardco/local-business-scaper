@@ -1,6 +1,6 @@
 import { websiteHost } from './intake-lookup.ts'
 import { studioLeadWebsite, studioSiteResearch, type StudioSiteResearch, type StudioSiteSource } from './studio-site-payload.ts'
-import { BUILD_MODE_WEB_STACK, parseBuildMode } from './web-stack.ts'
+import { BUILD_MODE_WEB_STACK, leadPayloadForBuild, parseBuildMode } from './web-stack.ts'
 
 /**
  * Website-first intake for a one-page rebuild.
@@ -157,4 +157,35 @@ export function outboundLeadPayload<T extends { website?: string | null }>(
 
 export function onePageSiteFields(source: StudioSiteSource, pageIntent: unknown): StudioSiteResearch | (StudioSiteResearch & { page_intent: typeof ONE_PAGE_INTENT }) {
   return outboundLeadPayload(studioSiteResearch(source), { pageIntent, buildMode: 'html' })
+}
+
+/** One HTML page, or the existing multi-page Web Stack. These are different webhooks. */
+export const PAGE_CHOICE_ONE = 'one_page' as const
+export const PAGE_CHOICE_MULTI = 'multi_page' as const
+export type PageChoice = typeof PAGE_CHOICE_ONE | typeof PAGE_CHOICE_MULTI
+
+export function parsePageChoice(value: unknown): PageChoice {
+  return value === PAGE_CHOICE_MULTI ? PAGE_CHOICE_MULTI : PAGE_CHOICE_ONE
+}
+
+export interface PageChoiceRequest {
+  pageIntent?: typeof ONE_PAGE_INTENT
+  buildMode?: typeof BUILD_MODE_WEB_STACK
+}
+
+/**
+ * One-page posts `page_intent` to the HTML studio webhook.
+ * Multi-page posts `build_mode: web_stack` to the Web Stack webhook and omits `page_intent`.
+ * An unknown choice stays one-page. There is no HTML fallback for multi-page.
+ */
+export function pageChoiceRequest(choice: unknown): PageChoiceRequest {
+  if (parsePageChoice(choice) === PAGE_CHOICE_MULTI) return { buildMode: BUILD_MODE_WEB_STACK }
+  return { pageIntent: ONE_PAGE_INTENT }
+}
+
+export function pageChoiceLead<T extends { website?: string | null }>(payload: T, choice: unknown) {
+  const request = pageChoiceRequest(choice)
+  const outbound = outboundLeadPayload(payload, request)
+  if (request.buildMode !== BUILD_MODE_WEB_STACK) return outbound
+  return leadPayloadForBuild(outbound, BUILD_MODE_WEB_STACK)
 }

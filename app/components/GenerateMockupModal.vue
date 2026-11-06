@@ -220,7 +220,7 @@ async function confirm() {
     const webStack = form.value.buildMode === BUILD_MODE_WEB_STACK
     const failed = webStack && result.mockup?.status === 'failed'
     toast.add({
-      title: failed ? 'Web stack did not start' : (webStack ? 'Web stack build started' : 'Mockup started'),
+      title: failed ? 'Multi-page site did not start' : (webStack ? 'Multi-page site started' : 'One-page mockup started'),
       description: failed
         ? (result.mockup?.buildError || 'n8n returned an error.')
         : (webStack ? 'Opening Studio for status, preview, and the agent link.' : 'Opening Studio'),
@@ -390,8 +390,8 @@ async function confirm() {
                 name="mockup-build-mode"
                 :value="BUILD_MODE_HTML"
               >
-              <span class="text-sm font-medium text-highlighted">Plain HTML</span>
-              <span class="mt-0.5 text-xs text-muted">Current Studio page. This is the default.</span>
+              <span class="text-sm font-medium text-highlighted">One-page HTML</span>
+              <span class="mt-0.5 text-xs text-muted">One HTML page on the current Studio workflow. This is the default.</span>
             </label>
             <label
               class="flex min-h-11 cursor-pointer flex-col justify-center rounded-lg border px-3 py-2"
@@ -405,8 +405,8 @@ async function confirm() {
                 :value="BUILD_MODE_WEB_STACK"
                 data-build-mode="web_stack"
               >
-              <span class="text-sm font-medium text-highlighted">Web Stack</span>
-              <span class="mt-0.5 text-xs text-muted">React, Vite, and Tailwind on grok-4.7. No on-demand fallback.</span>
+              <span class="text-sm font-medium text-highlighted">Multi-page Web Stack</span>
+              <span class="mt-0.5 text-xs text-muted">React, Vite, and Tailwind on grok-4.7. A separate webhook, with no one-page fallback.</span>
             </label>
           </div>
         </fieldset>
@@ -424,7 +424,7 @@ async function confirm() {
           v-if="form.buildMode === BUILD_MODE_WEB_STACK"
           class="text-sm text-muted"
         >
-          Web stack sends this lead to its own n8n webhook. The agent is grok-4.7. The Claude model and token limit stay on plain HTML.
+          Multi-page sends this lead to the Web Stack webhook. The agent is grok-4.7. It does not send the one-page flag, and it does not fall back to the one-page HTML workflow.
         </p>
         <UFormField
           v-if="form.buildMode === BUILD_MODE_HTML"
@@ -472,7 +472,9 @@ async function confirm() {
           :disabled="isLoading || listingStatus === 'loading'"
           @click="confirm"
         >
-          {{ isRegenerate ? 'Regenerate mockup' : 'Generate mockup' }}
+          {{ form.buildMode === BUILD_MODE_WEB_STACK
+            ? (isRegenerate ? 'Regenerate multi-page site' : 'Generate multi-page site')
+            : (isRegenerate ? 'Regenerate one-page mockup' : 'Generate one-page mockup') }}
         </UButton>
       </div>
     </template>

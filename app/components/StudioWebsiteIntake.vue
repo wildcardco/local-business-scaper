@@ -140,7 +140,7 @@ function useUrl() {
         Inspect website
       </UButton>
       <p class="text-sm text-muted">
-        Paste the current site. A matching Google listing can fill the form after you choose it. This builds a one-page version, not a copy of every page.
+        Paste the current site. A matching Google listing can fill the form after you choose it. Then pick a one-page or multi-page build. Inspect does not start generation.
       </p>
     </div>
 
