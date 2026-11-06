@@ -1,8 +1,15 @@
 import { db, generateId } from '~~/server/utils/db'
 import { listN8nLeadPage } from '~~/server/utils/n8n'
 import { isPlaceId, parseUsCityState } from '~~/shared/studio-location'
-import { isVercelMockupUrl, mockupGithubRepo, mockupGithubUrl, storedGithubRepo } from '~~/shared/mockup-repo'
+import { mockupGithubRepo, mockupGithubUrl, storedGithubRepo } from '~~/shared/mockup-repo'
 import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
+import {
+  dedupeLeadsByPlace,
+  incomingLeadIsOlder,
+  leadDeployment,
+  leadSyncAfterError,
+  syncPageIsLast
+} from '~~/shared/studio-sync-leads'
 import { removeDigestLeadsWithoutMockups } from '~~/server/utils/mockups'
 import { ensureMockupLinkColumns, inspectMockupTarget } from '~~/server/utils/mockup-links'
 
@@ -147,7 +154,12 @@ async function mapPool<T>(items: T[], limit: number, worker: (item: T) => Promis
 }
 
 function explicitGithubRepo(row: Record<string, unknown>) {
-  const stored = storedGithubRepo(asString(row.github_repo) || asString(row.repo_full_name))
+  const stored = storedGithubRepo(
+    asString(row.github_repo)
+    || asString(row.repo_full_name)
+    || asString(row.web_stack_repo)
+    || asString(row.full_site_repo)
+  )
   if (stored) return stored
   const html = asString(row.repo_html_url)
   const match = html?.match(/github\.com\/([\w.-]+\/[\w.-]+)/i)
@@ -161,16 +173,9 @@ export async function startSyncJob(userId: string) {
   if (current && String(current.status) === 'running') {
     return viewOf(current)
   }
-  if (current && String(current.status) === 'done' && asString(current.cursor)) {
-    await db.execute({
-      sql: `UPDATE mockup_sync_jobs
-            SET status = 'running', error = NULL, locked_at = NULL, updated_at = datetime('now')
-            WHERE id = ? AND user_id = ?`,
-      args: [current.id, userId]
-    })
-    return viewOf(await latestJob(userId))
-  }
 
+  // A stored cursor is an older offset. Resuming it skips a mockup that was
+  // created after the last page, which is the row Last created should show.
   const id = generateId()
   await db.execute({
     sql: `INSERT INTO mockup_sync_jobs (id, user_id, status) VALUES (?, ?, 'running')`,
@@ -204,22 +209,25 @@ function emptyLeadSave(partial: Partial<LeadPageSave> = {}): LeadPageSave {
 
 export async function saveLeadPage(userId: string, owner: string, rows: Record<string, unknown>[]) {
   await ensureMockupLinkColumns()
-  const byPlace = new Map<string, Record<string, unknown>>()
   const skipped = { no_place_id: 0, not_vercel: 0 }
-  let duplicatePlace = 0
+  const candidates: Record<string, unknown>[] = []
   for (const row of rows) {
-    const placeId = asString(row.place_id)
-    const mockupUrl = asString(row.mockup_url)
-    if (!placeId) {
+    if (!asString(row.place_id)) {
       skipped.no_place_id++
       continue
     }
-    if (!isVercelMockupUrl(mockupUrl)) {
+    candidates.push(row)
+  }
+  const deduped = dedupeLeadsByPlace(candidates)
+  const duplicatePlace = deduped.duplicatePlace
+  const byPlace = new Map<string, Record<string, unknown>>()
+  for (const row of deduped.rows) {
+    const deployment = leadDeployment(row)
+    if (!deployment.url && !deployment.webStack) {
       skipped.not_vercel++
       continue
     }
-    if (byPlace.has(placeId)) duplicatePlace++
-    byPlace.set(placeId, row)
+    byPlace.set(String(row.place_id), row)
   }
 
   let imported = 0
@@ -237,6 +245,7 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
   const [mockupResult, businessResult] = await db.batch([
     {
       sql: `SELECT m.id, m.place_id, m.business_id, m.status, m.mockup_url, m.mockup_version, m.made_at,
+          m.n8n_created_at, m.n8n_updated_at,
           b.city as b_city, b.state as b_state,
           b.address as b_address, b.email as b_email, b.category as b_category
         FROM mockups m
@@ -257,7 +266,11 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
 
   const linkByPlace = new Map<string, { deployment: 'live' | 'missing' | 'unknown', githubMissing: boolean, githubRepo: string | null }>()
   await mapPool([...byPlace.entries()], 8, async ([placeId, row]) => {
-    const mockupUrl = asString(row.mockup_url) || ''
+    const mockupUrl = leadDeployment(row).url || ''
+    if (!mockupUrl) {
+      linkByPlace.set(placeId, { deployment: 'unknown', githubMissing: false, githubRepo: null })
+      return
+    }
     const businessName = asString(row.business_name) || 'Imported lead'
     const explicitRepo = explicitGithubRepo(row)
     const repo = mockupGithubRepo({
@@ -281,7 +294,9 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const city = parsedLocation.city
     const state = parsedLocation.state
     const githubRepo = explicitGithubRepo(row)
-    const mockupUrl = asString(row.mockup_url)
+    const deployment = leadDeployment(row)
+    const mockupUrl = deployment.url
+    const webStack = deployment.webStack
     const pitchDraft = asString(row.pitch_draft)
     const status = asString(row.status) || (mockupUrl ? 'mockup_ready' : 'draft')
     const mockupVersion = Number(row.mockup_version || 0)
@@ -296,8 +311,10 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const existing = mockupsByPlace.get(placeId)
     const link = linkByPlace.get(placeId)
     const busy = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(String(existing?.status || ''))
+    const storedStamp = asString(existing?.n8n_updated_at) || asString(existing?.n8n_created_at)
+    if (existing?.id && incomingLeadIsOlder(storedStamp, row)) continue
 
-    if (link?.deployment === 'missing' && !busy) {
+    if (link?.deployment === 'missing' && !busy && !webStack) {
       hidden++
       if (existing?.id) {
         writes.push({
@@ -333,16 +350,21 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               photo_urls = COALESCE(?, photo_urls),
               github_repo = ?, github_missing = ?, deployment_missing = 0,
               links_checked_at = datetime('now'),
+              build_mode = CASE WHEN ? = 1 THEN 'web_stack' ELSE build_mode END,
               made_at = COALESCE(?, made_at),
-              n8n_created_at = COALESCE(?, n8n_created_at),
+              n8n_created_at = CASE
+                WHEN ? > COALESCE(n8n_created_at, '') THEN ?
+                ELSE COALESCE(n8n_created_at, ?)
+              END,
               n8n_updated_at = COALESCE(?, n8n_updated_at),
               n8n_synced_at = datetime('now'),
               updated_at = datetime('now')
               WHERE id = ? AND user_id = ?`,
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
-              pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing, madeAt,
-              createdTime, updatedTime,
+              pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing,
+              webStack ? 1 : 0, madeAt,
+              createdTime, createdTime, createdTime, updatedTime,
               String(existing.id), userId
             ]
           }
@@ -353,16 +375,21 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
               photo_urls = COALESCE(?, photo_urls),
               github_repo = COALESCE(github_repo, ?),
+              build_mode = CASE WHEN ? = 1 THEN 'web_stack' ELSE build_mode END,
               made_at = COALESCE(?, made_at),
-              n8n_created_at = COALESCE(?, n8n_created_at),
+              n8n_created_at = CASE
+                WHEN ? > COALESCE(n8n_created_at, '') THEN ?
+                ELSE COALESCE(n8n_created_at, ?)
+              END,
               n8n_updated_at = COALESCE(?, n8n_updated_at),
               n8n_synced_at = datetime('now'),
               updated_at = datetime('now')
               WHERE id = ? AND user_id = ?`,
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
-              pitchVersion, lastFeedback, photoUrls, githubRepo, madeAt,
-              createdTime, updatedTime,
+              pitchVersion, lastFeedback, photoUrls, githubRepo,
+              webStack ? 1 : 0, madeAt,
+              createdTime, createdTime, createdTime, updatedTime,
               String(existing.id), userId
             ]
           })
@@ -413,12 +440,13 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
       sql: `INSERT INTO mockups (
         id, user_id, business_id, place_id, owner, source, status, mockup_url, mockup_version,
         pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, github_missing,
-        deployment_missing, made_at, n8n_created_at, n8n_updated_at, links_checked_at, n8n_synced_at
-      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
+        deployment_missing, build_mode, made_at, n8n_created_at, n8n_updated_at, links_checked_at, n8n_synced_at
+      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
       args: [
         generateId(), userId, businessId, placeId, owner, status, mockupUrl,
         mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls,
-        live ? confirmedRepo : githubRepo, githubMissing, madeAt, createdTime, updatedTime
+        live ? confirmedRepo : githubRepo, githubMissing,
+        webStack ? 'web_stack' : 'html', madeAt, createdTime, updatedTime
       ]
     })
     imported++
@@ -552,7 +580,11 @@ export async function stepSyncJob(userId: string, email: string, owner: string):
       unsorted: Number(current.unsorted || 0) === 1
     })
     const saved = await saveLeadPage(userId, owner, page.rows)
-    const finished = !page.nextCursor || pageNumber >= PAGE_CAP
+    const finished = syncPageIsLast({
+      pageNumber,
+      nextCursor: page.nextCursor,
+      pageCap: PAGE_CAP
+    })
     const cursor = finished ? (page.nextCursor && pageNumber >= PAGE_CAP ? page.nextCursor : null) : page.nextCursor
     await db.execute({
       sql: `UPDATE mockup_sync_jobs SET
@@ -590,6 +622,30 @@ export async function stepSyncJob(userId: string, email: string, owner: string):
     }
   } catch (error: unknown) {
     const message = errorMessage(error).slice(0, 500)
+    if (leadSyncAfterError({
+      cursor: asString(current.cursor),
+      unsorted: Number(current.unsorted || 0) === 1,
+      message
+    }) === 'unsorted') {
+      await db.execute({
+        sql: `UPDATE mockup_sync_jobs
+              SET unsorted = 1, error = NULL, locked_at = NULL, updated_at = datetime('now')
+              WHERE id = ? AND user_id = ?`,
+        args: [current.id, userId]
+      })
+      return {
+        job: viewOf(await latestJob(userId)),
+        busy: false,
+        line: stepLine({
+          jobId: String(current.id),
+          n8n: n8nStatusOf(error),
+          page: pageNumber,
+          reason: 'fallback_unsorted',
+          error: message,
+          secrets: configuredSecrets()
+        })
+      }
+    }
     await db.execute({
       sql: `UPDATE mockup_sync_jobs
             SET status = 'failed', error = ?, locked_at = NULL, updated_at = datetime('now')

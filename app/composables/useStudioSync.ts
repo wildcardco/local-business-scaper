@@ -19,7 +19,7 @@ function summary(job: StudioSyncJob, owner?: string) {
   return [
     `Checked ${job.synced} n8n lead${job.synced === 1 ? '' : 's'}`,
     kept ? `Kept ${kept} with a Vercel link` : 'No Vercel mockup links on those rows',
-    job.partial ? 'Stopped after 40 pages. Run sync again to continue.' : ''
+    job.partial ? 'Stopped before the oldest leads. Sync again to read from the newest page.' : ''
   ].filter(Boolean).join('. ')
 }
 

@@ -11,6 +11,7 @@ import {
 import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
 import { costActionLabel, foldMockupCost, parseCostLedger } from '~~/shared/mockup-cost'
 import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
+import { takeLeadCursor } from '~~/shared/studio-sync-leads'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import {
   leadPayloadForBuild,
@@ -365,7 +366,11 @@ async function fetchLeadPage(columnName: string, value: string, sortBy: string, 
   return {
     status,
     rows,
-    nextCursor: next && rows.length > 0 && next !== cursor ? next : null
+    nextCursor: takeLeadCursor({
+      rowCount: rows.length,
+      nextCursor: next,
+      requestCursor: cursor
+    })
   }
 }
 

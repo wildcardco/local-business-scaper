@@ -1,6 +1,8 @@
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { stepSyncJob } from '~~/server/utils/mockup-sync'
 
+export const maxDuration = 60
+
 export default defineEventHandler(async (event) => {
   const user = event.context.user
   const owner = ownerSlugFromEmail(user.email)

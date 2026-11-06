@@ -1,4 +1,5 @@
 import { visibleMockupSql } from '~~/server/utils/mockups'
+import { MOCKUP_CREATED_ORDER_SQL } from '~~/shared/mockup-list-order'
 
 export type MockupSort = 'created' | 'oldest' | 'updated' | 'name'
 
@@ -30,7 +31,7 @@ function orderSql(sort: MockupSort) {
   if (sort === 'oldest') return `${CREATED_TIME} IS NULL, ${CREATED_TIME} ASC, id ASC`
   if (sort === 'updated') return `${UPDATED_TIME} IS NULL, ${UPDATED_TIME} DESC, id DESC`
   if (sort === 'name') return `lower(COALESCE(b_name, '')) ASC, ${CREATED_TIME} IS NULL, ${CREATED_TIME} DESC, id DESC`
-  return `${CREATED_TIME} IS NULL, ${CREATED_TIME} DESC, id DESC`
+  return MOCKUP_CREATED_ORDER_SQL
 }
 
 /**
