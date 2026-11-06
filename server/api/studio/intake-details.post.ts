@@ -2,7 +2,7 @@ import { detailsFromPlaceListing } from '~~/shared/place-lookup'
 import { intakeErrorMessage } from '~~/shared/intake-lookup'
 import { isPlaceId } from '~~/shared/studio-location'
 import { businessCategoryFromListing } from '~~/server/utils/openweb-ninja'
-import { fetchPlaceListing } from '~~/server/utils/place-listing'
+import { loadGbpListing } from '~~/server/utils/gbp-load'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -24,9 +24,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: intakeErrorMessage('details-failed') })
   }
 
-  let listing
+  let loaded
   try {
-    listing = await fetchPlaceListing(placeId)
+    loaded = await loadGbpListing(placeId)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : ''
     if (/RAPIDAPI_KEY is not configured/i.test(message)) {
@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
     }
     throw createError({ statusCode: 502, message: intakeErrorMessage('details-failed') })
   }
+  const listing = loaded.listing
   if (!listing) {
     return {
       found: {},
@@ -42,6 +43,10 @@ export default defineEventHandler(async (event) => {
       zipCode: null,
       rating: null,
       reviewCount: null,
+      googleBusinessId: null,
+      gbpPhotos: [],
+      photoCount: null,
+      photoMessage: loaded.photoMessage,
       message: intakeErrorMessage('details-empty')
     }
   }
@@ -61,13 +66,17 @@ export default defineEventHandler(async (event) => {
 
   return {
     found,
-    placeId,
+    placeId: text(listing.place_id) || placeId,
     googleMapsUrl: text(listing.google_maps_url) || null,
     zipCode: text(listing.postal_code) || null,
     rating: numberOrNull(listing.rating),
     reviewCount: numberOrNull(listing.review_count),
+    googleBusinessId: loaded.googleBusinessId,
+    gbpPhotos: loaded.gbpPhotos,
+    photoCount: loaded.photoCount,
+    photoMessage: loaded.photoMessage,
     message: Object.keys(found).length
-      ? 'Filled from the listing you chose. Edit anything that is wrong before you generate.'
+      ? `Filled from the Google listing you chose. ${loaded.photoMessage} Edit anything that is wrong before you generate.`
       : intakeErrorMessage('details-empty')
   }
 })

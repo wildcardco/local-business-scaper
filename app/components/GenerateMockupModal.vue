@@ -333,7 +333,7 @@ async function confirm() {
           :disabled="isSaving"
           @click="lookupPlace"
         >
-          Look up
+          Load Google listing
         </UButton>
         <p
           v-if="lookupMessage"

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { GbpPhoto } from '~~/shared/gbp-listing'
+import { siteExtractionStatus } from '~~/shared/gbp-listing'
 import { fillIntakeFields } from '~~/shared/intake-lookup'
 import type { PlaceDetails } from '~~/shared/place-lookup'
 import { pageChoiceRequest, parseWebsiteIntakeUrl, type PageChoice } from '~~/shared/website-intake'
@@ -26,7 +28,12 @@ const form = ref({
   googleMapsUrl: '',
   zipCode: '',
   rating: null as number | null,
-  reviewCount: null as number | null
+  reviewCount: null as number | null,
+  googleBusinessId: '',
+  gbpPhotos: [] as GbpPhoto[],
+  photoCount: null as number | null,
+  gbpLoaded: false,
+  photoMessage: ''
 })
 
 const generateNowLabel = computed(() => {
@@ -49,6 +56,10 @@ function applyLookup(payload: {
   zipCode: string | null
   rating: number | null
   reviewCount: number | null
+  googleBusinessId?: string | null
+  gbpPhotos?: GbpPhoto[]
+  photoCount?: number | null
+  photoMessage?: string | null
 }) {
   form.value = fillIntakeFields(form.value, payload.found)
   form.value.placeId = payload.placeId
@@ -56,6 +67,11 @@ function applyLookup(payload: {
   if (payload.zipCode) form.value.zipCode = payload.zipCode
   if (payload.rating != null) form.value.rating = payload.rating
   if (payload.reviewCount != null) form.value.reviewCount = payload.reviewCount
+  form.value.googleBusinessId = payload.googleBusinessId || ''
+  form.value.gbpPhotos = payload.gbpPhotos || []
+  form.value.photoCount = payload.photoCount ?? null
+  form.value.gbpLoaded = true
+  form.value.photoMessage = payload.photoMessage || ''
 }
 
 function applyWebsite(payload: {
@@ -67,6 +83,10 @@ function applyWebsite(payload: {
   reviewCount: number | null
   url: string
   host: string
+  googleBusinessId?: string | null
+  gbpPhotos?: GbpPhoto[]
+  photoCount?: number | null
+  photoMessage?: string | null
 }) {
   if (!form.value.website.trim()) form.value.website = payload.url
   applyLookup(payload)
@@ -78,7 +98,18 @@ function applyWebsite(payload: {
 function useWebsiteUrl(payload: { url: string, host: string }) {
   form.value.website = payload.url
   confirmedHost.value = payload.host
+  form.value.googleBusinessId = ''
+  form.value.gbpPhotos = []
+  form.value.photoCount = null
+  form.value.gbpLoaded = false
+  form.value.photoMessage = ''
 }
+
+const extraction = computed(() => siteExtractionStatus({
+  website: form.value.website,
+  phone: form.value.phone,
+  address: [form.value.address, form.value.city, form.value.state, form.value.zipCode].filter(Boolean).join(', ')
+}))
 
 function setMode(next: 'website' | 'manual') {
   mode.value = next
@@ -237,6 +268,22 @@ async function submit() {
           :disabled="isSaving"
           @apply="applyLookup"
         />
+        <UAlert
+          v-if="mode === 'website' && confirmedHost"
+          color="neutral"
+          variant="subtle"
+          icon="i-lucide-info"
+          :title="extraction.title"
+          :description="extraction.message"
+          data-site-extraction
+        />
+        <p
+          v-if="form.photoMessage"
+          class="text-sm text-muted"
+          data-gbp-photos
+        >
+          {{ form.photoMessage }}
+        </p>
         <fieldset
           v-if="mode === 'website'"
           class="space-y-2"

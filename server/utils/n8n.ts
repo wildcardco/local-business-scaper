@@ -59,6 +59,8 @@ export interface StudioLeadPayload {
   mockup_id: string
   business_id?: string | null
   mockup_version?: number
+  photo_count?: number
+  gbp_photos?: { id: string, url: string, type: string | null, ts: string | null }[]
   /** HTML one-page rebuild. Web stack must not send this. WF-2 ignores it until Normalize copies it. */
   page_intent?: 'one_page'
 }

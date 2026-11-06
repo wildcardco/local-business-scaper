@@ -1,7 +1,7 @@
 import { detailsFromPlaceListing, type PlaceDetailKey, type PlaceDetails } from '~~/shared/place-lookup'
 import { db } from '~~/server/utils/db'
 import { businessCategoryFromListing } from '~~/server/utils/openweb-ninja'
-import { fetchPlaceListing } from '~~/server/utils/place-listing'
+import { loadGbpListing } from '~~/server/utils/gbp-load'
 
 const COLUMNS: Record<PlaceDetailKey, string> = {
   name: 'name',
@@ -42,7 +42,8 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const listing = await fetchPlaceListing(placeId)
+  const loaded = await loadGbpListing(placeId)
+  const listing = loaded.listing
   const found = detailsFromPlaceListing(listing
     ? {
         name: listing.name,
@@ -59,15 +60,52 @@ export default defineEventHandler(async (event) => {
     : null)
 
   await saveFoundDetails(id, String(user.id), found)
+  await saveGbpIdentity(id, String(user.id), loaded, listing)
 
   const labels = Object.keys(found)
+  const filled = labels.length
+    ? `Filled from Google: ${labels.join(', ')}.`
+    : 'Google did not return those details. Type them in. Empty fields stay empty.'
   return {
     found,
-    message: labels.length
-      ? `Filled from Google: ${labels.join(', ')}.`
-      : 'Google did not return those details. Type them in. Empty fields stay empty.'
+    googleBusinessId: loaded.googleBusinessId,
+    photoCount: loaded.photoCount,
+    message: `${filled} ${loaded.photoMessage}`
   }
 })
+
+async function saveGbpIdentity(id: string, userId: string, loaded: {
+  googleBusinessId: string | null
+  gbpPhotos: unknown
+  photoCount: number | null
+}, listing: { postal_code?: unknown, rating?: unknown, review_count?: unknown } | null) {
+  const zip = typeof listing?.postal_code === 'string' ? listing.postal_code.trim() : ''
+  const rating = typeof listing?.rating === 'number' ? listing.rating : null
+  const reviewCount = typeof listing?.review_count === 'number' ? listing.review_count : null
+  await db.execute({
+    sql: `UPDATE businesses SET
+      google_business_id = ?,
+      gbp_photos = ?,
+      photo_count = ?,
+      zip_code = COALESCE(?, zip_code),
+      rating = COALESCE(?, rating),
+      review_count = COALESCE(?, review_count),
+      updated_at = datetime('now')
+      WHERE id = ? AND user_id = ?`,
+    args: [
+      loaded.googleBusinessId,
+      loaded.gbpPhotos && Array.isArray(loaded.gbpPhotos) && loaded.gbpPhotos.length
+        ? JSON.stringify(loaded.gbpPhotos)
+        : null,
+      loaded.photoCount,
+      zip || null,
+      rating,
+      reviewCount,
+      id,
+      userId
+    ]
+  })
+}
 
 async function saveFoundDetails(id: string, userId: string, found: PlaceDetails) {
   const sets: string[] = []

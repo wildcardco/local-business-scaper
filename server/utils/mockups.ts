@@ -7,6 +7,7 @@ import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/m
 import { factoryFeedback } from '~~/shared/photo-slots'
 import { studioSiteResearch } from '~~/shared/studio-site-payload'
 import { outboundLeadPayload } from '~~/shared/website-intake'
+import { gbpPhotosFrom, gbpWebhookFields, photoCountFrom } from '~~/shared/gbp-listing'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -62,6 +63,15 @@ function mapMockupCosts(raw: unknown) {
   }
 }
 
+function storedGbpPhotos(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return []
+  try {
+    return gbpPhotosFrom(JSON.parse(value))
+  } catch {
+    return []
+  }
+}
+
 export function mapMockup(row: Record<string, unknown>, business?: Record<string, unknown> | null) {
   let photoUrls: string[] = []
   if (typeof row.photo_urls === 'string' && row.photo_urls) {
@@ -81,6 +91,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
   const city = rawCity || parsed.city
   const state = rawState || parsed.state
   const placeId = (row.place_id as string) || (business?.place_id as string) || null
+  const storedPhotos = storedGbpPhotos(business?.gbp_photos)
   const mockupUrl = (row.mockup_url as string) || null
   const deploymentMissing = Number(row.deployment_missing || 0) === 1
   const githubMissing = Number(row.github_missing || 0) === 1
@@ -154,7 +165,10 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
           rating: business.rating != null ? Number(business.rating) : null,
           reviewCount: business.review_count != null ? Number(business.review_count) : null,
           placeId: (business.place_id as string) || null,
-          zipCode: (business.zip_code as string) || null
+          zipCode: (business.zip_code as string) || null,
+          googleBusinessId: (business.google_business_id as string) || null,
+          gbpPhotos: storedPhotos,
+          photoCount: photoCountFrom(business.photo_count, storedPhotos)
         }
       : null
   }
@@ -250,7 +264,9 @@ export async function getMockupForUser(id: string, userId: string) {
       SELECT m.*, b.name as b_name, b.website as b_website, b.phone as b_phone, b.email as b_email,
         b.address as b_address, b.city as b_city, b.state as b_state, b.zip_code as b_zip,
         b.category as b_category,
-        b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id
+        b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id,
+        b.google_business_id as b_google_business_id, b.gbp_photos as b_gbp_photos,
+        b.photo_count as b_photo_count
       FROM mockups m
       LEFT JOIN businesses b ON m.business_id = b.id
       WHERE m.id = ? AND m.user_id = ?
@@ -274,7 +290,10 @@ export async function getMockupForUser(id: string, userId: string) {
         category: row.b_category,
         rating: row.b_rating,
         review_count: row.b_review_count,
-        place_id: row.b_place_id
+        place_id: row.b_place_id,
+        google_business_id: row.b_google_business_id,
+        gbp_photos: row.b_gbp_photos,
+        photo_count: row.b_photo_count
       }
     : null
 
@@ -469,6 +488,18 @@ export async function fireMockupAction(opts: {
     mockup_id: mockup.id,
     business_id: mockup.businessId,
     mockup_version: mockup.mockupVersion
+  }
+
+  const gbp = gbpWebhookFields({
+    appBusinessId: mockup.businessId,
+    googleBusinessId: business?.googleBusinessId,
+    photos: business?.gbpPhotos,
+    photoCount: business?.photoCount
+  })
+  leadPayload.business_id = gbp.business_id
+  if (gbp.gbp_photos) {
+    leadPayload.photo_count = gbp.photo_count
+    leadPayload.gbp_photos = gbp.gbp_photos
   }
 
   const outbound = outboundLeadPayload(leadPayload, {

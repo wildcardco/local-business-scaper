@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { GbpPhoto } from '~~/shared/gbp-listing'
 import { intakeErrorMessage, type IntakeMatch } from '~~/shared/intake-lookup'
 import type { PlaceDetails } from '~~/shared/place-lookup'
 
@@ -18,6 +19,10 @@ const emit = defineEmits<{
     zipCode: string | null
     rating: number | null
     reviewCount: number | null
+    googleBusinessId: string | null
+    gbpPhotos: GbpPhoto[]
+    photoCount: number | null
+    photoMessage: string | null
   }]
 }>()
 
@@ -82,6 +87,10 @@ async function useListing(match: IntakeMatch) {
       zipCode: string | null
       rating: number | null
       reviewCount: number | null
+      googleBusinessId: string | null
+      gbpPhotos: GbpPhoto[]
+      photoCount: number | null
+      photoMessage: string | null
       message: string
     }>('/api/studio/intake-details', {
       method: 'POST',
@@ -98,7 +107,11 @@ async function useListing(match: IntakeMatch) {
       googleMapsUrl: result.googleMapsUrl,
       zipCode: result.zipCode,
       rating: result.rating,
-      reviewCount: result.reviewCount
+      reviewCount: result.reviewCount,
+      googleBusinessId: result.googleBusinessId,
+      gbpPhotos: result.gbpPhotos || [],
+      photoCount: result.photoCount,
+      photoMessage: result.photoMessage
     })
     tone.value = 'filled'
     message.value = result.message
@@ -211,7 +224,7 @@ async function useListing(match: IntakeMatch) {
           :disabled="disabled || loading || (Boolean(confirmingId) && confirmingId !== match.placeId)"
           @click="useListing(match)"
         >
-          Use this listing
+          Load this Google listing
         </UButton>
       </li>
     </ul>

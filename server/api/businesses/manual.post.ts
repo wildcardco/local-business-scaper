@@ -1,6 +1,7 @@
 import { db, generateId } from '~~/server/utils/db'
 import { calculateInitialScore } from '~~/server/utils/lead-scorer'
 import { findOrCreateMockupForBusiness, mapMockup } from '~~/server/utils/mockups'
+import { gbpPhotosFrom, googleBusinessIdFrom, photoCountFrom } from '~~/shared/gbp-listing'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -69,6 +70,23 @@ export default defineEventHandler(async (event) => {
         ...fields.slice(0, 9),
         placeId,
         ...fields.slice(9)
+      ]
+    })
+  }
+
+  if (body.gbpLoaded === true) {
+    const photos = gbpPhotosFrom(body.gbpPhotos)
+    const photoCount = photoCountFrom(body.photoCount, photos)
+    await db.execute({
+      sql: `UPDATE businesses SET
+        google_business_id = ?, gbp_photos = ?, photo_count = ?, updated_at = datetime('now')
+        WHERE id = ? AND user_id = ?`,
+      args: [
+        googleBusinessIdFrom(body.googleBusinessId),
+        photos.length ? JSON.stringify(photos) : null,
+        photoCount,
+        businessId,
+        user.id
       ]
     })
   }
