@@ -5,6 +5,7 @@ import { githubRepoForMockup, mockupDeleteRepo, mockupGithubUrl } from '~~/share
 import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/mockup-cost'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import { factoryFeedback } from '~~/shared/photo-slots'
+import { studioSiteResearch } from '~~/shared/studio-site-payload'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -151,7 +152,8 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
           category: (business.category as string) || null,
           rating: business.rating != null ? Number(business.rating) : null,
           reviewCount: business.review_count != null ? Number(business.review_count) : null,
-          placeId: (business.place_id as string) || null
+          placeId: (business.place_id as string) || null,
+          zipCode: (business.zip_code as string) || null
         }
       : null
   }
@@ -245,7 +247,8 @@ export async function getMockupForUser(id: string, userId: string) {
   const result = await db.execute({
     sql: `
       SELECT m.*, b.name as b_name, b.website as b_website, b.phone as b_phone, b.email as b_email,
-        b.address as b_address, b.city as b_city, b.state as b_state, b.category as b_category,
+        b.address as b_address, b.city as b_city, b.state as b_state, b.zip_code as b_zip,
+        b.category as b_category,
         b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id
       FROM mockups m
       LEFT JOIN businesses b ON m.business_id = b.id
@@ -266,6 +269,7 @@ export async function getMockupForUser(id: string, userId: string) {
         address: row.b_address,
         city: row.b_city,
         state: row.b_state,
+        zip_code: row.b_zip,
         category: row.b_category,
         rating: row.b_rating,
         review_count: row.b_review_count,
@@ -426,17 +430,29 @@ export async function fireMockupAction(opts: {
     ]
   })
 
+  const site = studioSiteResearch({
+    website: business?.website,
+    phone: business?.phone,
+    address: business?.address,
+    city: business?.city,
+    state: business?.state,
+    zip: business?.zipCode,
+    category: business?.category,
+    rating: business?.rating,
+    reviewCount: business?.reviewCount
+  })
+
   const leadPayload = {
     action: opts.action,
     place_id: placeId,
     owner,
     business_name: business?.name || 'Untitled business',
-    website: business?.website,
-    phone: business?.phone,
-    address: [business?.address, business?.city, business?.state].filter(Boolean).join(', ') || null,
-    category: business?.category,
-    rating: business?.rating,
-    review_count: business?.reviewCount,
+    website: site.website,
+    phone: site.phone,
+    address: site.address,
+    category: site.category,
+    rating: site.rating,
+    review_count: site.review_count,
     last_feedback: opts.clearFeedback ? '' : (feedbackText || mockup.lastFeedback),
     extra_prompt: opts.clearFeedback ? (opts.extraPrompt || opts.feedback || null) : extraPrompt,
     photo_urls: opts.photoUrls || mockup.photoUrls,
