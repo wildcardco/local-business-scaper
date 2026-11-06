@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GbpPhoto } from '~~/shared/gbp-listing'
-import { intakeErrorMessage, type IntakeMatch } from '~~/shared/intake-lookup'
+import { confidentChoice, intakeErrorMessage, type IntakeMatch } from '~~/shared/intake-lookup'
 import type { PlaceDetails } from '~~/shared/place-lookup'
 
 const props = defineProps<{
@@ -8,6 +8,8 @@ const props = defineProps<{
   city: string
   state: string
   website: string
+  phone?: string
+  address?: string
   disabled?: boolean
 }>()
 
@@ -37,12 +39,6 @@ function readError(error: unknown, fallback: string) {
   return err.data?.message || err.message || fallback
 }
 
-function locationLine(match: IntakeMatch) {
-  if (match.address) return match.address
-  const town = [match.city, match.state].filter(Boolean).join(', ')
-  return town || 'Address not on the listing'
-}
-
 async function findBusiness() {
   if (loading.value || confirmingId.value) return
   matches.value = []
@@ -62,12 +58,22 @@ async function findBusiness() {
         name: props.name,
         city: props.city,
         state: props.state,
-        website: props.website
+        website: props.website,
+        phone: props.phone || '',
+        address: props.address || ''
       }
     })
-    matches.value = result.matches || []
+    const found = result.matches || []
+    const choice = confidentChoice(found)
     message.value = result.message
-    tone.value = result.status === 'none' || matches.value.length === 0 ? 'none' : 'matches'
+    if (choice) {
+      matches.value = []
+      await useListing(choice, true)
+      if (tone.value === 'error') matches.value = found
+      return
+    }
+    matches.value = found
+    tone.value = result.status === 'none' || found.length === 0 ? 'none' : 'matches'
   } catch (error: unknown) {
     tone.value = 'error'
     message.value = readError(error, intakeErrorMessage('search-failed'))
@@ -76,8 +82,8 @@ async function findBusiness() {
   }
 }
 
-async function useListing(match: IntakeMatch) {
-  if (loading.value || confirmingId.value) return
+async function useListing(match: IntakeMatch, automatic = false) {
+  if ((!automatic && loading.value) || confirmingId.value) return
   confirmingId.value = match.placeId
   try {
     const result = await $fetch<{
@@ -144,7 +150,7 @@ async function useListing(match: IntakeMatch) {
         Find business information
       </UButton>
       <p class="text-sm text-muted">
-        Research this name in the town you entered. Pick a listing to fill the form. You can edit every field afterward. Generate does not start from this search.
+        Search Google with this name, town, phone, and website. One clear match fills the form. If more than one listing fits, you choose. Generate does not start from this search.
       </p>
     </div>
 
@@ -165,68 +171,12 @@ async function useListing(match: IntakeMatch) {
       {{ message }}
     </p>
 
-    <ul
-      v-if="matches.length"
-      class="space-y-2"
-      data-intake-matches
-    >
-      <li
-        v-for="match in matches"
-        :key="match.placeId"
-        class="rounded-wc-lg border border-default p-3"
-      >
-        <div class="flex flex-wrap items-start justify-between gap-2">
-          <p class="font-medium">
-            {{ match.name }}
-          </p>
-          <div class="flex flex-wrap gap-1">
-            <UBadge
-              v-if="match.exactName"
-              color="success"
-              variant="subtle"
-            >
-              Exact name
-            </UBadge>
-            <UBadge
-              v-if="match.websiteMatch"
-              color="neutral"
-              variant="subtle"
-            >
-              Website matches
-            </UBadge>
-            <UBadge
-              v-if="!match.exactName"
-              color="neutral"
-              variant="subtle"
-            >
-              Similar name
-            </UBadge>
-          </div>
-        </div>
-        <p class="mt-1 text-sm text-muted">
-          {{ locationLine(match) }}
-        </p>
-        <p
-          v-if="match.category || match.phone || match.website"
-          class="mt-1 break-words text-sm text-muted"
-        >
-          <span v-if="match.category">{{ match.category }}</span>
-          <span v-if="match.phone"> · {{ match.phone }}</span>
-          <span v-if="match.website"> · {{ match.website }}</span>
-        </p>
-        <UButton
-          type="button"
-          class="mt-3 min-h-11 w-full justify-center sm:w-auto"
-          size="sm"
-          variant="outline"
-          :data-intake-use="match.placeId"
-          :loading="confirmingId === match.placeId"
-          :disabled="disabled || loading || (Boolean(confirmingId) && confirmingId !== match.placeId)"
-          @click="useListing(match)"
-        >
-          Load this Google listing
-        </UButton>
-      </li>
-    </ul>
+    <ListingMatchList
+      :matches="matches"
+      :confirming-id="confirmingId"
+      :disabled="disabled"
+      :loading="loading"
+      @select="useListing"
+    />
   </div>
 </template>

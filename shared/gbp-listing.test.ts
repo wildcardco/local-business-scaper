@@ -6,6 +6,7 @@ import {
   gbpWebhookFields,
   googleBusinessIdFrom,
   googlePlaceIdFrom,
+  preferredPlaceId,
   siteExtractionStatus
 } from './gbp-listing.ts'
 import { pageChoiceLead } from './website-intake.ts'
@@ -37,6 +38,9 @@ test('a confirmed Google listing replaces the synthetic business id and keeps th
   assert.equal(googleBusinessIdFrom('ChIJleeps'), null)
   assert.equal(googlePlaceIdFrom('ChIJleepsplace'), 'ChIJleepsplace')
   assert.equal(googlePlaceIdFrom('studio_ryan_m1'), null)
+  assert.equal(preferredPlaceId('studio_ryan_m1', 'ChIJleepsplace'), 'ChIJleepsplace')
+  assert.equal(preferredPlaceId('ChIJmockupplace1', 'ChIJbusinessplace'), 'ChIJmockupplace1')
+  assert.equal(preferredPlaceId('', ''), null)
   assert.equal(fields.business_id, '0x880e1c:0x3a0c0e')
   assert.equal(fields.photo_count, 8)
   assert.deepEqual(fields.gbp_photos, [{

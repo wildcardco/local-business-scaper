@@ -58,6 +58,8 @@ export interface IntakeQuery {
   city: string
   state: string
   website: string
+  phone?: string
+  address?: string
 }
 
 export interface IntakeListing {
@@ -73,9 +75,20 @@ export interface IntakeListing {
 
 export interface IntakeMatch extends IntakeListing {
   exactName: boolean
+  /** Same name after dropping legal suffixes such as Company, Inc, and LLC. */
+  nameEquivalent: boolean
   sameCity: boolean
   sameState: boolean
   websiteMatch: boolean
+  phoneMatch: boolean
+  streetMatch: boolean
+  /** Both sides had this fact and they disagreed. A blank listing value is not a conflict. */
+  phoneConflict: boolean
+  websiteConflict: boolean
+  streetConflict: boolean
+  /** The query named a town and this listing is in it. */
+  townConfirmed: boolean
+  score: number
 }
 
 function clean(value: unknown) {
@@ -115,26 +128,70 @@ export function websiteHost(value: string) {
   }
 }
 
-function relatedNames(queryName: string, listingName: string) {
-  if (!queryName || !listingName) return false
-  if (queryName === listingName) return true
-  const shorter = queryName.length <= listingName.length ? queryName : listingName
-  const longer = shorter === queryName ? listingName : queryName
-  if (shorter.split(' ').length < 2) return false
-  return ` ${longer} `.includes(` ${shorter} `)
+const LEGAL_SUFFIXES = new Set([
+  'co',
+  'company',
+  'inc',
+  'incorporated',
+  'llc',
+  'ltd',
+  'limited',
+  'corp',
+  'corporation',
+  'plc',
+  'pc',
+  'pllc',
+  'llp',
+  'lp'
+])
+
+const STREET_WORDS = new Set([
+  'street', 'st', 'avenue', 'ave', 'road', 'rd', 'drive', 'dr', 'boulevard', 'blvd',
+  'lane', 'ln', 'court', 'ct', 'place', 'pl', 'highway', 'hwy', 'suite', 'ste', 'unit', 'apt'
+])
+
+function coreTokens(value: string) {
+  const words = nameKey(value).split(' ').filter(word => word && word !== 'the')
+  while (words.length > 1 && LEGAL_SUFFIXES.has(words[words.length - 1] || '')) words.pop()
+  return words
+}
+
+function phoneDigits(value: string) {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1)
+  if (digits.length > 10) return digits.slice(-10)
+  return digits.length === 10 ? digits : ''
+}
+
+function streetSignature(value: string) {
+  const line = (value.split(',')[0] || value).toLowerCase()
+  const words = line.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean)
+  const number = words.find(word => /^\d+$/.test(word)) || ''
+  const name = words.filter(word => !/^\d+$/.test(word) && !STREET_WORDS.has(word)).join(' ')
+  if (!number || !name) return ''
+  return `${number} ${name}`
+}
+
+function containedName(shorter: string[], longer: string[]) {
+  if (shorter.length < 2 || shorter.length >= longer.length) return false
+  const haystack = ` ${longer.join(' ')} `
+  return haystack.includes(` ${shorter.join(' ')} `)
 }
 
 /**
- * Listings the user can choose. An exact or closely named business in the
- * requested town is marked, and a matching website in that state stays in the
- * list even when the Google name differs. Nothing is applied until
- * confirmedMatch is given that listing's place id.
+ * Listings the user can choose. Ranking uses the name, town, phone, street,
+ * and website that are actually present. A legal suffix such as Company does
+ * not by itself make a different business. Nothing is written until the caller
+ * loads one place id from this list.
  */
 export function intakeMatches(query: IntakeQuery, listings: IntakeListing[]): IntakeMatch[] {
-  const queryName = nameKey(query.name)
+  const queryCore = coreTokens(query.name)
+  const queryName = queryCore.join(' ')
   const queryCity = cityKey(query.city)
   const queryState = stateKey(query.state)
   const queryHost = websiteHost(query.website)
+  const queryPhone = phoneDigits(query.phone || '')
+  const queryStreet = streetSignature(query.address || '')
   const seen = new Set<string>()
   const matches: IntakeMatch[] = []
 
@@ -142,23 +199,49 @@ export function intakeMatches(query: IntakeQuery, listings: IntakeListing[]): In
     const placeId = clean(listing.placeId)
     const name = clean(listing.name)
     if (!placeId || !name || seen.has(placeId)) continue
-    const listingName = nameKey(name)
+    const listingCore = coreTokens(name)
+    const listingName = listingCore.join(' ')
     const listingCity = cityKey(clean(listing.city))
     const listingState = stateKey(clean(listing.state))
     const listingHost = websiteHost(clean(listing.website))
-    const exactName = Boolean(queryName) && queryName === listingName
+    const listingPhone = phoneDigits(clean(listing.phone))
+    const listingStreet = streetSignature(clean(listing.address))
+    const exactName = Boolean(nameKey(query.name)) && nameKey(query.name) === nameKey(name)
+    const singleToken = queryCore.length === 1 ? (queryCore[0] || '') : ''
+    const nameEquivalent = Boolean(queryName)
+      && queryName === listingName
+      && (queryCore.length >= 2 || singleToken.length >= 4)
     const sameCity = Boolean(queryCity) && queryCity === listingCity
     const sameState = Boolean(queryState) && queryState === listingState
+    const stateAgreed = !queryState || sameState
+    const townConfirmed = Boolean(queryCity) && sameCity && stateAgreed
     const websiteMatch = Boolean(queryHost) && queryHost === listingHost
-    const cityOk = !queryCity || sameCity
-    const stateOk = !queryState || sameState
-    const related = relatedNames(queryName, listingName)
-    const include = stateOk && (
-      (exactName && cityOk)
-      || (related && !exactName && cityOk)
+    const websiteConflict = Boolean(queryHost) && Boolean(listingHost) && !websiteMatch
+    const phoneMatch = Boolean(queryPhone) && queryPhone === listingPhone
+    const phoneConflict = Boolean(queryPhone) && Boolean(listingPhone) && !phoneMatch
+    const streetMatch = Boolean(queryStreet) && queryStreet === listingStreet
+    const streetConflict = Boolean(queryStreet) && Boolean(listingStreet) && !streetMatch
+    const related = containedName(
+      queryCore.length <= listingCore.length ? queryCore : listingCore,
+      queryCore.length <= listingCore.length ? listingCore : queryCore
+    )
+    const inTown = !queryCity || sameCity
+    const include = stateAgreed && (
+      ((nameEquivalent || related) && inTown)
       || websiteMatch
+      || phoneMatch
+      || (streetMatch && inTown)
     )
     if (!include) continue
+    const score = (exactName ? 60 : nameEquivalent ? 50 : related ? 25 : 0)
+      + (websiteMatch ? 30 : 0)
+      + (phoneMatch ? 30 : 0)
+      + (streetMatch ? 25 : 0)
+      + (sameCity ? 15 : 0)
+      + (sameState ? 10 : 0)
+      - (websiteConflict ? 20 : 0)
+      - (phoneConflict ? 20 : 0)
+      - (streetConflict ? 20 : 0)
     seen.add(placeId)
     matches.push({
       placeId,
@@ -170,17 +253,35 @@ export function intakeMatches(query: IntakeQuery, listings: IntakeListing[]): In
       phone: clean(listing.phone) || null,
       category: clean(listing.category) || null,
       exactName,
+      nameEquivalent,
       sameCity,
       sameState,
-      websiteMatch
+      websiteMatch,
+      phoneMatch,
+      streetMatch,
+      phoneConflict,
+      websiteConflict,
+      streetConflict,
+      townConfirmed,
+      score
     })
   }
 
-  matches.sort((left, right) => {
-    const score = (match: IntakeMatch) => (match.exactName ? 4 : 0) + (match.websiteMatch ? 2 : 0) + (match.sameCity ? 1 : 0)
-    return score(right) - score(left)
-  })
+  matches.sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
   return matches.slice(0, 5)
+}
+
+/**
+ * One listing may be loaded without another click only when it is the only
+ * candidate, the name agrees after normal suffix cleanup, the town agrees,
+ * and phone, website, and street do not contradict it.
+ */
+export function confidentChoice(matches: IntakeMatch[]): IntakeMatch | null {
+  if (matches.length !== 1) return null
+  const match = matches[0]
+  if (!match?.nameEquivalent || !match.townConfirmed) return null
+  if (match.phoneConflict || match.websiteConflict || match.streetConflict) return null
+  return match
 }
 
 /** The listing the user picked. A missing or unknown id picks nothing, even when one exact match is in the list. */
@@ -209,13 +310,86 @@ export function intakeResultCopy(query: IntakeQuery, matches: IntakeMatch[]) {
       message: `No listing matched ${who}${place ? ` in ${place}` : ''}. Nothing was filled in. Type the details, or try the name as it appears on Google.`
     }
   }
-  const exact = matches.some(match => match.exactName)
+  if (confidentChoice(matches)) {
+    return {
+      status: 'confident' as const,
+      message: `One Google listing matches ${who}${place ? ` in ${place}` : ''}. Loading it does not start generation.`
+    }
+  }
+  const conflict = matches.length === 1 && Boolean(
+    matches[0]?.phoneConflict || matches[0]?.websiteConflict || matches[0]?.streetConflict
+  )
+  if (conflict) {
+    return {
+      status: 'matches' as const,
+      message: 'One listing is close, but the phone, website, or street does not agree. Choose it only if it is the right business. Nothing is filled in until you do.'
+    }
+  }
+  const named = matches.some(match => match.exactName || match.nameEquivalent)
   return {
     status: 'matches' as const,
-    message: exact
-      ? 'Choose the listing. The form stays as you typed it until you do.'
-      : 'No exact name match. Choose a listing only if it is the right business. The form stays as you typed it until you do.'
+    message: matches.length > 1 && named
+      ? 'More than one listing fits. Choose the right business. Nothing is filled in until you do.'
+      : 'No exact name match. Choose a listing only if it is the right business. Nothing is filled in until you do.'
   }
+}
+
+export type ListingLookupAction = 'load-saved' | 'load-confirmed' | 'load-confident' | 'choose' | 'none' | 'rejected'
+
+/**
+ * A saved Google place id is loaded as itself. With no id, a single safe
+ * match is loaded. Several matches, or a match that only looks similar,
+ * wait for the place id the user picked.
+ */
+export function resolveListingLookup(input: {
+  savedPlaceId?: string | null
+  requestedPlaceId?: string | null
+  matches: IntakeMatch[]
+}): { action: ListingLookupAction, placeId: string | null, message: string } {
+  const requested = clean(input.requestedPlaceId)
+  if (requested) {
+    const chosen = confirmedMatch(input.matches, requested)
+    if (!chosen) {
+      return {
+        action: 'rejected',
+        placeId: null,
+        message: 'That listing is not one of the matches for this lead. Nothing was saved.'
+      }
+    }
+    return { action: 'load-confirmed', placeId: chosen.placeId, message: '' }
+  }
+
+  const saved = clean(input.savedPlaceId)
+  if (saved && /^ChIJ[A-Za-z0-9_-]{8,}$/.test(saved)) {
+    return { action: 'load-saved', placeId: saved, message: '' }
+  }
+
+  const confident = confidentChoice(input.matches)
+  if (confident) return { action: 'load-confident', placeId: confident.placeId, message: '' }
+  if (input.matches.length) {
+    return {
+      action: 'choose',
+      placeId: null,
+      message: 'More than one listing fits. Choose the right business. Nothing is filled in until you do.'
+    }
+  }
+  return {
+    action: 'none',
+    placeId: null,
+    message: 'No listing matched this lead. Nothing was filled in.'
+  }
+}
+
+export function listingLookupFailure(message: string) {
+  if (/RAPIDAPI_KEY is not configured/i.test(message)) return 'missing-key' as const
+  return 'search-failed' as const
+}
+
+/** A mockup still on a synthetic id should follow the Google place id once the lead has one. */
+export function mockupPlaceNeedsGoogleId(current: unknown) {
+  if (typeof current !== 'string') return true
+  const value = current.trim()
+  return !value || value.startsWith('studio_')
 }
 
 export function intakeErrorMessage(kind: 'need-town' | 'missing-key' | 'search-failed' | 'details-failed' | 'details-empty') {

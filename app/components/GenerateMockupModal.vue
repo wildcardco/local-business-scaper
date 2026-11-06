@@ -6,6 +6,7 @@ import {
 } from '~~/shared/studio-ai'
 import type { GeneratePhotoWebhookFields } from '~~/shared/photo-slots'
 import { BUILD_MODE_HTML, BUILD_MODE_WEB_STACK, type BuildMode } from '~~/shared/web-stack'
+import type { IntakeMatch } from '~~/shared/intake-lookup'
 
 type ListingStatus = 'idle' | 'loading' | 'done' | 'skipped' | 'error'
 
@@ -28,6 +29,8 @@ const listingStatus = ref<ListingStatus>('idle')
 const listingMessage = ref('')
 const lookupStatus = ref<ListingStatus>('idle')
 const lookupMessage = ref('')
+const lookupMatches = ref<IntakeMatch[]>([])
+const confirmingId = ref('')
 const hasPlaceId = ref(false)
 
 const form = ref({
@@ -92,33 +95,71 @@ function socialLinks(source: Record<string, unknown>) {
 
 const detailKeys = ['name', 'category', 'website', 'phone', 'email', 'address', 'city', 'state'] as const
 
-async function lookupPlace() {
-  if (!businessId.value || lookupStatus.value === 'loading') return
+function applyFound(found: Partial<Record<(typeof detailKeys)[number], string>> | undefined, placeId?: string) {
+  for (const key of detailKeys) {
+    const value = found?.[key]
+    if (typeof value === 'string' && value.trim()) form.value[key] = value.trim()
+  }
+  if (placeId) hasPlaceId.value = true
+}
+
+async function lookupPlace(placeId = '') {
+  if (!businessId.value || lookupStatus.value === 'loading' || confirmingId.value) return
   lookupStatus.value = 'loading'
   lookupMessage.value = ''
+  if (!placeId) lookupMatches.value = []
+  confirmingId.value = placeId
   try {
-    const result = await $fetch<{ found?: Partial<Record<(typeof detailKeys)[number], string>>, message?: string }>(
+    const result = await $fetch<{
+      status?: 'loaded' | 'choose' | 'none'
+      found?: Partial<Record<(typeof detailKeys)[number], string>>
+      matches?: IntakeMatch[]
+      placeId?: string
+      message?: string
+    }>(
       `/api/businesses/${businessId.value}/lookup-place`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        body: {
+          placeId: placeId || undefined,
+          name: form.value.name,
+          city: form.value.city,
+          state: form.value.state,
+          website: form.value.website,
+          phone: form.value.phone,
+          address: form.value.address
+        }
+      }
     )
-    const found = result.found || {}
-    for (const key of detailKeys) {
-      const value = found[key]
-      if (typeof value === 'string' && value.trim()) form.value[key] = value.trim()
+    if (result.status === 'choose') {
+      lookupMatches.value = result.matches || []
+      lookupStatus.value = 'done'
+      lookupMessage.value = result.message || 'Choose the Google listing. Nothing is filled in until you do.'
+      return
     }
+    if (result.status === 'none') {
+      lookupMatches.value = []
+      lookupStatus.value = 'skipped'
+      lookupMessage.value = result.message || 'No listing matched this lead. Nothing was filled in.'
+      return
+    }
+    applyFound(result.found, result.placeId)
+    lookupMatches.value = []
     lookupStatus.value = 'done'
     lookupMessage.value = result.message || 'Lookup finished.'
   } catch (error: unknown) {
     lookupStatus.value = 'error'
     const err = error as { data?: { message?: string } }
-    lookupMessage.value = err.data?.message || 'Could not look up this listing. Type the details. Empty fields stay empty.'
+    lookupMessage.value = err.data?.message || 'The business search did not answer. Nothing was filled in.'
+  } finally {
+    confirmingId.value = ''
   }
 }
 
 async function refreshListing() {
   if (!businessId.value || !hasPlaceId.value) {
     listingStatus.value = 'skipped'
-    listingMessage.value = 'No Google listing on file. Fill in what you have — Facebook and email are pulled from the listing/site when one exists.'
+    listingMessage.value = 'No Google place id is saved yet. Load Google listing can match this name and town. That search does not start generation.'
     return
   }
 
@@ -150,6 +191,8 @@ watch(businessId, async (id) => {
   listingMessage.value = ''
   lookupStatus.value = 'idle'
   lookupMessage.value = ''
+  lookupMatches.value = []
+  confirmingId.value = ''
   socials.value = []
   slotsTouched.value = false
   try {
@@ -270,7 +313,7 @@ async function confirm() {
               {{ listingStatus === 'loading' ? 'Refreshing listing' : 'Google listing' }}
             </p>
             <p class="text-xs text-muted mt-1">
-              {{ listingMessage || 'Search stays cheap. This lookup runs only when you generate a mockup.' }}
+              {{ listingMessage || 'Load Google listing uses the details below. It does not start a mockup.' }}
             </p>
           </div>
           <UButton
@@ -331,10 +374,13 @@ async function confirm() {
           data-lookup-place
           :loading="lookupStatus === 'loading'"
           :disabled="isSaving"
-          @click="lookupPlace"
+          @click="lookupPlace()"
         >
           Load Google listing
         </UButton>
+        <p class="text-sm text-muted">
+          Uses the name, town, phone, street, and website on this lead. One clear match is saved. If more than one listing fits, you choose. This does not start generation.
+        </p>
         <p
           v-if="lookupMessage"
           data-lookup-message
@@ -342,6 +388,13 @@ async function confirm() {
         >
           {{ lookupMessage }}
         </p>
+        <ListingMatchList
+          :matches="lookupMatches"
+          :confirming-id="confirmingId"
+          :disabled="isSaving"
+          :loading="lookupStatus === 'loading'"
+          @select="lookupPlace($event.placeId)"
+        />
 
         <div v-if="socials.length" class="flex flex-wrap gap-2">
           <UButton

@@ -21,6 +21,17 @@ export function googleBusinessIdFrom(value: unknown): string | null {
   return HEX_BUSINESS_ID.test(trimmed) ? trimmed : null
 }
 
+/** Prefer a real Google place id over a synthetic studio id when both exist. */
+export function preferredPlaceId(mockupPlaceId: unknown, businessPlaceId: unknown): string | null {
+  const mockupGoogle = googlePlaceIdFrom(mockupPlaceId)
+  if (mockupGoogle) return mockupGoogle
+  const businessGoogle = googlePlaceIdFrom(businessPlaceId)
+  if (businessGoogle) return businessGoogle
+  if (typeof mockupPlaceId === 'string' && mockupPlaceId.trim()) return mockupPlaceId.trim()
+  if (typeof businessPlaceId === 'string' && businessPlaceId.trim()) return businessPlaceId.trim()
+  return null
+}
+
 export function googlePlaceIdFrom(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()

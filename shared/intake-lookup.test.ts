@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  confidentChoice,
   confirmedMatch,
   fillIntakeFields,
   intakeErrorMessage,
   intakeMatches,
   intakeResultCopy,
+  listingLookupFailure,
+  mockupPlaceNeedsGoogleId,
+  resolveListingLookup,
   type IntakeListing
 } from './intake-lookup.ts'
 
@@ -66,6 +70,8 @@ test('an exact name in the town is selectable and a different business is not ch
   assert.equal(matches[0]?.exactName, true)
   assert.equal(matches[0]?.websiteMatch, true)
   assert.equal(matches[1]?.exactName, false)
+  assert.equal(matches[1]?.nameEquivalent, true)
+  assert.equal(confidentChoice(matches), null)
   assert.equal(confirmedMatch(matches, null), null)
   assert.equal(confirmedMatch(matches, ''), null)
   assert.equal(confirmedMatch(matches, exact.placeId)?.phone, '219-696-1000')
@@ -83,6 +89,7 @@ test('two exact listings stay selectable and neither is applied without its plac
   const matches = intakeMatches(query, [exact, second])
   assert.equal(matches.length, 2)
   assert.equal(matches.every(match => match.exactName), true)
+  assert.equal(confidentChoice(matches), null)
   assert.equal(confirmedMatch(matches, null), null)
   assert.equal(confirmedMatch(matches, second.placeId)?.address, '400 Oak St, Lowell, IN 46356')
   assert.notEqual(confirmedMatch(matches, second.placeId)?.phone, exact.phone)
@@ -159,5 +166,125 @@ test('lookup errors stay on the form and do not describe a chosen business', () 
   }
   const copy = intakeResultCopy(query, intakeMatches(query, [closeName]))
   assert.equal(copy.status, 'matches')
-  assert.match(copy.message, /No exact name match/)
+  assert.match(copy.message, /does not agree/)
+  assert.match(copy.message, /Nothing is filled in until you do/)
+})
+
+const googleSupply: IntakeListing = {
+  placeId: 'ChIJleepsSupply9511',
+  name: 'Leeps Supply',
+  address: '7332 McConnell Ave, Lowell, IN 46356',
+  city: 'Lowell',
+  state: 'IN',
+  website: 'https://www.leeps.com/',
+  phone: '(219) 696-9511',
+  category: 'Plumbing supply store'
+}
+
+test('a missing place id can load one name variant in the same town', () => {
+  const lead = {
+    name: 'Leeps Supply Company',
+    city: 'Lowell',
+    state: 'Indiana',
+    website: '',
+    phone: '',
+    address: ''
+  }
+  const matches = intakeMatches(lead, [googleSupply, sameTownOtherName, otherTown])
+  assert.deepEqual(matches.map(match => match.placeId), [googleSupply.placeId])
+  assert.equal(matches[0]?.exactName, false)
+  assert.equal(matches[0]?.nameEquivalent, true)
+  assert.equal(confidentChoice(matches)?.placeId, googleSupply.placeId)
+  const decision = resolveListingLookup({ savedPlaceId: null, matches })
+  assert.equal(decision.action, 'load-confident')
+  assert.equal(decision.placeId, googleSupply.placeId)
+  assert.equal(resolveListingLookup({ savedPlaceId: 'studio_ryan_m1', matches }).action, 'load-confident')
+})
+
+test('a saved Google place id is loaded without searching for a different business', () => {
+  const matches = intakeMatches(query, [googleSupply])
+  const decision = resolveListingLookup({
+    savedPlaceId: 'ChIJsavedplace0001',
+    matches
+  })
+  assert.equal(decision.action, 'load-saved')
+  assert.equal(decision.placeId, 'ChIJsavedplace0001')
+  assert.notEqual(decision.placeId, googleSupply.placeId)
+})
+
+test('two name variants stay unselected until the user picks a place id', () => {
+  const north: IntakeListing = {
+    ...googleSupply,
+    placeId: 'ChIJleepsNorth0008',
+    name: 'Leeps Supply North',
+    address: '10 North St, Lowell, IN 46356',
+    phone: '219-555-0177',
+    website: ''
+  }
+  const matches = intakeMatches(
+    { name: 'Leeps Supply Company', city: 'Lowell', state: 'IN', website: '' },
+    [googleSupply, north]
+  )
+  assert.equal(matches.length, 2)
+  assert.equal(confidentChoice(matches), null)
+  const waiting = resolveListingLookup({ savedPlaceId: '', matches })
+  assert.equal(waiting.action, 'choose')
+  assert.equal(waiting.placeId, null)
+  assert.match(waiting.message, /Nothing is filled in until you do/)
+  const picked = resolveListingLookup({ savedPlaceId: '', requestedPlaceId: north.placeId, matches })
+  assert.equal(picked.action, 'load-confirmed')
+  assert.equal(picked.placeId, north.placeId)
+  const rejected = resolveListingLookup({
+    savedPlaceId: '',
+    requestedPlaceId: 'ChIJnotinthematchlist01',
+    matches
+  })
+  assert.equal(rejected.action, 'rejected')
+  assert.match(rejected.message, /Nothing was saved/)
+})
+
+test('a phone or street disagreement blocks a silent match, and a real disagreement is ranked below agreement', () => {
+  const wrongPhone: IntakeListing = {
+    ...googleSupply,
+    placeId: 'ChIJleepsWrongphone1',
+    phone: '219-555-0100'
+  }
+  const conflicted = intakeMatches({
+    ...query,
+    phone: '(219) 696-9511',
+    address: '7332 McConnell Ave',
+    website: ''
+  }, [wrongPhone])
+  assert.equal(conflicted.length, 1)
+  assert.equal(conflicted[0]?.phoneConflict, true)
+  assert.equal(conflicted[0]?.streetMatch, true)
+  assert.equal(confidentChoice(conflicted), null)
+
+  const agreed = intakeMatches({
+    name: 'Leeps Supply Company',
+    city: 'Lowell',
+    state: 'Indiana',
+    phone: '1-219-696-9511',
+    address: '7332 McConnell Avenue',
+    website: 'leeps.com'
+  }, [googleSupply, closeName])
+  assert.equal(agreed[0]?.placeId, googleSupply.placeId)
+  assert.equal(agreed[0]?.phoneMatch, true)
+  assert.equal(agreed[0]?.streetMatch, true)
+  assert.equal(agreed[0]?.websiteMatch, true)
+  assert.equal(confidentChoice(agreed), null)
+})
+
+test('no candidate and a provider failure leave the lead unchanged', () => {
+  const matches = intakeMatches(query, [])
+  const none = resolveListingLookup({ savedPlaceId: null, matches })
+  assert.equal(none.action, 'none')
+  assert.equal(none.placeId, null)
+  assert.match(none.message, /Nothing was filled in/)
+  assert.equal(listingLookupFailure('RAPIDAPI_KEY is not configured'), 'missing-key')
+  assert.equal(listingLookupFailure('Local Business Data API error: 500'), 'search-failed')
+  assert.equal(mockupPlaceNeedsGoogleId('studio_ryan_m1'), true)
+  assert.equal(mockupPlaceNeedsGoogleId(''), true)
+  assert.equal(mockupPlaceNeedsGoogleId(null), true)
+  assert.equal(mockupPlaceNeedsGoogleId('ChIJsavedplace0001'), false)
 })
