@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { fillIntakeFields } from '~~/shared/intake-lookup'
+import type { PlaceDetails } from '~~/shared/place-lookup'
+
 definePageMeta({ hidePhoneTabs: true })
 
 const toast = useToast()
@@ -14,8 +17,29 @@ const form = ref({
   address: '',
   city: '',
   state: '',
-  generateNow: true
+  generateNow: true,
+  placeId: '',
+  googleMapsUrl: '',
+  zipCode: '',
+  rating: null as number | null,
+  reviewCount: null as number | null
 })
+
+function applyLookup(payload: {
+  found: PlaceDetails
+  placeId: string
+  googleMapsUrl: string | null
+  zipCode: string | null
+  rating: number | null
+  reviewCount: number | null
+}) {
+  form.value = fillIntakeFields(form.value, payload.found)
+  form.value.placeId = payload.placeId
+  if (payload.googleMapsUrl) form.value.googleMapsUrl = payload.googleMapsUrl
+  if (payload.zipCode) form.value.zipCode = payload.zipCode
+  if (payload.rating != null) form.value.rating = payload.rating
+  if (payload.reviewCount != null) form.value.reviewCount = payload.reviewCount
+}
 
 async function submit() {
   if (!form.value.name.trim()) {
@@ -97,6 +121,14 @@ async function submit() {
             <UInput v-model="form.state" size="lg" class="w-full" />
           </UFormField>
         </div>
+        <StudioIntakeLookup
+          :name="form.name"
+          :city="form.city"
+          :state="form.state"
+          :website="form.website"
+          :disabled="isSaving"
+          @apply="applyLookup"
+        />
         <UCheckbox v-model="form.generateNow" label="Generate mockup now" />
       </form>
     </UCard>

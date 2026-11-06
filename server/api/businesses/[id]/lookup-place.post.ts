@@ -1,6 +1,7 @@
 import { detailsFromPlaceListing, type PlaceDetailKey, type PlaceDetails } from '~~/shared/place-lookup'
 import { db } from '~~/server/utils/db'
 import { businessCategoryFromListing } from '~~/server/utils/openweb-ninja'
+import { fetchPlaceListing } from '~~/server/utils/place-listing'
 
 const COLUMNS: Record<PlaceDetailKey, string> = {
   name: 'name',
@@ -84,51 +85,4 @@ async function saveFoundDetails(id: string, userId: string, found: PlaceDetails)
     sql: `UPDATE businesses SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
     args
   })
-}
-
-async function fetchPlaceListing(placeId: string) {
-  const config = useRuntimeConfig()
-  if (!config.rapidApiKey) {
-    throw createError({
-      statusCode: 500,
-      message: 'RAPIDAPI_KEY is not configured. Look up uses the existing RapidAPI business-details call. Type the town until that key is set.'
-    })
-  }
-
-  const query = new URLSearchParams({
-    business_id: placeId,
-    extract_emails_and_contacts: 'true',
-    extract_share_link: 'false',
-    region: 'us',
-    language: 'en'
-  })
-  const response = await fetch(`https://${config.rapidApiHost}/business-details?${query}`, {
-    headers: {
-      'X-RapidAPI-Key': config.rapidApiKey,
-      'X-RapidAPI-Host': config.rapidApiHost
-    }
-  })
-  if (!response.ok) {
-    throw createError({
-      statusCode: 502,
-      message: `Google listing lookup failed (${response.status}). Nothing was changed. Type the details.`
-    })
-  }
-
-  const data = await response.json() as { data?: Record<string, unknown>[] }
-  const listing = data.data?.[0]
-  if (!listing) return null
-  return listing as {
-    name?: unknown
-    website?: unknown
-    phone_number?: unknown
-    full_address?: unknown
-    address?: unknown
-    city?: unknown
-    state?: unknown
-    type?: unknown
-    subtypes?: unknown
-    types?: unknown
-    emails_and_contacts?: { emails?: unknown, phone_numbers?: unknown }
-  }
 }
