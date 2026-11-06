@@ -7,7 +7,7 @@ import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/m
 import { factoryFeedback } from '~~/shared/photo-slots'
 import { studioSiteResearch } from '~~/shared/studio-site-payload'
 import { outboundLeadPayload } from '~~/shared/website-intake'
-import { gbpPhotosFrom, gbpWebhookFields, photoCountFrom } from '~~/shared/gbp-listing'
+import { gbpPhotosFrom, gbpWebhookFields, photoCountFrom, preferredPlaceId } from '~~/shared/gbp-listing'
 import { siteContract } from '~~/shared/site-discovery'
 import {
   callbackUrlFromEvent,
@@ -402,7 +402,7 @@ export async function fireMockupAction(opts: {
   const extraPrompt = opts.clearFeedback ? null : (feedbackText || null)
   const business = mockup.business
   const placeId = studioPlaceId({
-    placeId: mockup.placeId || business?.placeId,
+    placeId: preferredPlaceId(mockup.placeId, business?.placeId),
     mockupId: mockup.id,
     userId: opts.user.id
   })

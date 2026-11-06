@@ -265,6 +265,8 @@ async function submit() {
           :city="form.city"
           :state="form.state"
           :website="form.website"
+          :phone="form.phone"
+          :address="form.address"
           :disabled="isSaving"
           @apply="applyLookup"
         />

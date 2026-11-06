@@ -30,7 +30,9 @@ export default defineEventHandler(async (event) => {
     name: text(body?.name),
     city: text(body?.city),
     state: text(body?.state),
-    website: text(body?.website)
+    website: text(body?.website),
+    phone: text(body?.phone),
+    address: text(body?.address)
   }
   if (!query.name || (!query.city && !query.state)) {
     throw createError({ statusCode: 400, message: intakeErrorMessage('need-town') })
