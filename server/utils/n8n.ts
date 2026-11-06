@@ -59,6 +59,8 @@ export interface StudioLeadPayload {
   mockup_id: string
   business_id?: string | null
   mockup_version?: number
+  /** HTML one-page rebuild. Web stack must not send this. WF-2 ignores it until Normalize copies it. */
+  page_intent?: 'one_page'
 }
 
 export async function getStudioAiSettings(userId: string): Promise<StudioAiSettings> {

@@ -6,6 +6,7 @@ import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/m
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import { factoryFeedback } from '~~/shared/photo-slots'
 import { studioSiteResearch } from '~~/shared/studio-site-payload'
+import { outboundLeadPayload } from '~~/shared/website-intake'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -331,6 +332,8 @@ export async function fireMockupAction(opts: {
   clearFeedback?: boolean
   /** `web_stack` sends the same lead to the web stack webhook. Anything else stays plain HTML. */
   buildMode?: unknown
+  /** `one_page` is sent on the HTML webhook only. Web stack does not receive it. */
+  pageIntent?: unknown
 }) {
   const mockup = await getMockupForUser(opts.mockupId, opts.user.id)
   if (!mockup) {
@@ -468,9 +471,14 @@ export async function fireMockupAction(opts: {
     mockup_version: mockup.mockupVersion
   }
 
+  const outbound = outboundLeadPayload(leadPayload, {
+    pageIntent: opts.pageIntent,
+    buildMode
+  })
+
   try {
     if (webStack) {
-      const result = await fireWebStackAction(leadPayload)
+      const result = await fireWebStackAction(outbound)
       await db.execute({
         sql: `UPDATE mockups SET
           status = ?, agent_id = ?, preview_url = ?, build_status = ?, build_error = ?,
@@ -487,7 +495,7 @@ export async function fireMockupAction(opts: {
         ]
       })
     } else {
-      await fireStudioAction(leadPayload)
+      await fireStudioAction(outbound)
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'n8n did not accept the Studio job'

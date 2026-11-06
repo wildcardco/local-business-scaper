@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { fillIntakeFields } from '~~/shared/intake-lookup'
 import type { PlaceDetails } from '~~/shared/place-lookup'
+import { parseWebsiteIntakeUrl } from '~~/shared/website-intake'
 
 definePageMeta({ hidePhoneTabs: true })
 
 const toast = useToast()
 const router = useRouter()
 const isSaving = ref(false)
+const mode = ref<'website' | 'manual'>('website')
+const confirmedHost = ref('')
 
 const form = ref({
   name: '',
@@ -41,11 +44,55 @@ function applyLookup(payload: {
   if (payload.reviewCount != null) form.value.reviewCount = payload.reviewCount
 }
 
+function applyWebsite(payload: {
+  found: PlaceDetails
+  placeId: string
+  googleMapsUrl: string | null
+  zipCode: string | null
+  rating: number | null
+  reviewCount: number | null
+  url: string
+  host: string
+}) {
+  if (!form.value.website.trim()) form.value.website = payload.url
+  applyLookup(payload)
+  const saved = parseWebsiteIntakeUrl(form.value.website)
+  if (!saved.ok || saved.host !== payload.host) form.value.website = payload.url
+  confirmedHost.value = payload.host
+}
+
+function useWebsiteUrl(payload: { url: string, host: string }) {
+  form.value.website = payload.url
+  confirmedHost.value = payload.host
+}
+
+function setMode(next: 'website' | 'manual') {
+  mode.value = next
+  if (next === 'manual') confirmedHost.value = ''
+}
+
 async function submit() {
+  const onePage = mode.value === 'website'
+  if (onePage) {
+    const parsed = parseWebsiteIntakeUrl(form.value.website)
+    if (!parsed.ok || parsed.host !== confirmedHost.value) {
+      toast.add({
+        title: 'Confirm the website',
+        description: parsed.ok
+          ? 'Inspect this website and confirm the listing or the URL before generating.'
+          : parsed.message,
+        color: 'error'
+      })
+      return
+    }
+  }
+
   if (!form.value.name.trim()) {
     toast.add({
       title: 'Name required',
-      description: 'Enter the business name',
+      description: onePage
+        ? 'Enter the business name. The website check did not fill one in.'
+        : 'Enter the business name',
       color: 'error'
     })
     return
@@ -61,7 +108,10 @@ async function submit() {
     if (form.value.generateNow && created.mockup?.id) {
       await $fetch('/api/mockups/generate', {
         method: 'POST',
-        body: { mockupId: created.mockup.id }
+        body: {
+          mockupId: created.mockup.id,
+          ...(onePage ? { pageIntent: 'one_page' } : {})
+        }
       })
     }
 
@@ -88,18 +138,56 @@ async function submit() {
     <div>
       <p class="eyebrow">Studio</p>
       <h1 class="font-display text-2xl font-semibold tracking-tight">New mockup</h1>
-      <p class="text-muted">Manual intake for a business that is not in search results yet.</p>
+      <p class="text-muted">Start from the current website, or enter the business yourself.</p>
+    </div>
+
+    <div
+      class="flex flex-col gap-2 sm:flex-row"
+      role="group"
+      aria-label="How to start this mockup"
+    >
+      <UButton
+        type="button"
+        class="min-h-11 justify-center"
+        data-intake-mode="website"
+        :color="mode === 'website' ? 'primary' : 'neutral'"
+        :variant="mode === 'website' ? 'solid' : 'outline'"
+        :aria-pressed="mode === 'website'"
+        @click="setMode('website')"
+      >
+        Current website
+      </UButton>
+      <UButton
+        type="button"
+        class="min-h-11 justify-center"
+        data-intake-mode="manual"
+        :color="mode === 'manual' ? 'primary' : 'neutral'"
+        :variant="mode === 'manual' ? 'solid' : 'outline'"
+        :aria-pressed="mode === 'manual'"
+        @click="setMode('manual')"
+      >
+        Business details
+      </UButton>
     </div>
 
     <UCard class="max-w-2xl">
       <form class="space-y-4" @submit.prevent="submit">
+        <StudioWebsiteIntake
+          v-if="mode === 'website'"
+          :disabled="isSaving"
+          @apply="applyWebsite"
+          @use-url="useWebsiteUrl"
+        />
         <UFormField label="Business name">
           <UInput v-model="form.name" size="lg" class="w-full" icon="i-lucide-building-2" />
         </UFormField>
         <UFormField label="Category">
           <UInput v-model="form.category" size="lg" class="w-full" placeholder="plumber, salon, gym…" />
         </UFormField>
-        <UFormField label="Website">
+        <UFormField
+          v-if="mode === 'manual' || confirmedHost"
+          label="Website"
+        >
           <UInput v-model="form.website" size="lg" class="w-full" icon="i-lucide-globe" placeholder="https://" />
         </UFormField>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -129,7 +217,10 @@ async function submit() {
           :disabled="isSaving"
           @apply="applyLookup"
         />
-        <UCheckbox v-model="form.generateNow" label="Generate mockup now" />
+        <UCheckbox
+          v-model="form.generateNow"
+          :label="mode === 'website' ? 'Generate the one-page mockup now' : 'Generate mockup now'"
+        />
       </form>
     </UCard>
 
@@ -143,7 +234,7 @@ async function submit() {
         :style="{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }"
         @click="submit"
       >
-        {{ form.generateNow ? 'Generate mockup' : 'Save business' }}
+        {{ form.generateNow ? (mode === 'website' ? 'Generate one-page mockup' : 'Generate mockup') : 'Save business' }}
       </UButton>
     </div>
   </div>
