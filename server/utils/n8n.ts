@@ -11,6 +11,7 @@ import {
 import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
 import { costActionLabel, foldMockupCost, parseCostLedger } from '~~/shared/mockup-cost'
 import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
+import { takeLeadCursor } from '~~/shared/studio-sync-leads'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import {
   leadPayloadForBuild,
@@ -58,6 +59,22 @@ export interface StudioLeadPayload {
   mockup_id: string
   business_id?: string | null
   mockup_version?: number
+  photo_count?: number
+  gbp_photos?: { id: string, url: string, type: string | null, ts: string | null }[]
+  /** HTML one-page rebuild. Web stack must not send this. WF-2 ignores it until Normalize copies it. */
+  page_intent?: 'one_page'
+  /**
+   * Current-site navigation, footer, pages, and content when a lead already has them.
+   * `unavailable` with null lists means this app did not read the live site.
+   * A generic Home/About/Services/Contact list is never filled in here.
+   */
+  site_discovery?: {
+    status: 'observed' | 'unavailable'
+    navigation: string[] | null
+    footer: string[] | null
+    pages: { name: string, path: string | null }[] | null
+    content: string | null
+  }
 }
 
 export async function getStudioAiSettings(userId: string): Promise<StudioAiSettings> {
@@ -365,7 +382,11 @@ async function fetchLeadPage(columnName: string, value: string, sortBy: string, 
   return {
     status,
     rows,
-    nextCursor: next && rows.length > 0 && next !== cursor ? next : null
+    nextCursor: takeLeadCursor({
+      rowCount: rows.length,
+      nextCursor: next,
+      requestCursor: cursor
+    })
   }
 }
 

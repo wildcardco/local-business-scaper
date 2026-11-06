@@ -72,11 +72,44 @@ export async function searchBusinesses(params: BusinessSearchParams): Promise<Op
   return data.data || []
 }
 
+/** Same Local Business Data search, with the text used as the query itself. */
+export async function searchBusinessesByText(query: string, limit = 10): Promise<OpenWebBusiness[]> {
+  const config = useRuntimeConfig()
+  if (!config.rapidApiKey) {
+    throw new Error('RAPIDAPI_KEY is not configured')
+  }
+
+  const searchParams = new URLSearchParams({
+    query,
+    limit: String(limit),
+    language: 'en',
+    region: 'us'
+  })
+
+  const response = await fetch(
+    `https://${config.rapidApiHost}/search?${searchParams}`,
+    {
+      headers: {
+        'X-RapidAPI-Key': config.rapidApiKey,
+        'X-RapidAPI-Host': config.rapidApiHost
+      }
+    }
+  )
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Local Business Data API error: ${response.status} - ${errorText}`)
+  }
+
+  const data = await response.json()
+  return data.data || []
+}
+
 // Transform API response to our database model format
 export function transformBusinessData(business: OpenWebBusiness, searchId: string) {
   // Extract first email from emails_and_contacts if available
   const email = business.emails_and_contacts?.emails?.[0] || null
-  
+
   return {
     searchId,
     name: business.name || 'Unknown Business',
@@ -95,4 +128,3 @@ export function transformBusinessData(business: OpenWebBusiness, searchId: strin
     priceLevel: business.price_level || null
   }
 }
-

@@ -5,6 +5,10 @@ import { githubRepoForMockup, mockupDeleteRepo, mockupGithubUrl } from '~~/share
 import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/mockup-cost'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import { factoryFeedback } from '~~/shared/photo-slots'
+import { studioSiteResearch } from '~~/shared/studio-site-payload'
+import { outboundLeadPayload } from '~~/shared/website-intake'
+import { gbpPhotosFrom, gbpWebhookFields, photoCountFrom } from '~~/shared/gbp-listing'
+import { siteContract } from '~~/shared/site-discovery'
 import {
   callbackUrlFromEvent,
   fireStudioAction,
@@ -60,6 +64,15 @@ function mapMockupCosts(raw: unknown) {
   }
 }
 
+function storedGbpPhotos(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return []
+  try {
+    return gbpPhotosFrom(JSON.parse(value))
+  } catch {
+    return []
+  }
+}
+
 export function mapMockup(row: Record<string, unknown>, business?: Record<string, unknown> | null) {
   let photoUrls: string[] = []
   if (typeof row.photo_urls === 'string' && row.photo_urls) {
@@ -79,6 +92,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
   const city = rawCity || parsed.city
   const state = rawState || parsed.state
   const placeId = (row.place_id as string) || (business?.place_id as string) || null
+  const storedPhotos = storedGbpPhotos(business?.gbp_photos)
   const mockupUrl = (row.mockup_url as string) || null
   const deploymentMissing = Number(row.deployment_missing || 0) === 1
   const githubMissing = Number(row.github_missing || 0) === 1
@@ -151,7 +165,12 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
           category: (business.category as string) || null,
           rating: business.rating != null ? Number(business.rating) : null,
           reviewCount: business.review_count != null ? Number(business.review_count) : null,
-          placeId: (business.place_id as string) || null
+          placeId: (business.place_id as string) || null,
+          zipCode: (business.zip_code as string) || null,
+          googleBusinessId: (business.google_business_id as string) || null,
+          gbpPhotos: storedPhotos,
+          photoCount: photoCountFrom(business.photo_count, storedPhotos),
+          siteDiscovery: (business.site_discovery as string) || null
         }
       : null
   }
@@ -245,8 +264,11 @@ export async function getMockupForUser(id: string, userId: string) {
   const result = await db.execute({
     sql: `
       SELECT m.*, b.name as b_name, b.website as b_website, b.phone as b_phone, b.email as b_email,
-        b.address as b_address, b.city as b_city, b.state as b_state, b.category as b_category,
-        b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id
+        b.address as b_address, b.city as b_city, b.state as b_state, b.zip_code as b_zip,
+        b.category as b_category,
+        b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id,
+        b.google_business_id as b_google_business_id, b.gbp_photos as b_gbp_photos,
+        b.photo_count as b_photo_count, b.site_discovery as b_site_discovery
       FROM mockups m
       LEFT JOIN businesses b ON m.business_id = b.id
       WHERE m.id = ? AND m.user_id = ?
@@ -266,10 +288,15 @@ export async function getMockupForUser(id: string, userId: string) {
         address: row.b_address,
         city: row.b_city,
         state: row.b_state,
+        zip_code: row.b_zip,
         category: row.b_category,
         rating: row.b_rating,
         review_count: row.b_review_count,
-        place_id: row.b_place_id
+        place_id: row.b_place_id,
+        google_business_id: row.b_google_business_id,
+        gbp_photos: row.b_gbp_photos,
+        photo_count: row.b_photo_count,
+        site_discovery: row.b_site_discovery
       }
     : null
 
@@ -327,6 +354,8 @@ export async function fireMockupAction(opts: {
   clearFeedback?: boolean
   /** `web_stack` sends the same lead to the web stack webhook. Anything else stays plain HTML. */
   buildMode?: unknown
+  /** `one_page` is sent on the HTML webhook only. Web stack does not receive it. */
+  pageIntent?: unknown
 }) {
   const mockup = await getMockupForUser(opts.mockupId, opts.user.id)
   if (!mockup) {
@@ -426,17 +455,35 @@ export async function fireMockupAction(opts: {
     ]
   })
 
+  const site = studioSiteResearch({
+    website: business?.website,
+    phone: business?.phone,
+    address: business?.address,
+    city: business?.city,
+    state: business?.state,
+    zip: business?.zipCode,
+    category: business?.category,
+    rating: business?.rating,
+    reviewCount: business?.reviewCount
+  })
+
+  const contract = siteContract({
+    website: site.website,
+    stored: business?.siteDiscovery
+  })
+
   const leadPayload = {
     action: opts.action,
     place_id: placeId,
     owner,
     business_name: business?.name || 'Untitled business',
-    website: business?.website,
-    phone: business?.phone,
-    address: [business?.address, business?.city, business?.state].filter(Boolean).join(', ') || null,
-    category: business?.category,
-    rating: business?.rating,
-    review_count: business?.reviewCount,
+    website: contract.website || site.website,
+    site_discovery: contract.site_discovery,
+    phone: site.phone,
+    address: site.address,
+    category: site.category,
+    rating: site.rating,
+    review_count: site.review_count,
     last_feedback: opts.clearFeedback ? '' : (feedbackText || mockup.lastFeedback),
     extra_prompt: opts.clearFeedback ? (opts.extraPrompt || opts.feedback || null) : extraPrompt,
     photo_urls: opts.photoUrls || mockup.photoUrls,
@@ -452,9 +499,26 @@ export async function fireMockupAction(opts: {
     mockup_version: mockup.mockupVersion
   }
 
+  const gbp = gbpWebhookFields({
+    appBusinessId: mockup.businessId,
+    googleBusinessId: business?.googleBusinessId,
+    photos: business?.gbpPhotos,
+    photoCount: business?.photoCount
+  })
+  leadPayload.business_id = gbp.business_id
+  if (gbp.gbp_photos) {
+    leadPayload.photo_count = gbp.photo_count
+    leadPayload.gbp_photos = gbp.gbp_photos
+  }
+
+  const outbound = outboundLeadPayload(leadPayload, {
+    pageIntent: opts.pageIntent,
+    buildMode
+  })
+
   try {
     if (webStack) {
-      const result = await fireWebStackAction(leadPayload)
+      const result = await fireWebStackAction(outbound)
       await db.execute({
         sql: `UPDATE mockups SET
           status = ?, agent_id = ?, preview_url = ?, build_status = ?, build_error = ?,
@@ -471,7 +535,7 @@ export async function fireMockupAction(opts: {
         ]
       })
     } else {
-      await fireStudioAction(leadPayload)
+      await fireStudioAction(outbound)
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'n8n did not accept the Studio job'

@@ -26,12 +26,23 @@ test('plain HTML is the default and does not change the lead payload', () => {
 })
 
 test('web stack keeps the lead payload and adds the build contract', () => {
-  const payload = { action: 'generate_mockup', business_name: 'Acme', model: 'claude-fable-5', mockup_id: 'm1' }
+  const payload = {
+    action: 'generate_mockup',
+    business_name: 'Leeps Supply Company',
+    website: 'https://www.leeps.com/',
+    phone: '219-696-1000',
+    address: '100 Washington St, Lowell, IN 46356',
+    model: 'claude-fable-5',
+    mockup_id: 'm1'
+  }
   const sent = leadPayloadForBuild(payload, BUILD_MODE_WEB_STACK)
   assert.notEqual(sent, payload)
   if (!('build_mode' in sent)) assert.fail('web stack fields were not added')
   assert.equal(sent.action, 'generate_mockup')
-  assert.equal(sent.business_name, 'Acme')
+  assert.equal(sent.business_name, 'Leeps Supply Company')
+  assert.equal(sent.website, 'https://www.leeps.com/')
+  assert.equal(sent.phone, '219-696-1000')
+  assert.equal(sent.address, '100 Washington St, Lowell, IN 46356')
   assert.equal(sent.model, 'claude-fable-5')
   assert.equal(sent.mockup_id, 'm1')
   assert.equal(sent.build_mode, 'web_stack')

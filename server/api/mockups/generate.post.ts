@@ -42,6 +42,7 @@ export default defineEventHandler(async (event) => {
     action: 'generate_mockup',
     buildMode: body.buildMode ?? body.build_mode,
     extraPrompt: typeof body.extraPrompt === 'string' ? body.extraPrompt.trim() : undefined,
+    pageIntent: body.pageIntent ?? body.page_intent,
     model: typeof body.model === 'string' ? body.model : undefined,
     maxTokens: body.maxTokens != null ? Number(body.maxTokens) : undefined,
     force: body.force === true,
