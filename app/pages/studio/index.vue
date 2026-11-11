@@ -255,6 +255,21 @@ function statusColor(status: string) {
           >
             GitHub repo
           </UButton>
+          <ResearchReportButton
+            :mockup-id="mockup.id"
+            :business-id="mockup.businessId"
+            :place-id="mockup.placeId"
+            :business-place-id="mockup.business?.placeId"
+            :research-status="mockup.researchStatus"
+            :owner="mockup.owner"
+            :name="mockup.business?.name"
+            :city="mockup.business?.city"
+            :state="mockup.business?.state"
+            :website="mockup.business?.website"
+            :phone="mockup.business?.phone"
+            :address="mockup.business?.address"
+            @updated="refresh()"
+          />
           <UButton
             class="min-h-11 justify-center sm:ml-auto"
             :to="`/studio/${mockup.id}`"

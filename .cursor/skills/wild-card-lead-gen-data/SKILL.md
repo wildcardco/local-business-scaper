@@ -40,7 +40,7 @@ Local `dev.db` and production Turso are **separate databases with separate accou
 | `email_replies` | log | inbound (helper not routed) |
 | `email_drafts` | user | |
 | `branding_settings` | user | defaults `#D6293E` / `#2d1818`. Also `ai_model` (default `claude-fable-5`), `ai_max_tokens` (16000), `pitch_max_tokens` (1500) |
-| `mockups` | user | Studio + n8n digest rows. Keyed by `place_id` + owner slug. Web stack adds `build_mode` (`html` default, or `web_stack`), `agent_id`, `preview_url`, `build_status`, `build_error` |
+| `mockups` | user | Studio + n8n digest rows. Keyed by `place_id` + owner slug. Web stack adds `build_mode` (`html` default, or `web_stack`), `agent_id`, `preview_url`, `build_status`, `build_error`. Research report adds `research_status` (`requested` or `complete`), `research_requested_at`, `research_completed_at` |
 
 Indexes: businesses(user, search, status, unique user+place), searches(user), outreach_logs(user, business), email_replies(outreach), mockups(user, business, place).
 
@@ -84,7 +84,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 
 ## API map (session unless noted)
 
-**Public prefix:** `/api/auth/*` `/api/_auth/` `/api/_nuxt_icon/` `/api/health` `/api/mockups/webhook`
+**Public prefix:** `/api/auth/*` `/api/_auth/` `/api/_nuxt_icon/` `/api/health` `/api/mockups/webhook` `/api/research-report/webhook`
 
 | Method | Path |
 |---|---|
@@ -94,11 +94,12 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | GET | `/api/autocomplete` `/api/businesses` `/api/businesses/[id]` `/api/mockups` `/api/mockups/[id]` |
 | PATCH | `/api/businesses/[id]` |
 | POST | `/api/businesses/delete` `[id]/audit` `[id]/scrape-contacts` `/api/audit/batch` |
-| POST | `/api/mockups/generate` `/api/mockups/sync` `/api/mockups/[id]/revise` `pitch` `photos` |
+| POST | `/api/mockups/generate` `/api/mockups/sync` `/api/mockups/[id]/revise` `pitch` `photos` `[id]/research` |
 | GET | `/api/studio/stock-photos` `q` — Pixabay, Pexels, Unsplash. A provider with no key is skipped. |
 | POST | `/api/studio/stock-photos/download` — Unsplash download ping for photos the user added |
 | GET | `/api/mockups/[id]/photo-queries` — live mockup photo slots (`data-photo-query`, hero first) plus search phrases. `src` is set only when the slot already has an http(s) URL |
 | POST | `/api/mockups/webhook` (public, `X-Studio-Secret`) |
+| POST | `/api/research-report/webhook` (public, `X-Studio-Secret`) — `{ok, action: research_report, place_id, research_status: complete}` marks matching requested rows complete. It does not update mockup build fields. |
 | GET/POST | `/api/templates` `/api/drafts` `/api/branding` |
 | PATCH/DEL | `/api/templates/[id]` |
 | POST | `/api/templates/seed` `/api/emails/generate` `/api/emails/webhook` |
@@ -109,7 +110,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | POST | `/api/export/n8n` `/api/report/batch` `email` `n8n` |
 | GET | `/api/imagekit/auth` |
 
-Studio webhook `/api/mockups/webhook` is public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated.
+Studio webhook `/api/mockups/webhook` and research callback `/api/research-report/webhook` are public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated. Research report POSTs `{action: research_report, owner, place_id, callback_url?, notes?}` to `N8N_STUDIO_WEBHOOK_URL` (`/webhook/studio`) with `X-Studio-Secret`. It does not call `N8N_WEB_STACK_WEBHOOK_URL`.
 
 ## Categories
 

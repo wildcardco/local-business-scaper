@@ -351,6 +351,9 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE mockups ADD COLUMN preview_url TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN build_status TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN build_error TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN research_status TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN research_requested_at TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN research_completed_at TEXT`)
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)

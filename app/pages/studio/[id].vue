@@ -543,6 +543,22 @@ function statusColor(status: string) {
         >
           {{ generateLabel }}
         </UButton>
+        <ResearchReportButton
+          v-if="mockup"
+          :mockup-id="mockup.id"
+          :business-id="mockup.businessId"
+          :place-id="mockup.placeId"
+          :business-place-id="mockup.business?.placeId"
+          :research-status="mockup.researchStatus"
+          :owner="mockup.owner"
+          :name="mockup.business?.name"
+          :city="mockup.business?.city"
+          :state="mockup.business?.state"
+          :website="mockup.business?.website"
+          :phone="mockup.business?.phone"
+          :address="mockup.business?.address"
+          @updated="refresh()"
+        />
         <UButton
           class="min-h-11 w-full justify-center sm:w-auto"
           to="/studio"
