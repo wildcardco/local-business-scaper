@@ -13,7 +13,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: parsed.message })
   }
 
-  const updated = await db.execute({
+  const businesses = await db.execute({
+    sql: `UPDATE businesses SET
+      research_status = 'complete',
+      research_completed_at = datetime('now'),
+      updated_at = datetime('now')
+      WHERE place_id = ? AND research_status = 'requested'`,
+    args: [parsed.placeId]
+  })
+  const mockups = await db.execute({
     sql: `UPDATE mockups SET
       research_status = 'complete',
       research_completed_at = datetime('now'),
@@ -21,7 +29,7 @@ export default defineEventHandler(async (event) => {
       WHERE place_id = ? AND research_status = 'requested'`,
     args: [parsed.placeId]
   })
-  const count = Number(updated.rowsAffected || 0)
+  const count = Number(businesses.rowsAffected || 0) + Number(mockups.rowsAffected || 0)
   if (count > 0) {
     return {
       ok: true,
@@ -33,10 +41,16 @@ export default defineEventHandler(async (event) => {
   }
 
   const existing = await db.execute({
-    sql: `SELECT id FROM mockups WHERE place_id = ? AND research_status = 'complete' LIMIT 1`,
+    sql: `SELECT id FROM businesses WHERE place_id = ? AND research_status = 'complete' LIMIT 1`,
     args: [parsed.placeId]
   })
-  if (existing.rows[0]) {
+  const existingMockup = existing.rows[0]
+    ? existing
+    : await db.execute({
+        sql: `SELECT id FROM mockups WHERE place_id = ? AND research_status = 'complete' LIMIT 1`,
+        args: [parsed.placeId]
+      })
+  if (existingMockup.rows[0]) {
     return {
       ok: true,
       action: 'research_report',

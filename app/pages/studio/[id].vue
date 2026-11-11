@@ -10,6 +10,7 @@ import {
   type JobPhase
 } from '~~/shared/studio-job'
 import { webStackJobView, webStackStatusLabel } from '~~/shared/web-stack'
+import { newestStudioBuild, studioBuilds, type StudioBuildKind } from '~~/shared/studio-builds'
 
 definePageMeta({ hidePhoneTabs: true })
 
@@ -20,6 +21,21 @@ const id = computed(() => String(route.params.id))
 
 const { data, pending, refresh } = await useFetch(() => `/api/mockups/${id.value}`)
 const mockup = computed(() => data.value?.mockup)
+const selectedBuild = ref<StudioBuildKind | null>(null)
+const builds = computed(() => studioBuilds({
+  onePageUrl: mockup.value?.vercelUrl,
+  onePageAt: mockup.value?.n8nCreatedAt || mockup.value?.madeAt,
+  webStackUrl: mockup.value?.previewUrl,
+  webStackAt: mockup.value?.previewMadeAt,
+  buildMode: mockup.value?.buildMode
+}))
+const activeBuild = computed(() => {
+  const chosen = builds.value.find(build => build.kind === selectedBuild.value)
+  return chosen || newestStudioBuild(builds.value)
+})
+watch(id, () => {
+  selectedBuild.value = null
+})
 
 const notes = ref('')
 const isGenerating = ref(false)
@@ -671,16 +687,35 @@ function statusColor(status: string) {
       </section>
 
       <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
-        <StudioMockupStage
-          class="lg:sticky lg:top-4"
-          :mockup-id="id"
-          :mockup-url="mockup.vercelUrl"
-          :active-index="activeIndex"
-          :assignments="assignments"
-          :armed="Boolean(chosen)"
-          @pick="onPickSlot"
-          @drop="onDropSlot"
-        />
+        <div class="min-w-0 space-y-3 lg:sticky lg:top-4">
+          <div
+            v-if="builds.length > 1"
+            class="flex flex-wrap gap-2"
+            data-build-switch
+          >
+            <UButton
+              v-for="build in builds"
+              :key="build.kind"
+              type="button"
+              class="min-h-11"
+              :variant="activeBuild?.kind === build.kind ? 'solid' : 'outline'"
+              :data-build-choice="build.kind"
+              @click="selectedBuild = build.kind"
+            >
+              {{ build.label }}
+            </UButton>
+          </div>
+          <StudioMockupStage
+            :mockup-id="id"
+            :mockup-url="activeBuild?.url || null"
+            :direct-url="activeBuild?.kind === 'web_stack' ? activeBuild.url : null"
+            :active-index="activeIndex"
+            :assignments="assignments"
+            :armed="Boolean(chosen)"
+            @pick="onPickSlot"
+            @drop="onDropSlot"
+          />
+        </div>
 
         <div class="space-y-6">
           <UCard>
@@ -872,7 +907,24 @@ function statusColor(status: string) {
         </template>
         <div class="space-y-3">
           <div
-            v-if="mockup.vercelUrl"
+            v-for="build in builds"
+            :key="`link-${build.kind}`"
+            class="min-w-0"
+          >
+            <p class="text-xs text-muted">
+              {{ build.label }}
+            </p>
+            <a
+              :href="build.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-1 inline-flex min-h-11 items-center break-all text-sm text-primary underline"
+            >
+              {{ build.url }}
+            </a>
+          </div>
+          <div
+            v-if="!builds.length && mockup.vercelUrl"
             class="min-w-0"
           >
             <p class="text-xs text-muted">

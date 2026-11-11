@@ -12,8 +12,8 @@ import {
   type ResearchStatus
 } from '~~/shared/research-report'
 
-const props = defineProps<{
-  mockupId: string
+const props = withDefaults(defineProps<{
+  mockupId?: string | null
   businessId?: string | null
   placeId?: string | null
   businessPlaceId?: string | null
@@ -26,7 +26,10 @@ const props = defineProps<{
   website?: string | null
   phone?: string | null
   address?: string | null
-}>()
+  compact?: boolean
+}>(), {
+  compact: false
+})
 
 const emit = defineEmits<{
   updated: []
@@ -96,9 +99,12 @@ function scheduleSentFlip() {
 
 async function refreshStatus() {
   try {
-    const result = await $fetch<{ mockup?: { researchStatus?: string, researchRequestedAt?: string | null } }>(`/api/mockups/${props.mockupId}`)
-    const next = researchStatusFrom(result.mockup?.researchStatus)
-    if (result.mockup?.researchRequestedAt) requestedAt.value = result.mockup.researchRequestedAt
+    const result = props.businessId
+      ? await $fetch<{ business?: { researchStatus?: string, researchRequestedAt?: string | null } }>(`/api/businesses/${props.businessId}`)
+      : await $fetch<{ mockup?: { researchStatus?: string, researchRequestedAt?: string | null } }>(`/api/mockups/${props.mockupId}`)
+    const record = 'business' in result ? result.business : result.mockup
+    const next = researchStatusFrom(record?.researchStatus)
+    if (record?.researchRequestedAt) requestedAt.value = record.researchRequestedAt
     if (next === 'complete' && status.value !== 'complete') {
       status.value = 'complete'
       stopPoll()
@@ -187,11 +193,14 @@ async function lookupPlace(selectedId = '') {
 }
 
 async function requestReport() {
-  if (submitting.value || view.value === 'requested' || !googleId.value) return
+  const endpoint = props.businessId
+    ? `/api/businesses/${props.businessId}/research`
+    : (props.mockupId ? `/api/mockups/${props.mockupId}/research` : '')
+  if (submitting.value || view.value === 'requested' || !googleId.value || !endpoint) return
   submitting.value = true
   errorMessage.value = ''
   try {
-    await $fetch(`/api/mockups/${props.mockupId}/research`, {
+    await $fetch(endpoint, {
       method: 'POST',
       body: { notes: notes.value }
     })
@@ -216,7 +225,11 @@ async function requestReport() {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-2 sm:w-auto">
+  <div
+    class="flex flex-col gap-2"
+    :class="compact ? 'w-full' : 'w-full sm:w-auto'"
+    data-research-report-wrap
+  >
     <UBadge
       v-if="view === 'requested'"
       color="warning"
@@ -245,6 +258,7 @@ async function requestReport() {
       type="button"
       data-research-report
       class="min-h-11 w-full justify-center"
+      :size="compact ? 'sm' : 'md'"
       variant="outline"
       icon="i-lucide-file-search"
       :title="buttonTitle"

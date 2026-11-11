@@ -14,6 +14,10 @@ interface Business {
   leadScore: number
   leadCategory: 'hot' | 'warm' | 'cold' | 'skip' | null
   status: 'new' | 'approved' | 'sent' | 'responded' | 'rejected'
+  placeId?: string | null
+  address?: string | null
+  researchStatus?: string | null
+  researchRequestedAt?: string | null
   audit?: {
     performanceScore: number | null
     seoScore: number | null
@@ -642,6 +646,20 @@ defineExpose({
               <div class="flex flex-col">
                 <span class="font-medium">{{ business.name }}</span>
                 <span v-if="business.category" class="text-xs text-muted">{{ business.category }}</span>
+                <ResearchReportButton
+                  class="mt-2"
+                  compact
+                  :business-id="business.id"
+                  :place-id="business.placeId"
+                  :research-status="business.researchStatus"
+                  :research-requested-at="business.researchRequestedAt"
+                  :name="business.name"
+                  :city="business.city"
+                  :state="business.state"
+                  :website="business.website"
+                  :phone="business.phone"
+                  :address="business.address"
+                />
               </div>
             </td>
 

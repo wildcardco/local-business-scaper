@@ -8,6 +8,7 @@ import { factoryFeedback } from '~~/shared/photo-slots'
 import { studioSiteResearch } from '~~/shared/studio-site-payload'
 import { outboundLeadPayload } from '~~/shared/website-intake'
 import { gbpPhotosFrom, gbpWebhookFields, photoCountFrom, preferredPlaceId } from '~~/shared/gbp-listing'
+import { preferredResearch } from '~~/shared/research-report'
 import { siteContract } from '~~/shared/site-discovery'
 import {
   callbackUrlFromEvent,
@@ -146,9 +147,20 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
     previewUrl: httpsUrl(row.preview_url),
     buildStatus: typeof row.build_status === 'string' && row.build_status ? row.build_status : null,
     buildError: typeof row.build_error === 'string' && row.build_error ? row.build_error : null,
-    researchStatus: row.research_status === 'requested' || row.research_status === 'complete' ? row.research_status : null,
-    researchRequestedAt: (row.research_requested_at as string) || null,
-    researchCompletedAt: (row.research_completed_at as string) || null,
+    previewMadeAt: (row.preview_made_at as string) || null,
+    researchStatus: preferredResearch({
+      businessStatus: row.b_research_status,
+      businessRequestedAt: row.b_research_requested_at,
+      mockupStatus: row.research_status,
+      mockupRequestedAt: row.research_requested_at
+    }).status,
+    researchRequestedAt: preferredResearch({
+      businessStatus: row.b_research_status,
+      businessRequestedAt: row.b_research_requested_at,
+      mockupStatus: row.research_status,
+      mockupRequestedAt: row.research_requested_at
+    }).requestedAt,
+    researchCompletedAt: (row.b_research_completed_at as string) || (row.research_completed_at as string) || null,
     n8nSyncedAt: (row.n8n_synced_at as string) || null,
     madeAt: (row.made_at as string) || null,
     n8nCreatedAt: (row.n8n_created_at as string) || null,
@@ -270,6 +282,8 @@ export async function getMockupForUser(id: string, userId: string) {
         b.address as b_address, b.city as b_city, b.state as b_state, b.zip_code as b_zip,
         b.category as b_category,
         b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id,
+        b.research_status as b_research_status, b.research_requested_at as b_research_requested_at,
+        b.research_completed_at as b_research_completed_at,
         b.google_business_id as b_google_business_id, b.gbp_photos as b_gbp_photos,
         b.photo_count as b_photo_count, b.site_discovery as b_site_discovery
       FROM mockups m

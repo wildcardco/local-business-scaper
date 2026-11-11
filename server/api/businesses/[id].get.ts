@@ -83,6 +83,8 @@ export default defineEventHandler(async (event) => {
       leadScore: row.lead_score,
       leadCategory: row.lead_category,
       status: row.status,
+      researchStatus: row.research_status === 'requested' || row.research_status === 'complete' ? row.research_status : null,
+      researchRequestedAt: row.research_requested_at || null,
       approvedAt: row.approved_at,
       sentAt: row.sent_at,
       createdAt: row.created_at,
