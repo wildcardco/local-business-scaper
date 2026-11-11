@@ -10,6 +10,7 @@ import {
   RESEARCH_STUDIO_WEBHOOK_PATH,
   RESEARCH_WEB_STACK_WEBHOOK_PATH,
   parseResearchCallback,
+  preferredResearch,
   researchReportPayload,
   researchRequestBlock,
   researchRequestedAtMs,
@@ -96,6 +97,16 @@ test('owner must be a studio slug and a pending request stays blocked', () => {
   assert.equal(researchRequestBlock('complete'), null)
   assert.equal(researchRequestBlock(null), null)
   assert.equal(RESEARCH_SENT_LABEL, 'Sent - check email')
+  assert.deepEqual(preferredResearch({
+    businessStatus: 'complete',
+    businessRequestedAt: '2026-11-11 21:00:00',
+    mockupStatus: 'requested',
+    mockupRequestedAt: '2026-11-11 21:10:00'
+  }), { status: 'complete', requestedAt: '2026-11-11 21:00:00' })
+  assert.deepEqual(preferredResearch({ mockupStatus: 'requested', mockupRequestedAt: '2026-11-11 21:10:00' }), {
+    status: 'requested',
+    requestedAt: '2026-11-11 21:10:00'
+  })
 })
 
 test('the callback marks a Google place complete and ignores other actions', () => {

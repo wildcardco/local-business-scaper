@@ -2,6 +2,7 @@
 const props = defineProps<{
   mockupId: string
   mockupUrl: string | null
+  directUrl?: string | null
   activeIndex: number | null
   assignments: Record<number, string>
   armed: boolean
@@ -13,7 +14,10 @@ const emit = defineEmits<{
 }>()
 
 const frame = ref<HTMLIFrameElement | null>(null)
-const src = computed(() => props.mockupUrl ? `/api/mockups/${props.mockupId}/preview` : '')
+const src = computed(() => {
+  if (props.directUrl) return props.directUrl
+  return props.mockupUrl ? `/api/mockups/${props.mockupId}/preview` : ''
+})
 
 function paint() {
   const win = frame.value?.contentWindow
@@ -74,7 +78,9 @@ onUnmounted(() => window.removeEventListener('message', onMessage))
       :src="src"
       class="h-[70vh] min-h-112 w-full bg-white lg:h-[78vh]"
       title="Live mockup"
-      sandbox="allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox"
+      :sandbox="directUrl
+        ? 'allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox'
+        : 'allow-scripts allow-popups allow-forms allow-popups-to-escape-sandbox'"
       @load="paint"
     />
     <p

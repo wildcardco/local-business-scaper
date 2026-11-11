@@ -13,6 +13,11 @@ const props = defineProps<{
       city?: string | null
       state?: string | null
       website?: string | null
+      phone?: string | null
+      address?: string | null
+      placeId?: string | null
+      researchStatus?: string | null
+      researchRequestedAt?: string | null
       lead_category?: string | null
     }
     mockup?: {
@@ -120,6 +125,19 @@ const place = computed(() => {
         Skip
       </UButton>
     </div>
+    <ResearchReportButton
+      class="mt-2"
+      :business-id="lead.business.id"
+      :place-id="lead.business.placeId"
+      :research-status="lead.business.researchStatus"
+      :research-requested-at="lead.business.researchRequestedAt"
+      :name="lead.business.name"
+      :city="lead.business.city"
+      :state="lead.business.state"
+      :website="lead.business.website"
+      :phone="lead.business.phone"
+      :address="lead.business.address"
+    />
 
     <WebStackStatus
       v-if="lead.mockup?.buildMode === 'web_stack'"

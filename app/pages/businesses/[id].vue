@@ -267,6 +267,20 @@ function hasSocialMedia(contactsData: any): boolean {
               >
                 Generate mockup
               </UButton>
+              <ResearchReportButton
+                v-if="business"
+                :business-id="business.id"
+                :place-id="business.placeId"
+                :research-status="business.researchStatus"
+                :research-requested-at="business.researchRequestedAt"
+                :name="business.name"
+                :city="business.city"
+                :state="business.state"
+                :website="business.website"
+                :phone="business.phone"
+                :address="business.address"
+                @updated="refresh()"
+              />
 
               <UButton
                 v-if="business.website"

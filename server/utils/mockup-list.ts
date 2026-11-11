@@ -6,7 +6,9 @@ export type MockupSort = 'created' | 'oldest' | 'updated' | 'name'
 const MOCKUP_COLUMNS = `
   m.*, b.name as b_name, b.website as b_website, b.phone as b_phone, b.email as b_email,
   b.address as b_address, b.city as b_city, b.state as b_state, b.category as b_category,
-  b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id
+  b.rating as b_rating, b.review_count as b_review_count, b.place_id as b_place_id, b.id as b_id,
+  b.research_status as b_research_status, b.research_requested_at as b_research_requested_at,
+  b.research_completed_at as b_research_completed_at
 `
 
 /** n8n created time only. Studio's row insert time (created_at) must not decide this order. */

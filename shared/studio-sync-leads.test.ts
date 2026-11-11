@@ -8,6 +8,7 @@ import {
   dedupeLeadsByPlace,
   incomingLeadIsOlder,
   leadDeployment,
+  leadSiteBuilds,
   leadSyncAfterError
 } from './studio-sync-leads.ts'
 
@@ -41,6 +42,22 @@ test('a current-day HTML lead keeps its Vercel URL over an older duplicate', () 
   assert.equal(merged.rows.length, 1)
   assert.equal(merged.rows[0]?.mockup_url, TODAY_URL)
   assert.equal(mockupCreatedTime(merged.rows[0]), '2026-11-06 11:01:18')
+})
+
+test('a lead with both links keeps the one-page URL and the Web Stack URL', () => {
+  const builds = leadSiteBuilds({
+    mockup_url: 'https://wildcard-mockup-ryan-leeps-supply-c.vercel.app',
+    web_stack_url: 'https://wildcard-webstack-ryan-leeps-supply.vercel.app',
+    web_stack_status: 'ready',
+    web_stack_started_at: '2026-11-06T21:01:45.000Z'
+  })
+  assert.equal(builds.onePageUrl, 'https://wildcard-mockup-ryan-leeps-supply-c.vercel.app')
+  assert.equal(builds.webStackUrl, 'https://wildcard-webstack-ryan-leeps-supply.vercel.app')
+  assert.equal(builds.webStackAt, '2026-11-06T21:01:45.000Z')
+  assert.equal(leadDeployment({
+    mockup_url: builds.onePageUrl,
+    web_stack_url: builds.webStackUrl
+  }).url, builds.onePageUrl)
 })
 
 test('a web-stack row uses web_stack_url and its start time when the lead is older', () => {

@@ -7,6 +7,7 @@ import {
   dedupeLeadsByPlace,
   incomingLeadIsOlder,
   leadDeployment,
+  leadSiteBuilds,
   leadSyncAfterError,
   syncPageIsLast
 } from '~~/shared/studio-sync-leads'
@@ -321,9 +322,12 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
     const city = parsedLocation.city
     const state = parsedLocation.state
     const githubRepo = explicitGithubRepo(row)
+    const sites = leadSiteBuilds(row)
     const deployment = leadDeployment(row)
-    const mockupUrl = deployment.url
-    const webStack = deployment.webStack
+    const mockupUrl = sites.onePageUrl || sites.webStackUrl || deployment.url
+    const previewUrl = sites.webStackUrl
+    const onlyStack = Boolean(sites.webStackUrl && !sites.onePageUrl)
+    const webStack = onlyStack || deployment.webStack
     const pitchDraft = asString(row.pitch_draft)
     const status = asString(row.status) || (mockupUrl ? 'mockup_ready' : 'draft')
     const mockupVersion = Number(row.mockup_version || 0)
@@ -377,7 +381,9 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               photo_urls = COALESCE(?, photo_urls),
               github_repo = ?, github_missing = ?, deployment_missing = 0,
               links_checked_at = datetime('now'),
-              build_mode = CASE WHEN ? = 1 THEN 'web_stack' ELSE build_mode END,
+              build_mode = CASE WHEN ? = 1 THEN 'web_stack' WHEN ? = 1 THEN 'html' ELSE build_mode END,
+              preview_url = COALESCE(?, preview_url),
+              preview_made_at = COALESCE(?, preview_made_at),
               made_at = COALESCE(?, made_at),
               n8n_created_at = CASE
                 WHEN ? > COALESCE(n8n_created_at, '') THEN ?
@@ -390,7 +396,7 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
               pitchVersion, lastFeedback, photoUrls, confirmedRepo, githubMissing,
-              webStack ? 1 : 0, madeAt,
+              onlyStack ? 1 : 0, sites.onePageUrl ? 1 : 0, previewUrl, sites.webStackAt, madeAt,
               createdTime, createdTime, createdTime, updatedTime,
               String(existing.id), userId
             ]
@@ -402,7 +408,9 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
               pitch_version = ?, last_feedback = COALESCE(?, last_feedback),
               photo_urls = COALESCE(?, photo_urls),
               github_repo = COALESCE(github_repo, ?),
-              build_mode = CASE WHEN ? = 1 THEN 'web_stack' ELSE build_mode END,
+              build_mode = CASE WHEN ? = 1 THEN 'web_stack' WHEN ? = 1 THEN 'html' ELSE build_mode END,
+              preview_url = COALESCE(?, preview_url),
+              preview_made_at = COALESCE(?, preview_made_at),
               made_at = COALESCE(?, made_at),
               n8n_created_at = CASE
                 WHEN ? > COALESCE(n8n_created_at, '') THEN ?
@@ -415,7 +423,7 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
             args: [
               owner, status, mockupUrl, mockupVersion, pitchDraft,
               pitchVersion, lastFeedback, photoUrls, githubRepo,
-              webStack ? 1 : 0, madeAt,
+              onlyStack ? 1 : 0, sites.onePageUrl ? 1 : 0, previewUrl, sites.webStackAt, madeAt,
               createdTime, createdTime, createdTime, updatedTime,
               String(existing.id), userId
             ]
@@ -478,13 +486,13 @@ export async function saveLeadPage(userId: string, owner: string, rows: Record<s
       sql: `INSERT INTO mockups (
         id, user_id, business_id, place_id, owner, source, status, mockup_url, mockup_version,
         pitch_draft, pitch_version, last_feedback, photo_urls, github_repo, github_missing,
-        deployment_missing, build_mode, made_at, n8n_created_at, n8n_updated_at, links_checked_at, n8n_synced_at
-      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
+        deployment_missing, build_mode, preview_url, preview_made_at, made_at, n8n_created_at, n8n_updated_at, links_checked_at, n8n_synced_at
+      ) VALUES (?, ?, ?, ?, ?, 'digest', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ${live ? `datetime('now')` : 'NULL'}, datetime('now'))`,
       args: [
         generateId(), userId, businessId, placeId, owner, status, mockupUrl,
         mockupVersion, pitchDraft, pitchVersion, lastFeedback, photoUrls,
         live ? confirmedRepo : githubRepo, githubMissing,
-        webStack ? 'web_stack' : 'html', madeAt, createdTime, updatedTime
+        onlyStack ? 'web_stack' : 'html', previewUrl, sites.webStackAt, madeAt, createdTime, updatedTime
       ]
     })
     imported++

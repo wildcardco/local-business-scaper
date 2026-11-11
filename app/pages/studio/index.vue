@@ -233,10 +233,32 @@ function statusColor(status: string) {
           <span v-if="updatedTime(mockup)">Updated {{ updatedTime(mockup) }}</span>
         </p>
         <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <template v-if="mockup.previewUrl && mockup.vercelUrl && mockup.previewUrl !== mockup.vercelUrl">
+            <UButton
+              class="min-h-11 justify-center"
+              :to="mockup.vercelUrl"
+              target="_blank"
+              external
+              variant="outline"
+              icon="i-lucide-external-link"
+            >
+              One Page
+            </UButton>
+            <UButton
+              class="min-h-11 justify-center"
+              :to="mockup.previewUrl"
+              target="_blank"
+              external
+              variant="outline"
+              icon="i-lucide-panels-top-left"
+            >
+              Web Stack
+            </UButton>
+          </template>
           <UButton
-            v-if="mockup.vercelUrl"
+            v-else-if="mockup.vercelUrl || mockup.previewUrl"
             class="min-h-11 justify-center"
-            :to="mockup.vercelUrl"
+            :to="mockup.vercelUrl || mockup.previewUrl"
             target="_blank"
             external
             variant="outline"

@@ -17,6 +17,11 @@ const props = defineProps<{
       city?: string | null
       phone?: string | null
       website?: string | null
+      state?: string | null
+      address?: string | null
+      placeId?: string | null
+      researchStatus?: string | null
+      researchRequestedAt?: string | null
     }
     mockup?: {
       id: string
@@ -153,6 +158,17 @@ function signalLabel(key: string, value: unknown): string {
           Details
         </UButton>
       </div>
+      <ResearchReportButton
+        :business-id="lead.business.id"
+        :place-id="lead.business.placeId"
+        :research-status="lead.business.researchStatus"
+        :research-requested-at="lead.business.researchRequestedAt"
+        :name="lead.business.name"
+        :city="lead.business.city"
+        :website="lead.business.website"
+        :phone="lead.business.phone"
+        :address="lead.business.address"
+      />
 
       <div v-if="lead.mockup" class="rounded-lg border border-default bg-muted p-3">
         <div class="flex items-start justify-between gap-3">

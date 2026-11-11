@@ -300,6 +300,9 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE businesses ADD COLUMN gbp_photos TEXT`)
   await tryAlter(`ALTER TABLE businesses ADD COLUMN photo_count INTEGER`)
   await tryAlter(`ALTER TABLE businesses ADD COLUMN site_discovery TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN research_status TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN research_requested_at TEXT`)
+  await tryAlter(`ALTER TABLE businesses ADD COLUMN research_completed_at TEXT`)
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS mockups (
@@ -354,6 +357,7 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE mockups ADD COLUMN research_status TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN research_requested_at TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN research_completed_at TEXT`)
+  await tryAlter(`ALTER TABLE mockups ADD COLUMN preview_made_at TEXT`)
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)

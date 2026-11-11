@@ -46,6 +46,28 @@ export function leadHasDeployment(row: Record<string, unknown>) {
   return Boolean(deployment.url) || deployment.webStack
 }
 
+/**
+ * Keep the one-page Vercel link and the Web Stack link apart.
+ * Sync used to store only leadDeployment(), which returns mockup_url
+ * whenever that field is already a Vercel link and drops web_stack_url.
+ */
+export function leadSiteBuilds(row: Record<string, unknown>) {
+  const mockupUrl = httpUrl(row.mockup_url)
+  const webStackUrl = httpUrl(row.web_stack_url)
+  const fullSiteUrl = httpUrl(row.full_site_url)
+  const onePageUrl = mockupUrl && mockupUrl !== webStackUrl
+    ? mockupUrl
+    : (fullSiteUrl && fullSiteUrl !== webStackUrl ? fullSiteUrl : null)
+  const started = text(row.web_stack_started_at)
+  return {
+    onePageUrl: onePageUrl && isVercelMockupUrl(onePageUrl) ? onePageUrl : null,
+    webStackUrl: webStackUrl && (isVercelMockupUrl(webStackUrl) || text(row.web_stack_status) || text(row.web_stack_agent_id))
+      ? webStackUrl
+      : null,
+    webStackAt: started || null
+  }
+}
+
 /** Newer updated time, then created time. Empty when the row has neither. */
 export function leadStamp(row: Record<string, unknown>) {
   return mockupUpdatedTime(row) || mockupCreatedTime(row) || ''

@@ -39,6 +39,27 @@ export function researchRequestedAtMs(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/** The lead row is the source of truth once it has a status. A mockup row is only the fallback. */
+export function preferredResearch(input: {
+  businessStatus?: unknown
+  businessRequestedAt?: unknown
+  mockupStatus?: unknown
+  mockupRequestedAt?: unknown
+}) {
+  const business = researchStatusFrom(input.businessStatus)
+  if (business) {
+    return {
+      status: business,
+      requestedAt: typeof input.businessRequestedAt === 'string' ? input.businessRequestedAt : null
+    }
+  }
+  const mockup = researchStatusFrom(input.mockupStatus)
+  return {
+    status: mockup,
+    requestedAt: mockup && typeof input.mockupRequestedAt === 'string' ? input.mockupRequestedAt : null
+  }
+}
+
 export function researchView(status: unknown, requestedAt: unknown, now = Date.now()): ResearchView {
   const parsed = researchStatusFrom(status)
   if (parsed === 'complete') return 'complete'
