@@ -9,6 +9,7 @@ const publicPaths = [
   '/api/_nuxt_icon/',
   '/api/health',
   '/api/mockups/webhook',
+  '/api/research-report/webhook',
   '/api/digests/ingest'
 ]
 

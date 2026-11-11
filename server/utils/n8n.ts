@@ -226,6 +226,68 @@ export async function fireStudioAction(payload: StudioLeadPayload) {
 }
 
 /**
+ * WF-19 research report. Posts only the research contract to the Studio webhook.
+ * Does not call the web stack webhook and does not send a mockup lead payload.
+ */
+export async function fireResearchReport(payload: {
+  action: 'research_report'
+  owner: string
+  place_id: string
+  callback_url?: string
+  notes?: string
+}) {
+  const { studioWebhookUrl, studioSecret } = n8nConfig()
+
+  if (!studioWebhookUrl || /web-stack/i.test(studioWebhookUrl)) {
+    throw createError({
+      statusCode: 500,
+      message: 'Research reports go to the Studio webhook (/webhook/studio), not the web-stack webhook. Set N8N_STUDIO_WEBHOOK_URL to https://n8n.wildcardcreative.cloud/webhook/studio.'
+    })
+  }
+
+  if (!studioSecret) {
+    throw createError({
+      statusCode: 500,
+      message: 'N8N_STUDIO_SECRET is not configured, so Studio did not call the webhook.'
+    })
+  }
+
+  const response = await fetch(studioWebhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Studio-Secret': studioSecret
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(20_000)
+  })
+
+  const errorText = await response.text()
+  if (!response.ok) {
+    const detail = errorText.slice(0, 300) || response.statusText
+    throw createError({
+      statusCode: 502,
+      message: `Studio webhook failed (${response.status}): ${detail}. No research report was started.`
+    })
+  }
+
+  if (!errorText) return { ok: true }
+  try {
+    const body = JSON.parse(errorText) as { ok?: unknown }
+    if (body.ok === false) {
+      throw createError({
+        statusCode: 502,
+        message: 'Studio webhook returned 200 with ok:false. No research report was started.'
+      })
+    }
+    return body
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'statusCode' in error) throw error
+    return { ok: true }
+  }
+}
+
+/**
  * Starts a React + Vite + Tailwind build on a Cursor Cloud Agent.
  * Uses N8N_WEB_STACK_WEBHOOK_URL only. Does not call the plain HTML studio webhook.
  */
@@ -522,6 +584,14 @@ export function callbackUrlFromEvent(event: Parameters<typeof getRequestURL>[0])
   }
   const origin = getRequestURL(event).origin
   return `${origin}/api/mockups/webhook`
+}
+
+export function researchCallbackUrlFromEvent(event: Parameters<typeof getRequestURL>[0]) {
+  const config = useRuntimeConfig()
+  const origin = config.n8nCallbackUrl
+    ? String(config.n8nCallbackUrl).replace(/\/$/, '')
+    : getRequestURL(event).origin
+  return `${origin}/api/research-report/webhook`
 }
 
 function asLeadString(value: unknown) {

@@ -1,6 +1,6 @@
 # n8n patches — Mockup Studio
 
-WF-7 Studio Ingress is live: `HPHWqFUK7DXBynWo`, `POST https://n8n.wildcardcreative.cloud/webhook/studio`.
+WF-7 Studio Ingress is live: `HPHWqFUK7DXBynWo`, `POST https://n8n.wildcardcreative.cloud/webhook/studio`. Its switch includes `research_report`, which runs WF-19 and returns `{ok:true}` immediately. See `wf-7-studio-ingress.md`.
 
 WF-2/3/6 model-token expression patches are still optional. Do not paste `action_secret` or API keys into git.
 
