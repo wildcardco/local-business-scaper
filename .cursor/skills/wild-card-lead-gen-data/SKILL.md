@@ -110,7 +110,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | POST | `/api/export/n8n` `/api/report/batch` `email` `n8n` |
 | GET | `/api/imagekit/auth` |
 
-Studio webhook `/api/mockups/webhook` and research callback `/api/research-report/webhook` are public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated. Research report POSTs `{action: research_report, owner, place_id, callback_url?, notes?}` to `N8N_STUDIO_WEBHOOK_URL` (`/webhook/studio`) with `X-Studio-Secret`. It does not call `N8N_WEB_STACK_WEBHOOK_URL`.
+Studio webhook `/api/mockups/webhook` and research callback `/api/research-report/webhook` are public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated. Research report POSTs `{action: research_report, owner, place_id, callback_url?, notes?}` to `N8N_STUDIO_WEBHOOK_URL` (`/webhook/studio`) with `X-Studio-Secret`. WF-7 routes that action to WF-19 and returns `{ok:true}` immediately. It does not call `N8N_WEB_STACK_WEBHOOK_URL`. WF-19 emails Ryan for every request for now. Its callback does not send `X-Studio-Secret` yet, so the app keeps rejecting unsigned callbacks. After 15 minutes a requested lead shows `Sent - check email` and can be requested again. A later signed callback still marks it complete.
 
 ## Categories
 

@@ -7,6 +7,7 @@ Webhook responds immediately, then Execute Workflow:
 - `generate_mockup` / `revise_mockup` → WF-2 `jslUBLzcV27vdLIA`
 - `write_pitch` → WF-3 `wkqEVHfuCV1CsS2a`
 - `add_photos` → WF-6 `7aofECe7KpM13rbH`
+- `research_report` → WF-19. Returns `200 {"ok":true}` immediately. The report is emailed to Ryan for now. Per-owner delivery comes later.
 
 Digest WF-1 `/webhook/action` stays untouched.
 
@@ -59,7 +60,21 @@ Upsert Studio Lead currently matches **only** `place_id` and runs **in parallel*
 
 The leads table has no `city` column and no GitHub column. Nuxt parses city from `address` (`…, City, ST 12345`). Sync does not create GitHub repos. WF-2 **Create Repo** (`POST https://api.github.com/user/repos`) runs only after **Generation OK?**, in the same run that writes `mockup_url`. Studio lists a lead only when `mockup_url` is an `https://*.vercel.app` link that still answers. A 404 (`DEPLOYMENT_NOT_FOUND`) is marked missing and left off the list. A GitHub link is shown only when `https://github.com/wildcardco/...` also answers.
 
-The webhook answers `200 {"ok":true}` immediately. n8n does not call `callback_url`. When the factory finishes it writes `status=mockup_ready`, a new `mockup_url`, and `mockup_version` incremented by 1 on the lead row. Studio stays on “Revision requested, in progress” and reads that row (detail refresh or Sync from n8n). It does not treat the immediate 200 as the finished mockup.
+The webhook answers `200 {"ok":true}` immediately. For generate, revise, pitch, and photos, n8n does not call `callback_url`. When the factory finishes it writes `status=mockup_ready`, a new `mockup_url`, and `mockup_version` incremented by 1 on the lead row. Studio stays on “Revision requested, in progress” and reads that row (detail refresh or Sync from n8n). It does not treat the immediate 200 as the finished mockup.
+
+`research_report` is a smaller body on the same webhook. Nuxt sends only `action`, `owner` (`ryan|chase|aaron`), `place_id` (a Google `ChIJ…` id), optional `callback_url`, and optional `notes`. It does not send the mockup lead payload and it does not call `/webhook/web-stack-v2`.
+
+```json
+{
+  "action": "research_report",
+  "owner": "ryan",
+  "place_id": "ChIJ…",
+  "callback_url": "https://<app>/api/research-report/webhook",
+  "notes": "optional"
+}
+```
+
+WF-19 can later POST `{ "ok": true, "action": "research_report", "place_id": "ChIJ…", "research_status": "complete" }` to that callback. The app route requires `X-Studio-Secret`. WF-19 does not send that header yet, so those callbacks are rejected until Ryan attaches the Studio secret credential in n8n. Studio still keeps the endpoint authenticated. If no callback arrives, the lead leaves “Research requested” after 15 minutes and shows “Sent - check email”, and another confirmed request is allowed. A later callback that includes the secret marks the lead complete.
 
 Nuxt sends `X-Studio-Secret` on every Studio action (generate, revise, pitch, photos), all of which go through `fireStudioAction`. If `N8N_STUDIO_SECRET` is empty, Nuxt does not call the webhook and returns 500. A non-2xx from n8n is returned to the UI as “Studio webhook failed (status)”. Vercel must set `N8N_STUDIO_SECRET` to credential Studio secret (`bYKoHkwycoKjqI1A`).
 
@@ -74,6 +89,7 @@ Live nodes are Webhook (header auth, not a separate IF), Normalize, then Upsert 
    - `generate_mockup` / `revise_mockup` → Execute Workflow WF-2 (`jslUBLzcV27vdLIA`) with the full JSON (including `model`, `max_tokens`, `research_model`, `last_feedback`, `callback_url`, `mockup_id`)
    - `write_pitch` → Execute Workflow WF-3 (`wkqEVHfuCV1CsS2a`)
    - `add_photos` → Execute Workflow WF-6 (`7aofECe7KpM13rbH`)
+   - `research_report` → Execute Workflow WF-19, then respond `200 {"ok":true}` immediately
 5. **Respond** `{ "ok": true, "action": …, "place_id": … }`
 
 WF-2 currently has no webhook. This ingress is the only public entry from Nuxt. Digest WF-1 `/webhook/action` stays untouched.

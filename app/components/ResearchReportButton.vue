@@ -2,13 +2,15 @@
 import type { IntakeMatch } from '~~/shared/intake-lookup'
 import { googlePlaceIdFrom, preferredPlaceId } from '~~/shared/gbp-listing'
 import {
+  RESEARCH_CALLBACK_WAIT_MS,
   RESEARCH_CONFIRM_COPY,
   RESEARCH_NEEDS_LISTING,
-  researchOwnerSlug,
+  RESEARCH_SENT_LABEL,
+  researchRequestedAtMs,
   researchStatusFrom,
+  researchView,
   type ResearchStatus
 } from '~~/shared/research-report'
-import { studioOwnerBySlug } from '~~/shared/studio-owners'
 
 const props = defineProps<{
   mockupId: string
@@ -16,6 +18,7 @@ const props = defineProps<{
   placeId?: string | null
   businessPlaceId?: string | null
   researchStatus?: string | null
+  researchRequestedAt?: string | null
   owner?: string | null
   name?: string | null
   city?: string | null
@@ -37,6 +40,8 @@ const errorMessage = ref('')
 const placeId = ref(props.placeId || '')
 const businessPlaceId = ref(props.businessPlaceId || '')
 const status = ref<ResearchStatus | null>(researchStatusFrom(props.researchStatus))
+const requestedAt = ref(props.researchRequestedAt || '')
+const now = ref(Date.now())
 const lookupStatus = ref<'idle' | 'loading' | 'done' | 'skipped' | 'error'>('idle')
 const lookupMessage = ref('')
 const matches = ref<IntakeMatch[]>([])
@@ -51,15 +56,22 @@ watch(() => props.businessPlaceId, (value) => {
 watch(() => props.researchStatus, (value) => {
   status.value = researchStatusFrom(value)
 })
+watch(() => props.researchRequestedAt, (value) => {
+  if (value) requestedAt.value = value
+})
 
 const googleId = computed(() => googlePlaceIdFrom(preferredPlaceId(placeId.value, businessPlaceId.value)))
-const pending = computed(() => status.value === 'requested' || submitting.value)
-const ownerLabel = computed(() => {
-  const slug = researchOwnerSlug(props.owner)
-  return (slug && studioOwnerBySlug(slug)?.label) || 'the lead\'s owner'
+const view = computed(() => researchView(status.value, requestedAt.value, now.value))
+const pending = computed(() => view.value === 'requested' || submitting.value)
+const buttonTitle = computed(() => {
+  if (view.value === 'requested') return 'A report was requested. It is emailed to Ryan. This stays off for about 15 minutes.'
+  if (view.value === 'sent') return 'Sent - check email. The report is emailed to Ryan. You can request another.'
+  if (view.value === 'complete') return 'Research complete. You can request another report. It is emailed to Ryan.'
+  return 'Request a research report. It is emailed to Ryan. Each run costs money.'
 })
 
 let timer: ReturnType<typeof setInterval> | null = null
+let clock: ReturnType<typeof setTimeout> | null = null
 
 function stopPoll() {
   if (!timer) return
@@ -67,17 +79,33 @@ function stopPoll() {
   timer = null
 }
 
+function scheduleSentFlip() {
+  if (clock) clearTimeout(clock)
+  clock = null
+  const at = researchRequestedAtMs(requestedAt.value)
+  if (status.value !== 'requested' || at == null) return
+  const delay = at + RESEARCH_CALLBACK_WAIT_MS - Date.now()
+  if (delay <= 0) {
+    now.value = Date.now()
+    return
+  }
+  clock = setTimeout(() => {
+    now.value = Date.now()
+  }, delay)
+}
+
 async function refreshStatus() {
   try {
-    const result = await $fetch<{ mockup?: { researchStatus?: string } }>(`/api/mockups/${props.mockupId}`)
+    const result = await $fetch<{ mockup?: { researchStatus?: string, researchRequestedAt?: string | null } }>(`/api/mockups/${props.mockupId}`)
     const next = researchStatusFrom(result.mockup?.researchStatus)
+    if (result.mockup?.researchRequestedAt) requestedAt.value = result.mockup.researchRequestedAt
     if (next === 'complete' && status.value !== 'complete') {
       status.value = 'complete'
       stopPoll()
       emit('updated')
     }
   } catch {
-    stopPoll()
+    // A missing callback is not an error. Keep the requested time and keep checking.
   }
 }
 
@@ -89,7 +117,12 @@ watch(status, (value) => {
   }, 15000)
 }, { immediate: true })
 
-onUnmounted(stopPoll)
+watch([status, requestedAt], scheduleSentFlip, { immediate: true })
+
+onUnmounted(() => {
+  stopPoll()
+  if (clock) clearTimeout(clock)
+})
 
 function readError(error: unknown) {
   const data = (error as { data?: { message?: string } }).data
@@ -154,7 +187,7 @@ async function lookupPlace(selectedId = '') {
 }
 
 async function requestReport() {
-  if (submitting.value || status.value === 'requested' || !googleId.value) return
+  if (submitting.value || view.value === 'requested' || !googleId.value) return
   submitting.value = true
   errorMessage.value = ''
   try {
@@ -163,11 +196,12 @@ async function requestReport() {
       body: { notes: notes.value }
     })
     status.value = 'requested'
+    requestedAt.value = new Date().toISOString()
     open.value = false
     notes.value = ''
     toast.add({
       title: 'Research requested',
-      description: `n8n accepted the request. The report is emailed to ${ownerLabel.value}. This button stays off until the report is marked complete.`,
+      description: 'n8n accepted the request. The report is emailed to Ryan. This button stays off for about 15 minutes.',
       color: 'success'
     })
     emit('updated')
@@ -184,7 +218,7 @@ async function requestReport() {
 <template>
   <div class="flex w-full flex-col gap-2 sm:w-auto">
     <UBadge
-      v-if="status === 'requested'"
+      v-if="view === 'requested'"
       color="warning"
       variant="subtle"
       data-research-status="requested"
@@ -192,7 +226,15 @@ async function requestReport() {
       Research requested
     </UBadge>
     <UBadge
-      v-else-if="status === 'complete'"
+      v-else-if="view === 'sent'"
+      color="neutral"
+      variant="subtle"
+      data-research-status="sent"
+    >
+      {{ RESEARCH_SENT_LABEL }}
+    </UBadge>
+    <UBadge
+      v-else-if="view === 'complete'"
       color="success"
       variant="subtle"
       data-research-status="complete"
@@ -205,10 +247,11 @@ async function requestReport() {
       class="min-h-11 w-full justify-center"
       variant="outline"
       icon="i-lucide-file-search"
+      :title="buttonTitle"
       :disabled="pending"
       @click="showDialog"
     >
-      {{ status === 'requested' ? 'Research requested' : 'Research report' }}
+      {{ view === 'requested' ? 'Research requested' : 'Research report' }}
     </UButton>
     <UModal
       v-model:open="open"
@@ -228,7 +271,7 @@ async function requestReport() {
             v-if="googleId"
             class="text-sm text-muted"
           >
-            The report goes to {{ ownerLabel }}.
+            The report is emailed to Ryan.
           </p>
           <div
             v-else
@@ -304,7 +347,7 @@ async function requestReport() {
             data-research-confirm
             icon="i-lucide-file-search"
             :loading="submitting"
-            :disabled="submitting || status === 'requested'"
+            :disabled="submitting || view === 'requested'"
             @click="requestReport"
           >
             Request research report

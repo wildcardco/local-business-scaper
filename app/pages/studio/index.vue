@@ -261,6 +261,7 @@ function statusColor(status: string) {
             :place-id="mockup.placeId"
             :business-place-id="mockup.business?.placeId"
             :research-status="mockup.researchStatus"
+            :research-requested-at="mockup.researchRequestedAt"
             :owner="mockup.owner"
             :name="mockup.business?.name"
             :city="mockup.business?.city"

@@ -2,15 +2,19 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
+  RESEARCH_CALLBACK_WAIT_MS,
   RESEARCH_CONFIRM_COPY,
   RESEARCH_NEEDS_LISTING,
   RESEARCH_PENDING_MESSAGE,
+  RESEARCH_SENT_LABEL,
   RESEARCH_STUDIO_WEBHOOK_PATH,
   RESEARCH_WEB_STACK_WEBHOOK_PATH,
   parseResearchCallback,
   researchReportPayload,
   researchRequestBlock,
-  researchStatusFrom
+  researchRequestedAtMs,
+  researchStatusFrom,
+  researchView
 } from './research-report.ts'
 
 const placeId = 'ChIJleepsExact0001'
@@ -38,6 +42,9 @@ test('research report body is the studio contract and not a web stack build', ()
   assert.equal('build_mode' in result.body, false)
   assert.equal('page_intent' in result.body, false)
   assert.match(RESEARCH_CONFIRM_COPY, /costs money/)
+  assert.match(RESEARCH_CONFIRM_COPY, /emailed to Ryan/)
+  assert.match(RESEARCH_CONFIRM_COPY, /Sent - check email/)
+  assert.equal(RESEARCH_CONFIRM_COPY.includes('lead\'s owner'), false)
 })
 
 test('notes are optional and omitted when blank', () => {
@@ -76,9 +83,19 @@ test('owner must be a studio slug and a pending request stays blocked', () => {
   assert.equal(researchStatusFrom('requested'), 'requested')
   assert.equal(researchStatusFrom('complete'), 'complete')
   assert.equal(researchStatusFrom('generating'), null)
+  const requestedAt = '2026-11-11 21:00:00'
+  const at = researchRequestedAtMs(requestedAt)
+  assert.equal(typeof at, 'number')
+  assert.equal(researchView('requested', requestedAt, (at || 0) + RESEARCH_CALLBACK_WAIT_MS - 1), 'requested')
+  assert.equal(researchView('requested', requestedAt, (at || 0) + RESEARCH_CALLBACK_WAIT_MS), 'sent')
+  assert.equal(researchView('requested', null, (at || 0) + RESEARCH_CALLBACK_WAIT_MS), 'requested')
+  assert.equal(researchView('complete', requestedAt, (at || 0) + RESEARCH_CALLBACK_WAIT_MS), 'complete')
+  assert.equal(researchRequestBlock('requested', requestedAt, (at || 0) + 1000), RESEARCH_PENDING_MESSAGE)
+  assert.equal(researchRequestBlock('requested', requestedAt, (at || 0) + RESEARCH_CALLBACK_WAIT_MS), null)
   assert.equal(researchRequestBlock('requested'), RESEARCH_PENDING_MESSAGE)
   assert.equal(researchRequestBlock('complete'), null)
   assert.equal(researchRequestBlock(null), null)
+  assert.equal(RESEARCH_SENT_LABEL, 'Sent - check email')
 })
 
 test('the callback marks a Google place complete and ignores other actions', () => {

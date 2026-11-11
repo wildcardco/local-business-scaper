@@ -3,6 +3,9 @@ import { verifyStudioSecret } from '~~/server/utils/n8n'
 import { parseResearchCallback } from '~~/shared/research-report'
 
 export default defineEventHandler(async (event) => {
+  // WF-19 does not send X-Studio-Secret yet. Keep rejecting those calls.
+  // A later callback that includes the secret still marks a requested lead complete,
+  // including one that Studio already shows as "Sent - check email".
   verifyStudioSecret(event)
   const body = await readBody(event).catch(() => null)
   const parsed = parseResearchCallback(body)

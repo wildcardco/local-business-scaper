@@ -2,6 +2,7 @@ import { db } from '~~/server/utils/db'
 import { googlePlaceIdFrom, preferredPlaceId } from '~~/shared/gbp-listing'
 import { mockupPlaceNeedsGoogleId } from '~~/shared/intake-lookup'
 import {
+  RESEARCH_CALLBACK_WAIT_MINUTES,
   RESEARCH_NEEDS_LISTING,
   researchOwnerSlug,
   researchReportPayload,
@@ -40,7 +41,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: 'Mockup not found' })
   }
 
-  const pending = researchRequestBlock(row.research_status)
+  const pending = researchRequestBlock(row.research_status, row.research_requested_at)
   if (pending) {
     throw createError({ statusCode: 409, message: pending })
   }
@@ -74,8 +75,12 @@ export default defineEventHandler(async (event) => {
       research_completed_at = NULL,
       place_id = CASE WHEN ? = 1 THEN ? ELSE place_id END,
       updated_at = datetime('now')
-      WHERE id = ? AND COALESCE(research_status, '') != 'requested'`,
-    args: [replacePlaceId ? 1 : 0, googlePlaceId, id]
+      WHERE id = ?
+        AND (
+          COALESCE(research_status, '') != 'requested'
+          OR datetime(research_requested_at) <= datetime('now', ?)
+        )`,
+    args: [replacePlaceId ? 1 : 0, googlePlaceId, id, `-${RESEARCH_CALLBACK_WAIT_MINUTES} minutes`]
   })
   if (Number(claimed.rowsAffected || 0) < 1) {
     throw createError({ statusCode: 409, message: researchRequestBlock('requested') || 'A research report is already requested for this lead.' })
