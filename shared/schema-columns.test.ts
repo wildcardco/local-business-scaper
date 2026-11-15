@@ -14,7 +14,8 @@ const EXPECTED = [
   'mockups.research_requested_at',
   'mockups.research_completed_at',
   'mockups.preview_url',
-  'mockups.preview_made_at'
+  'mockups.preview_made_at',
+  'digest_leads.lead_group'
 ]
 
 function openDb(name: string) {
@@ -31,7 +32,7 @@ function names(db: DatabaseSync, table: string) {
   return db.prepare(`PRAGMA table_info(${table})`).all().map(row => String(row.name))
 }
 
-test('the catalog is the research and preview columns production was missing', () => {
+test('the catalog is the columns production was missing', () => {
   assert.deepEqual(
     SCHEMA_COLUMNS.map(column => `${column.table}.${column.column}`),
     EXPECTED
@@ -54,6 +55,12 @@ test('a production-shaped database gains the columns, and a second pass does not
         business_id TEXT,
         build_mode TEXT DEFAULT 'html',
         build_error TEXT
+      );
+      CREATE TABLE digest_leads (
+        id TEXT PRIMARY KEY,
+        digest_id TEXT NOT NULL,
+        business_id TEXT NOT NULL,
+        place_id TEXT NOT NULL
       );
       INSERT INTO businesses (id, user_id, name) VALUES ('biz', 'user', 'Harbor');
     `)

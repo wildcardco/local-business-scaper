@@ -14,7 +14,8 @@ export const SCHEMA_COLUMNS = [
   { table: 'mockups', column: 'research_requested_at', type: 'TEXT' },
   { table: 'mockups', column: 'research_completed_at', type: 'TEXT' },
   { table: 'mockups', column: 'preview_url', type: 'TEXT' },
-  { table: 'mockups', column: 'preview_made_at', type: 'TEXT' }
+  { table: 'mockups', column: 'preview_made_at', type: 'TEXT' },
+  { table: 'digest_leads', column: 'lead_group', type: 'TEXT' }
 ] as const
 
 export type SchemaColumn = (typeof SCHEMA_COLUMNS)[number]

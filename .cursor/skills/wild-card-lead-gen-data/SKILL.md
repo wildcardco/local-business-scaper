@@ -18,7 +18,7 @@ authToken: isProduction ? TURSO_KEY : undefined
 generateId() // `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`
 ```
 
-Schema: `initializeSchema()` on Nitro start. `CREATE TABLE IF NOT EXISTS` + try/catch `ALTER TABLE`. Research and preview columns (`businesses.research_status`, `research_requested_at`, `research_completed_at`, and the same three on `mockups`, plus `mockups.preview_url` and `preview_made_at`) are also added on the request path by `ensureSchemaColumns()` after `PRAGMA table_info`. `web_stack_url` stays an n8n field stored in `preview_url`.
+Schema: `initializeSchema()` on Nitro start. `CREATE TABLE IF NOT EXISTS` + try/catch `ALTER TABLE`. Research and preview columns (`businesses.research_status`, `research_requested_at`, `research_completed_at`, and the same three on `mockups`, plus `mockups.preview_url` and `preview_made_at`) and `digest_leads.lead_group` are also added on the request path by `ensureSchemaColumns()` after `PRAGMA table_info`. `web_stack_url` stays an n8n field stored in `preview_url`.
 
 ## Local database (dev.db)
 
