@@ -7,6 +7,20 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const LEAD_GROUP_RE = /^[a-z][a-z0-9_-]{0,31}$/
 const HTTP_URL_RE = /^https?:\/\/\S+$/i
 
+const TIER_MAP: Record<string, { slug: string, label: string }> = {
+  'call first': { slug: 'call_first', label: 'Call First' },
+  'good': { slug: 'good', label: 'Good' },
+  'worth a look': { slug: 'worth_a_look', label: 'Worth a look' },
+  'long shot': { slug: 'long_shot', label: 'Long shot' },
+  'skip': { slug: 'skip', label: 'Skip' }
+}
+
+/** Digest and lead_details labels. Unknown text is dropped so a saved tier is not cleared. */
+export function normalizeDigestTier(value: unknown): { slug: string, label: string } | null {
+  if (typeof value !== 'string') return null
+  return TIER_MAP[value.trim().toLowerCase()] || null
+}
+
 /** Live lead_details returns at most 10 Google photos. */
 export const GBP_PHOTO_LIMIT = 10
 

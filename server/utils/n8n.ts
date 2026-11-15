@@ -12,6 +12,7 @@ import { leadAdvancedWhileBusy } from '~~/shared/studio-progress'
 import { costActionLabel, foldMockupCost, parseCostLedger } from '~~/shared/mockup-cost'
 import { mockupActivityTime, mockupCreatedTime, mockupUpdatedTime } from '~~/shared/mockup-time'
 import { takeLeadCursor } from '~~/shared/studio-sync-leads'
+import { leadDetailsTransportError } from '~~/shared/lead-details'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import {
   leadPayloadForBuild,
@@ -284,6 +285,57 @@ export async function fireResearchReport(payload: {
   } catch (error: unknown) {
     if (error && typeof error === 'object' && 'statusCode' in error) throw error
     return { ok: true }
+  }
+}
+
+/**
+ * POST JSON to the Studio webhook and return the status plus parsed body.
+ * Callers decide what a 401, 404, or unknown action means. The secret is not logged.
+ */
+export async function requestStudioWebhook(payload: unknown, timeoutMs = 15_000): Promise<{ status: number, body: unknown }> {
+  const { studioWebhookUrl, studioSecret } = n8nConfig()
+
+  if (!studioWebhookUrl || /web-stack/i.test(studioWebhookUrl)) {
+    throw createError({
+      statusCode: 500,
+      message: 'Past lead details go to the Studio webhook (/webhook/studio). Set N8N_STUDIO_WEBHOOK_URL to https://n8n.wildcardcreative.cloud/webhook/studio.'
+    })
+  }
+
+  if (!studioSecret) {
+    throw createError({
+      statusCode: 500,
+      message: 'N8N_STUDIO_SECRET is not configured, so Studio did not call the webhook.'
+    })
+  }
+
+  let response: Response
+  try {
+    response = await fetch(studioWebhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Studio-Secret': studioSecret
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(timeoutMs)
+    })
+  } catch (error: unknown) {
+    const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : ''
+    const timeout = leadDetailsTransportError(name)
+    if (timeout) throw createError({ statusCode: 504, message: timeout })
+    throw createError({
+      statusCode: 502,
+      message: 'The Studio webhook could not be reached.'
+    })
+  }
+
+  const text = await response.text()
+  if (!text) return { status: response.status, body: null }
+  try {
+    return { status: response.status, body: JSON.parse(text) }
+  } catch {
+    return { status: response.status, body: { message: text.slice(0, 180) } }
   }
 }
 

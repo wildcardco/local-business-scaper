@@ -1,6 +1,7 @@
 import { db, generateId } from '~~/server/utils/db'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { isPlaceId, locationLabel, parseUsCityState } from '~~/shared/studio-location'
+import { leadEmails } from '~~/shared/lead-context'
 import { githubRepoForMockup, mockupDeleteRepo, mockupGithubUrl } from '~~/shared/mockup-repo'
 import { costTotalCents, formatUsdFromCents, parseCostLedger } from '~~/shared/mockup-cost'
 import { checkUserMockupLinks, ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
@@ -174,6 +175,7 @@ export function mapMockup(row: Record<string, unknown>, business?: Record<string
           website: (business.website as string) || null,
           phone: business.phone != null ? String(business.phone) : null,
           email: (business.email as string) || null,
+          emails: leadEmails(business.email, business.contacts_data),
           address: (business.address as string) || null,
           city,
           state,
@@ -285,7 +287,8 @@ export async function getMockupForUser(id: string, userId: string) {
         b.research_status as b_research_status, b.research_requested_at as b_research_requested_at,
         b.research_completed_at as b_research_completed_at,
         b.google_business_id as b_google_business_id, b.gbp_photos as b_gbp_photos,
-        b.photo_count as b_photo_count, b.site_discovery as b_site_discovery
+        b.photo_count as b_photo_count, b.site_discovery as b_site_discovery,
+        b.contacts_data as b_contacts_data
       FROM mockups m
       LEFT JOIN businesses b ON m.business_id = b.id
       WHERE m.id = ? AND m.user_id = ?
@@ -313,7 +316,8 @@ export async function getMockupForUser(id: string, userId: string) {
         google_business_id: row.b_google_business_id,
         gbp_photos: row.b_gbp_photos,
         photo_count: row.b_photo_count,
-        site_discovery: row.b_site_discovery
+        site_discovery: row.b_site_discovery,
+        contacts_data: row.b_contacts_data
       }
     : null
 

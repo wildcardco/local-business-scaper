@@ -2,7 +2,7 @@ import { db, generateId } from '~~/server/utils/db'
 import { ensureDigestTables } from '~~/server/utils/digest-schema'
 import { OWNER_EMAIL_MAP, normalizeEmail } from '~~/server/utils/allowlist'
 import { callbackUrlFromEvent } from '~~/server/utils/n8n'
-import { digestLeadFields } from '~~/shared/digest-ingest'
+import { digestLeadFields, normalizeDigestTier } from '~~/shared/digest-ingest'
 
 interface IngestLead {
   place_id: string
@@ -31,20 +31,6 @@ interface IngestPayload {
     location: string
   }
   leads: IngestLead[]
-}
-
-const TIER_MAP: Record<string, { slug: string; label: string }> = {
-  'call first': { slug: 'call_first', label: 'Call First' },
-  'good': { slug: 'good', label: 'Good' },
-  'worth a look': { slug: 'worth_a_look', label: 'Worth a look' },
-  'long shot': { slug: 'long_shot', label: 'Long shot' },
-  'skip': { slug: 'skip', label: 'Skip' }
-}
-
-function normalizeTier(tier: string | undefined): { slug: string; label: string } | null {
-  if (!tier) return null
-  const normalized = tier.trim().toLowerCase()
-  return TIER_MAP[normalized] || null
 }
 
 function constantTimeCompare(a: string, b: string): boolean {
@@ -183,7 +169,7 @@ export default defineEventHandler(async (event) => {
       continue
     }
 
-    const tier = normalizeTier(lead.tier)
+    const tier = normalizeDigestTier(lead.tier)
     const score = typeof lead.score === 'number' ? lead.score : 0
     const rawLead = lead as unknown as Record<string, unknown>
 

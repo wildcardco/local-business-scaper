@@ -191,3 +191,5 @@ WF-0 (daily lead digest workflow) runs at 5 AM CT for each owner (`ryan`, `chase
 4. (Optional) Send a backup email with a slimmed-down version
 
 The page at `/leads/today` shows the logged-in user's digest for today (Central Time). Query param `?date=YYYY-MM-DD` shows a past day.
+
+Studio can fill the same fields for a lead that is already saved. `POST /api/businesses/:id/fetch-details` calls n8n `lead_details` and merges the result with these rules. The request and response are documented in `docs/lead-details-api.md`.
