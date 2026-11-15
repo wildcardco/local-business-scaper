@@ -5,6 +5,10 @@
  *
  * `web_stack_url` is an n8n lead field. Studio stores that URL in
  * `mockups.preview_url`. It is not a SQLite column.
+ *
+ * `digest_rerolls` already exists in production without the snapshot columns.
+ * The request-path ensure creates the table when it is missing, then adds
+ * any catalog column `PRAGMA table_info` does not already list.
  */
 export const SCHEMA_COLUMNS = [
   { table: 'businesses', column: 'research_status', type: 'TEXT' },
@@ -15,8 +19,35 @@ export const SCHEMA_COLUMNS = [
   { table: 'mockups', column: 'research_completed_at', type: 'TEXT' },
   { table: 'mockups', column: 'preview_url', type: 'TEXT' },
   { table: 'mockups', column: 'preview_made_at', type: 'TEXT' },
-  { table: 'digest_leads', column: 'lead_group', type: 'TEXT' }
+  { table: 'digest_leads', column: 'lead_group', type: 'TEXT' },
+  { table: 'digest_rerolls', column: 'search_category', type: 'TEXT' },
+  { table: 'digest_rerolls', column: 'search_location', type: 'TEXT' },
+  { table: 'digest_rerolls', column: 'result_count', type: 'INTEGER' },
+  { table: 'digest_rerolls', column: 'results_json', type: 'TEXT' },
+  { table: 'digest_rerolls', column: 'completed_at', type: 'TEXT' },
+  { table: 'digest_rerolls', column: 'dismissed_at', type: 'TEXT' },
+  { table: 'digest_rerolls', column: 'digest_id', type: 'TEXT' }
 ] as const
+
+/** Current re-roll table. `IF NOT EXISTS` leaves an older table in place so the column catalog can ALTER it. */
+export const DIGEST_REROLLS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS digest_rerolls (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      digest_date TEXT NOT NULL,
+      category TEXT NOT NULL,
+      random INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      search_category TEXT,
+      search_location TEXT,
+      result_count INTEGER,
+      results_json TEXT,
+      completed_at TEXT,
+      dismissed_at TEXT,
+      digest_id TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+
+export const DIGEST_REROLLS_INDEX_SQL = `CREATE INDEX IF NOT EXISTS idx_digest_rerolls_user_date ON digest_rerolls(user_id, digest_date)`
 
 export type SchemaColumn = (typeof SCHEMA_COLUMNS)[number]
 
@@ -29,8 +60,11 @@ function assertIdentifier(value: string) {
 export function columnAlterSql(column: SchemaColumn) {
   assertIdentifier(column.table)
   assertIdentifier(column.column)
-  if (column.type !== 'TEXT') throw new Error(`Unsupported column type: ${column.type}`)
-  return `ALTER TABLE ${column.table} ADD COLUMN ${column.column} ${column.type}`
+  const type: string = column.type
+  if (type !== 'TEXT' && type !== 'INTEGER') {
+    throw new Error(`Unsupported column type: ${type}`)
+  }
+  return `ALTER TABLE ${column.table} ADD COLUMN ${column.column} ${type}`
 }
 
 type QueryRows = Array<Record<string, unknown>>
@@ -70,4 +104,15 @@ export async function ensureMissingColumns(execute: (sql: string) => Promise<Que
   }
 
   return applied
+}
+
+/**
+ * Request-path schema. Creates `digest_rerolls` when production does not have
+ * it yet, then adds every catalog column that is still missing. Startup init
+ * is not required.
+ */
+export async function ensureRequestSchema(execute: (sql: string) => Promise<QueryRows>) {
+  await execute(DIGEST_REROLLS_TABLE_SQL)
+  await execute(DIGEST_REROLLS_INDEX_SQL)
+  return ensureMissingColumns(execute)
 }

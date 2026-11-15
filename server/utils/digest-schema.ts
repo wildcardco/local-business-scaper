@@ -40,12 +40,29 @@ export const DIGEST_SCHEMA_SQL = [
       category TEXT NOT NULL,
       random INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
+      search_category TEXT,
+      search_location TEXT,
+      result_count INTEGER,
+      results_json TEXT,
+      completed_at TEXT,
+      dismissed_at TEXT,
+      digest_id TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`,
   `CREATE INDEX IF NOT EXISTS idx_digest_rerolls_user_date ON digest_rerolls(user_id, digest_date)`
 ]
 
 let digestTablesReady: Promise<void> | null = null
+
+const REROLL_RESULT_COLUMNS = [
+  'search_category TEXT',
+  'search_location TEXT',
+  'result_count INTEGER',
+  'results_json TEXT',
+  'completed_at TEXT',
+  'dismissed_at TEXT',
+  'digest_id TEXT'
+]
 
 async function tryAlter(sql: string) {
   try {
@@ -62,6 +79,9 @@ async function createDigestTables() {
     await db.execute(sql)
   }
   await tryAlter('ALTER TABLE digest_leads ADD COLUMN lead_group TEXT')
+  for (const column of REROLL_RESULT_COLUMNS) {
+    await tryAlter(`ALTER TABLE digest_rerolls ADD COLUMN ${column}`)
+  }
 }
 
 /** Memoized per server instance. A failed attempt is cleared so the next request retries. */

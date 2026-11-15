@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { SCHEMA_COLUMNS, ensureMissingColumns } from './schema-columns.ts'
+import { SCHEMA_COLUMNS, columnAlterSql, ensureMissingColumns, ensureRequestSchema } from './schema-columns.ts'
 
 const EXPECTED = [
   'businesses.research_status',
@@ -15,7 +15,14 @@ const EXPECTED = [
   'mockups.research_completed_at',
   'mockups.preview_url',
   'mockups.preview_made_at',
-  'digest_leads.lead_group'
+  'digest_leads.lead_group',
+  'digest_rerolls.search_category',
+  'digest_rerolls.search_location',
+  'digest_rerolls.result_count',
+  'digest_rerolls.results_json',
+  'digest_rerolls.completed_at',
+  'digest_rerolls.dismissed_at',
+  'digest_rerolls.digest_id'
 ]
 
 function openDb(name: string) {
@@ -25,7 +32,12 @@ function openDb(name: string) {
 }
 
 function execute(db: DatabaseSync) {
-  return async (sql: string) => db.prepare(sql).all() as Array<Record<string, unknown>>
+  return async (sql: string) => {
+    const statement = db.prepare(sql)
+    if (/^\s*(select|pragma)/i.test(sql)) return statement.all() as Array<Record<string, unknown>>
+    statement.run()
+    return []
+  }
 }
 
 function names(db: DatabaseSync, table: string) {
@@ -62,18 +74,24 @@ test('a production-shaped database gains the columns, and a second pass does not
         business_id TEXT NOT NULL,
         place_id TEXT NOT NULL
       );
+      CREATE TABLE digest_rerolls (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        digest_date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        random INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT
+      );
       INSERT INTO businesses (id, user_id, name) VALUES ('biz', 'user', 'Harbor');
     `)
 
     const applied = await ensureMissingColumns(execute(db))
-    assert.deepEqual(applied, EXPECTED.map((name) => {
-      const [table, column] = name.split('.')
-      return `ALTER TABLE ${table} ADD COLUMN ${column} TEXT`
-    }))
+    assert.deepEqual(applied, SCHEMA_COLUMNS.map(column => columnAlterSql(column)))
 
     for (const name of EXPECTED) {
       const [table, column] = name.split('.')
-      assert.ok(names(db, table!).includes(column), name)
+      if (!table || !column) throw new Error(name)
+      assert.ok(names(db, table).includes(column), name)
     }
 
     const again = await ensureMissingColumns(execute(db))
@@ -105,6 +123,41 @@ test('only the missing column is added, and a missing table is left alone', asyn
   } finally {
     db.close()
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the request path creates digest_rerolls and fills columns the old table is missing', async () => {
+  const created = openDb('created.db')
+  try {
+    const applied = await ensureRequestSchema(execute(created.db))
+    assert.deepEqual(applied, [])
+    assert.ok(names(created.db, 'digest_rerolls').includes('results_json'))
+    assert.ok(names(created.db, 'digest_rerolls').includes('result_count'))
+  } finally {
+    created.db.close()
+    rmSync(created.dir, { recursive: true, force: true })
+  }
+
+  const older = openDb('older.db')
+  try {
+    older.db.exec(`
+      CREATE TABLE digest_rerolls (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        digest_date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        random INTEGER NOT NULL DEFAULT 0
+      );
+    `)
+    const applied = await ensureRequestSchema(execute(older.db))
+    assert.ok(applied.includes('ALTER TABLE digest_rerolls ADD COLUMN results_json TEXT'))
+    assert.ok(applied.includes('ALTER TABLE digest_rerolls ADD COLUMN result_count INTEGER'))
+    assert.ok(names(older.db, 'digest_rerolls').includes('dismissed_at'))
+    const again = await ensureRequestSchema(execute(older.db))
+    assert.deepEqual(again.filter(sql => sql.includes('digest_rerolls')), [])
+  } finally {
+    older.db.close()
+    rmSync(older.dir, { recursive: true, force: true })
   }
 })
 

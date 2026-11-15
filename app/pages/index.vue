@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { getTodayCentralTime } from '~~/shared/date-utils'
+import type { RerollLeadView, RerollSummary } from '~~/shared/digest-reroll'
 
 const toast = useToast()
 const route = useRoute()
@@ -42,6 +43,43 @@ const formattedDate = computed(() => {
     month: 'short',
     day: 'numeric'
   }).format(date)
+})
+
+const homeReroll = useState<{
+  date: string
+  reroll: RerollSummary
+  leads: RerollLeadView[]
+  pending: boolean
+} | null>('home-reroll-view', () => null)
+
+watch(digestData, (value) => {
+  if (!value) return
+  const payload = value as {
+    reroll?: RerollSummary | null
+    rerollLeads?: RerollLeadView[]
+    rerollPending?: boolean
+  }
+  if (payload.reroll) {
+    homeReroll.value = {
+      date: today,
+      reroll: payload.reroll,
+      leads: payload.rerollLeads || [],
+      pending: Boolean(payload.rerollPending)
+    }
+    return
+  }
+  homeReroll.value = null
+})
+
+const reroll = computed(() => digestData.value?.reroll || (homeReroll.value?.date === today ? homeReroll.value.reroll : null))
+const rerollLeads = computed(() => {
+  if (digestData.value?.reroll) return digestData.value.rerollLeads || []
+  if (homeReroll.value?.date === today && homeReroll.value.reroll) return homeReroll.value.leads
+  return []
+})
+const rerollPending = computed(() => {
+  if (digestData.value) return Boolean(digestData.value.rerollPending)
+  return Boolean(homeReroll.value?.date === today && homeReroll.value.pending)
 })
 
 const digestLeads = computed(() => digestData.value?.leads || [])
@@ -169,7 +207,10 @@ watch(() => route.query.focus, (focus) => {
           </h1>
           <p class="truncate text-sm text-muted">
             {{ formattedDate }}
-            <span v-if="digestData?.digest">
+            <span v-if="reroll">
+              · {{ rerollLeads.length }} from the re-roll
+            </span>
+            <span v-else-if="digestData?.digest">
               · {{ visibleLeads.length }} to work
             </span>
           </p>
@@ -188,6 +229,9 @@ watch(() => route.query.focus, (focus) => {
       <DigestReroll
         class="mb-3"
         :reroll-count="Number(digestData?.rerollCount || 0)"
+        :last-ran-at="reroll?.createdAt || null"
+        :result-count="reroll ? rerollLeads.length : null"
+        :pending="rerollPending"
         @done="refreshDigest()"
       />
 
@@ -255,8 +299,29 @@ watch(() => route.query.focus, (focus) => {
         </ul>
       </div>
 
+      <RerollResults
+        v-if="reroll"
+        :key="reroll.id"
+        class="mt-3"
+        :leads="rerollLeads"
+        :reroll="reroll"
+        from="home"
+        :date="today"
+        @dismissed="refreshDigest()"
+      >
+        <template #lead="{ lead, detailsTo }">
+          <DashboardLeadCard
+            :lead="lead"
+            :details-to="detailsTo"
+            :skipping="skippingId === lead.business.id"
+            @generate="handleGenerate"
+            @skip="handleSkip"
+          />
+        </template>
+      </RerollResults>
+
       <div
-        v-if="digestLoading"
+        v-if="digestLoading && !reroll"
         class="flex justify-center py-10"
       >
         <UIcon
@@ -265,19 +330,19 @@ watch(() => route.query.focus, (focus) => {
         />
       </div>
       <p
-        v-else-if="!digestData?.digest"
+        v-else-if="!digestData?.digest && !reroll"
         class="py-8 text-center text-sm text-muted"
       >
         Today's digest has not come in yet.
       </p>
       <div
-        v-else-if="visibleLeads.length === 0"
+        v-else-if="!reroll && visibleLeads.length === 0"
         class="py-8 text-center text-sm text-muted"
       >
         Nothing left to work from today's list.
       </div>
       <div
-        v-else
+        v-else-if="!reroll"
         class="mt-3 space-y-3"
       >
         <DashboardLeadCard

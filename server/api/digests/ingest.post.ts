@@ -1,7 +1,9 @@
+import { storedRerollLead, type StoredRerollLead } from '~~/shared/digest-reroll'
 import { db, generateId } from '~~/server/utils/db'
 import { ensureDigestTables } from '~~/server/utils/digest-schema'
 import { OWNER_EMAIL_MAP, normalizeEmail } from '~~/server/utils/allowlist'
 import { callbackUrlFromEvent } from '~~/server/utils/n8n'
+import { saveRerollResults } from '~~/server/utils/reroll-results'
 import { digestLeadFields, normalizeDigestTier } from '~~/shared/digest-ingest'
 
 interface IngestLead {
@@ -31,6 +33,9 @@ interface IngestPayload {
     location: string
   }
   leads: IngestLead[]
+  reroll?: boolean | string
+  reroll_id?: string
+  source?: string
 }
 
 function constantTimeCompare(a: string, b: string): boolean {
@@ -164,10 +169,12 @@ export default defineEventHandler(async (event) => {
     args: [finalDigestId]
   })
 
+  const savedLeads: StoredRerollLead[] = []
+
   for (const lead of body.leads) {
-    if (!lead.place_id || !lead.name) {
-      continue
-    }
+    const placeId = typeof lead.place_id === 'string' ? lead.place_id.trim() : ''
+    if (!placeId) continue
+    const name = typeof lead.name === 'string' && lead.name.trim() ? lead.name.trim() : '(name unavailable)'
 
     const tier = normalizeDigestTier(lead.tier)
     const score = typeof lead.score === 'number' ? lead.score : 0
@@ -175,7 +182,7 @@ export default defineEventHandler(async (event) => {
 
     const existingBusiness = await db.execute({
       sql: 'SELECT id, email, contacts_data FROM businesses WHERE user_id = ? AND place_id = ? LIMIT 1',
-      args: [userId, lead.place_id]
+      args: [userId, placeId]
     })
 
     let businessId: string
@@ -201,7 +208,7 @@ export default defineEventHandler(async (event) => {
         'email = ?'
       ]
       const args: Array<string | number | null> = [
-        lead.name,
+        name,
         lead.address || null,
         lead.city || null,
         lead.state || null,
@@ -242,7 +249,7 @@ export default defineEventHandler(async (event) => {
           status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', datetime('now'), datetime('now'))`,
         args: [
-          businessId, userId, searchId, lead.name,
+          businessId, userId, searchId, name,
           lead.address || null,
           lead.city || null,
           lead.state || null,
@@ -252,7 +259,7 @@ export default defineEventHandler(async (event) => {
           lead.category || null,
           lead.rating || null,
           lead.review_count || null,
-          lead.place_id,
+          placeId,
           score,
           tier?.slug || null,
           fields.contactsData,
@@ -271,7 +278,7 @@ export default defineEventHandler(async (event) => {
         generateId(),
         finalDigestId,
         businessId,
-        lead.place_id,
+        placeId,
         lead.rank || null,
         score,
         tier?.slug || null,
@@ -282,7 +289,47 @@ export default defineEventHandler(async (event) => {
         fields.leadGroup
       ]
     })
+
+    const stored = storedRerollLead({
+      businessId,
+      placeId,
+      name,
+      address: lead.address || null,
+      city: lead.city || null,
+      state: lead.state || null,
+      phone: lead.phone || null,
+      website: lead.website || null,
+      category: lead.category || null,
+      rating: typeof lead.rating === 'number' ? lead.rating : null,
+      reviewCount: typeof lead.review_count === 'number' ? lead.review_count : null,
+      score,
+      tierSlug: tier?.slug || null,
+      tierLabel: tier?.label || null,
+      rank: typeof lead.rank === 'number' ? lead.rank : null,
+      angle: lead.angle || null,
+      note: lead.note || null,
+      signals: lead.signals && typeof lead.signals === 'object' ? lead.signals : null,
+      leadGroup: fields.leadGroup
+    })
+    if (stored) savedLeads.push(stored)
   }
+
+  await db.execute({
+    sql: 'UPDATE digests SET lead_count = ? WHERE id = ?',
+    args: [savedLeads.length, finalDigestId]
+  })
+
+  const rerollFlag = body.reroll === true || body.reroll === 'true' || body.source === 'reroll'
+  await saveRerollResults({
+    userId,
+    date: body.date,
+    requestedId: typeof body.reroll_id === 'string' ? body.reroll_id : '',
+    rerollFlag,
+    digestId: finalDigestId,
+    category: body.search.category,
+    location: body.search.location,
+    leads: savedLeads
+  })
 
   const origin = callbackUrlFromEvent(event).replace(/\/api\/mockups\/webhook$/, '')
   const url = `${origin}/leads/today?date=${body.date}`
@@ -290,7 +337,7 @@ export default defineEventHandler(async (event) => {
   return {
     success: true,
     digest_id: finalDigestId,
-    lead_count: body.leads.length,
+    lead_count: savedLeads.length,
     url
   }
 })

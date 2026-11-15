@@ -1,4 +1,4 @@
-import { ensureMissingColumns } from '~~/shared/schema-columns'
+import { ensureRequestSchema } from '~~/shared/schema-columns'
 import { db } from './db'
 
 let ready: Promise<void> | null = null
@@ -11,7 +11,7 @@ let ready: Promise<void> | null = null
 export function ensureSchemaColumns() {
   if (!ready) {
     ready = (async () => {
-      await ensureMissingColumns(async (sql) => {
+      await ensureRequestSchema(async (sql) => {
         const result = await db.execute(sql)
         return result.rows as Array<Record<string, unknown>>
       })
