@@ -1,5 +1,6 @@
 import { db } from './db'
 import { ensureDigestTables } from './digest-schema'
+import { ensureSchemaColumns } from './schema-columns'
 
 async function tryAlter(sql: string) {
   try {
@@ -300,9 +301,6 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE businesses ADD COLUMN gbp_photos TEXT`)
   await tryAlter(`ALTER TABLE businesses ADD COLUMN photo_count INTEGER`)
   await tryAlter(`ALTER TABLE businesses ADD COLUMN site_discovery TEXT`)
-  await tryAlter(`ALTER TABLE businesses ADD COLUMN research_status TEXT`)
-  await tryAlter(`ALTER TABLE businesses ADD COLUMN research_requested_at TEXT`)
-  await tryAlter(`ALTER TABLE businesses ADD COLUMN research_completed_at TEXT`)
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS mockups (
@@ -351,13 +349,8 @@ export async function initializeSchema() {
   await tryAlter(`ALTER TABLE mockups ADD COLUMN mockup_cost_ledger TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN build_mode TEXT DEFAULT 'html'`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN agent_id TEXT`)
-  await tryAlter(`ALTER TABLE mockups ADD COLUMN preview_url TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN build_status TEXT`)
   await tryAlter(`ALTER TABLE mockups ADD COLUMN build_error TEXT`)
-  await tryAlter(`ALTER TABLE mockups ADD COLUMN research_status TEXT`)
-  await tryAlter(`ALTER TABLE mockups ADD COLUMN research_requested_at TEXT`)
-  await tryAlter(`ALTER TABLE mockups ADD COLUMN research_completed_at TEXT`)
-  await tryAlter(`ALTER TABLE mockups ADD COLUMN preview_made_at TEXT`)
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_user ON mockups(user_id)`)
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_mockups_business ON mockups(business_id)`)
@@ -387,6 +380,8 @@ export async function initializeSchema() {
     console.error(`[schema] initializeSchema stopped early (${message}). Digest tables are created separately.`)
   }
 
+  // Outside the try above. A failure earlier in startup must not skip these columns.
+  await ensureSchemaColumns()
   await ensureDigestTables()
 
   console.log('Database schema initialized')

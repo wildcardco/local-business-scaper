@@ -146,6 +146,7 @@ export type RerollLeadView = {
   angle: string | null
   note: string | null
   signals: Record<string, unknown> | null
+  lead_group: string | null
   business: {
     id: string
     name: string
@@ -160,6 +161,10 @@ export type RerollLeadView = {
     category: string | null
     rating: number | null
     review_count: number | null
+    email: string | null
+    emails: string[]
+    photo_count: number | null
+    gbp_photos: unknown[] | null
     lead_category: string | null
     status: string
   }
@@ -194,6 +199,7 @@ export type StoredRerollLead = {
   angle: string | null
   note: string | null
   signals: Record<string, unknown> | null
+  leadGroup: string | null
 }
 
 function cleanText(value: unknown): string {
@@ -235,7 +241,8 @@ export function storedRerollLead(input: Partial<StoredRerollLead> | null | undef
     rank: finiteNumber(input.rank),
     angle: cleanOptional(input.angle),
     note: cleanOptional(input.note),
-    signals
+    signals,
+    leadGroup: cleanOptional(input.leadGroup)
   }
 }
 

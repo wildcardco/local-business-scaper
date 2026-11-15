@@ -1,3 +1,5 @@
+import { normalizeGbpPhotos } from '~~/shared/digest-ingest'
+import { displayPhotoCount, leadEmails } from '~~/shared/lead-context'
 import { cursorAgentUrl, httpsUrl } from '~~/shared/web-stack'
 import {
   leadsForRerollList,
@@ -66,6 +68,10 @@ type LiveBusiness = {
   leadCategory: string | null
   researchStatus: 'requested' | 'complete' | null
   researchRequestedAt: string | null
+  email: string | null
+  emails: string[]
+  photoCount: number | null
+  gbpPhotos: unknown[] | null
   mockup: RerollLeadView['mockup']
 }
 
@@ -79,6 +85,10 @@ async function loadLiveBusinesses(userId: string, ids: string[]): Promise<Map<st
         b.id as business_id,
         b.lead_category,
         b.status,
+        b.email,
+        b.contacts_data,
+        b.photo_count,
+        b.gbp_photos,
         b.research_status,
         b.research_requested_at,
         m.id as mockup_id,
@@ -106,6 +116,10 @@ async function loadLiveBusinesses(userId: string, ids: string[]): Promise<Map<st
       leadCategory: text(row.lead_category),
       researchStatus: researchStatus(row.research_status),
       researchRequestedAt: text(row.research_requested_at),
+      email: text(row.email),
+      emails: leadEmails(row.email, row.contacts_data),
+      photoCount: displayPhotoCount(row.photo_count, row.gbp_photos) || null,
+      gbpPhotos: normalizeGbpPhotos(row.gbp_photos),
       mockup: row.mockup_id
         ? {
             id: String(row.mockup_id),
@@ -133,6 +147,7 @@ function cardFromStored(rerollId: string, index: number, lead: StoredRerollLead,
     angle: lead.angle,
     note: lead.note,
     signals: lead.signals,
+    lead_group: lead.leadGroup,
     business: {
       id: lead.businessId,
       name: lead.name,
@@ -147,6 +162,10 @@ function cardFromStored(rerollId: string, index: number, lead: StoredRerollLead,
       category: lead.category,
       rating: lead.rating,
       review_count: lead.reviewCount,
+      email: live?.email ?? null,
+      emails: live?.emails ?? [],
+      photo_count: live?.photoCount ?? null,
+      gbp_photos: live?.gbpPhotos ?? null,
       lead_category: live?.leadCategory ?? lead.tierSlug,
       status: live?.status ?? 'new'
     },

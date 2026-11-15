@@ -1,5 +1,6 @@
 import { db } from '~~/server/utils/db'
 import { verifyStudioSecret } from '~~/server/utils/n8n'
+import { ensureSchemaColumns } from '~~/server/utils/schema-columns'
 import { parseResearchCallback } from '~~/shared/research-report'
 
 export default defineEventHandler(async (event) => {
@@ -7,6 +8,7 @@ export default defineEventHandler(async (event) => {
   // A later callback that includes the secret still marks a requested lead complete,
   // including one that Studio already shows as "Sent - check email".
   verifyStudioSecret(event)
+  await ensureSchemaColumns()
   const body = await readBody(event).catch(() => null)
   const parsed = parseResearchCallback(body)
   if (!parsed.ok) {

@@ -3,6 +3,8 @@ import { ensureDigestTables } from '~~/server/utils/digest-schema'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
 import { loadRerollForDate, type RerollLeadView } from '~~/server/utils/reroll-results'
 import { cursorAgentUrl, httpsUrl } from '~~/shared/web-stack'
+import { normalizeGbpPhotos } from '~~/shared/digest-ingest'
+import { displayPhotoCount, leadEmails } from '~~/shared/lead-context'
 
 export default defineEventHandler(async (event) => {
   await ensureDigestTables()
@@ -64,6 +66,7 @@ export default defineEventHandler(async (event) => {
         dl.angle,
         dl.note,
         dl.signals,
+        dl.lead_group,
         b.id as business_id,
         b.name,
         b.address,
@@ -74,6 +77,10 @@ export default defineEventHandler(async (event) => {
         b.category,
         b.rating,
         b.review_count,
+        b.email,
+        b.contacts_data,
+        b.photo_count,
+        b.gbp_photos,
         b.lead_category,
         b.status,
         b.place_id as business_place_id,
@@ -123,6 +130,7 @@ export default defineEventHandler(async (event) => {
     angle: row.angle,
     note: row.note,
     signals: row.signals ? JSON.parse(String(row.signals)) : null,
+    lead_group: typeof row.lead_group === 'string' && row.lead_group ? row.lead_group : null,
     business: {
       id: row.business_id,
       name: row.name || '',
@@ -137,6 +145,10 @@ export default defineEventHandler(async (event) => {
       category: row.category || null,
       rating: row.rating || null,
       review_count: row.review_count || null,
+      email: typeof row.email === 'string' && row.email.trim() ? row.email.trim() : null,
+      emails: leadEmails(row.email, row.contacts_data),
+      photo_count: displayPhotoCount(row.photo_count, row.gbp_photos) || null,
+      gbp_photos: normalizeGbpPhotos(row.gbp_photos),
       lead_category: row.lead_category || null,
       status: row.status || 'new'
     },

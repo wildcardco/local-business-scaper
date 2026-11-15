@@ -213,17 +213,12 @@ watch(() => route.query.date, fetchDigest, { immediate: true })
             <div class="flex items-center gap-2 mb-1">
               <UIcon name="i-lucide-search" class="text-primary-500" />
               <p class="font-medium text-highlighted">
-                {{ reroll?.category || digest?.search?.category }}
+                {{ digest?.search?.category }}
               </p>
             </div>
             <p class="text-sm text-muted">
-              {{ (reroll?.location || digest?.search?.location) }}
-              <template v-if="reroll">
-                • {{ rerollLeads.length }} result{{ rerollLeads.length === 1 ? '' : 's' }}
-              </template>
-              <template v-else>
-                • {{ digest?.lead_count || 0 }} lead{{ digest?.lead_count === 1 ? '' : 's' }}
-              </template>
+              {{ digest?.search?.location }}
+              • {{ digest?.lead_count || 0 }} lead{{ digest?.lead_count === 1 ? '' : 's' }}
             </p>
             <p v-if="receivedLabel" class="text-xs text-muted mt-1">
               Received {{ receivedLabel }}

@@ -26,6 +26,7 @@ export const DIGEST_SCHEMA_SQL = [
       angle TEXT,
       note TEXT,
       signals TEXT,
+      lead_group TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (digest_id) REFERENCES digests(id) ON DELETE CASCADE,
       FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
@@ -63,19 +64,23 @@ const REROLL_RESULT_COLUMNS = [
   'digest_id TEXT'
 ]
 
+async function tryAlter(sql: string) {
+  try {
+    await db.execute(sql)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/duplicate column name/i.test(message)) return
+    console.error(`[digest-schema] statement failed: ${message}\n${sql.trim()}`)
+  }
+}
+
 async function createDigestTables() {
   for (const sql of DIGEST_SCHEMA_SQL) {
     await db.execute(sql)
   }
+  await tryAlter('ALTER TABLE digest_leads ADD COLUMN lead_group TEXT')
   for (const column of REROLL_RESULT_COLUMNS) {
-    try {
-      await db.execute(`ALTER TABLE digest_rerolls ADD COLUMN ${column}`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      if (!/duplicate column/i.test(message)) {
-        console.error(`[schema] statement failed: ${message}\nALTER TABLE digest_rerolls ADD COLUMN ${column}`)
-      }
-    }
+    await tryAlter(`ALTER TABLE digest_rerolls ADD COLUMN ${column}`)
   }
 }
 

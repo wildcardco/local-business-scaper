@@ -7,6 +7,7 @@ const props = defineProps<{
     angle?: string | null
     note?: string | null
     signals?: Record<string, unknown> | null
+    lead_group?: string | null
     tier?: { slug?: string | null, label?: string | null } | null
     business: {
       id: string
@@ -19,6 +20,9 @@ const props = defineProps<{
       website?: string | null
       state?: string | null
       address?: string | null
+      emails?: string[] | null
+      photo_count?: number | null
+      gbp_photos?: unknown
       placeId?: string | null
       researchStatus?: string | null
       researchRequestedAt?: string | null
@@ -52,6 +56,11 @@ const tierColors: Record<string, { bg: string, text: string, border: string }> =
 
 const colors = computed(() => tierColors[props.tierSlug] || tierColors.skip)
 
+const siteCheck = computed(() => {
+  const value = props.lead.signals?.site_check
+  return typeof value === 'string' ? value : null
+})
+
 const signalTags = computed(() => {
   const signals = props.lead.signals
   if (!signals) return []
@@ -76,9 +85,6 @@ function signalLabel(key: string, value: unknown): string {
           <h3 class="font-display font-semibold text-highlighted text-lg mb-1">
             {{ lead.business.name }}
           </h3>
-          <p v-if="lead.business.category" class="text-sm text-muted mb-2">
-            {{ lead.business.category }}
-          </p>
         </div>
         <div
           :class="[
@@ -92,34 +98,41 @@ function signalLabel(key: string, value: unknown): string {
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <div v-if="lead.score" class="flex items-center gap-1">
-          <UIcon name="i-lucide-target" class="text-primary-500" />
-          <span class="font-medium text-highlighted">{{ lead.score }}</span>
-        </div>
-        <div v-if="lead.business.rating" class="flex items-center gap-1">
-          <UIcon name="i-lucide-star" class="text-wcGold-400" />
-          <span class="text-highlighted">{{ lead.business.rating }}</span>
-          <span class="text-muted">({{ lead.business.review_count || 0 }})</span>
-        </div>
-        <div v-if="lead.business.city" class="flex items-center gap-1">
-          <UIcon name="i-lucide-map-pin" class="text-muted" />
-          <span class="text-muted">{{ lead.business.city }}</span>
-        </div>
+      <LeadContextBlock
+        :score="lead.score"
+        :category="lead.business.category"
+        :lead-group="lead.lead_group"
+        :website="lead.business.website"
+        :site-check="siteCheck"
+        :rating="lead.business.rating"
+        :review-count="lead.business.review_count"
+        :phone="lead.business.phone"
+        :address="lead.business.address"
+        :city="lead.business.city"
+        :state="lead.business.state"
+        :angle="lead.angle"
+        :photo-count="lead.business.photo_count"
+        :photos="lead.business.gbp_photos"
+        :emails="lead.business.emails"
+      />
+
+      <div
+        v-if="lead.note"
+        class="flex items-start gap-2 text-sm"
+      >
+        <UIcon
+          name="i-lucide-sticky-note"
+          class="mt-0.5 shrink-0 text-blue-400"
+        />
+        <p class="min-w-0 break-words text-muted">
+          {{ lead.note }}
+        </p>
       </div>
 
-      <div v-if="lead.angle || lead.note" class="space-y-2 text-sm">
-        <div v-if="lead.angle" class="flex items-start gap-2">
-          <UIcon name="i-lucide-lightbulb" class="text-wcGold-400 mt-0.5 shrink-0" />
-          <p class="text-muted">{{ lead.angle }}</p>
-        </div>
-        <div v-if="lead.note" class="flex items-start gap-2">
-          <UIcon name="i-lucide-sticky-note" class="text-blue-400 mt-0.5 shrink-0" />
-          <p class="text-muted">{{ lead.note }}</p>
-        </div>
-      </div>
-
-      <div v-if="signalTags.length" class="flex flex-wrap gap-2">
+      <div
+        v-if="signalTags.length"
+        class="flex flex-wrap gap-2"
+      >
         <span
           v-for="tag in signalTags"
           :key="tag"
@@ -172,10 +185,15 @@ function signalLabel(key: string, value: unknown): string {
         :address="lead.business.address"
       />
 
-      <div v-if="lead.mockup" class="rounded-lg border border-default bg-muted p-3">
+      <div
+        v-if="lead.mockup"
+        class="rounded-lg border border-default bg-muted p-3"
+      >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="text-sm font-medium text-highlighted mb-1">Mockup</p>
+            <p class="text-sm font-medium text-highlighted mb-1">
+              Mockup
+            </p>
             <p class="text-xs text-muted capitalize">
               {{ lead.mockup.buildMode === 'web_stack'
                 ? webStackStatusLabel(String(lead.mockup.status || ''), lead.mockup.buildStatus)

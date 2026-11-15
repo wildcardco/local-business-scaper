@@ -4,6 +4,7 @@ import { ensureDigestTables } from '~~/server/utils/digest-schema'
 import { OWNER_EMAIL_MAP, normalizeEmail } from '~~/server/utils/allowlist'
 import { callbackUrlFromEvent } from '~~/server/utils/n8n'
 import { saveRerollResults } from '~~/server/utils/reroll-results'
+import { digestLeadFields, normalizeDigestTier } from '~~/shared/digest-ingest'
 
 interface IngestLead {
   place_id: string
@@ -35,20 +36,6 @@ interface IngestPayload {
   reroll?: boolean | string
   reroll_id?: string
   source?: string
-}
-
-const TIER_MAP: Record<string, { slug: string; label: string }> = {
-  'call first': { slug: 'call_first', label: 'Call First' },
-  'good': { slug: 'good', label: 'Good' },
-  'worth a look': { slug: 'worth_a_look', label: 'Worth a look' },
-  'long shot': { slug: 'long_shot', label: 'Long shot' },
-  'skip': { slug: 'skip', label: 'Skip' }
-}
-
-function normalizeTier(tier: string | undefined): { slug: string; label: string } | null {
-  if (!tier) return null
-  const normalized = tier.trim().toLowerCase()
-  return TIER_MAP[normalized] || null
 }
 
 function constantTimeCompare(a: string, b: string): boolean {
@@ -189,49 +176,78 @@ export default defineEventHandler(async (event) => {
     if (!placeId) continue
     const name = typeof lead.name === 'string' && lead.name.trim() ? lead.name.trim() : '(name unavailable)'
 
-    const tier = normalizeTier(lead.tier)
+    const tier = normalizeDigestTier(lead.tier)
     const score = typeof lead.score === 'number' ? lead.score : 0
+    const rawLead = lead as unknown as Record<string, unknown>
 
     const existingBusiness = await db.execute({
-      sql: 'SELECT id, status FROM businesses WHERE user_id = ? AND place_id = ? LIMIT 1',
+      sql: 'SELECT id, email, contacts_data FROM businesses WHERE user_id = ? AND place_id = ? LIMIT 1',
       args: [userId, placeId]
     })
 
-  let businessId: string
-  const existing = existingBusiness.rows[0]
-  if (existing) {
-    businessId = String(existing.id)
+    let businessId: string
+    const existing = existingBusiness.rows[0]
+    const fields = digestLeadFields(rawLead, existing
+      ? { email: existing.email, contacts_data: existing.contacts_data }
+      : undefined)
 
+    if (existing) {
+      businessId = String(existing.id)
+      const assignments = [
+        'name = ?',
+        'address = ?',
+        'city = ?',
+        'state = ?',
+        'phone = ?',
+        'website = ?',
+        'category = ?',
+        'rating = ?',
+        'review_count = ?',
+        'lead_score = ?',
+        'lead_category = ?',
+        'email = ?'
+      ]
+      const args: Array<string | number | null> = [
+        name,
+        lead.address || null,
+        lead.city || null,
+        lead.state || null,
+        lead.phone || null,
+        lead.website || null,
+        lead.category || null,
+        lead.rating || null,
+        lead.review_count || null,
+        score,
+        tier?.slug || null,
+        fields.email
+      ]
+      if (fields.contactsData !== null) {
+        assignments.push('contacts_data = ?')
+        args.push(fields.contactsData)
+      }
+      if (fields.photoCount !== null) {
+        assignments.push('photo_count = ?')
+        args.push(fields.photoCount)
+      }
+      if (fields.gbpPhotos !== null) {
+        assignments.push('gbp_photos = ?')
+        args.push(fields.gbpPhotos)
+      }
+      assignments.push('updated_at = datetime(\'now\')')
+      args.push(businessId, userId)
       await db.execute({
-        sql: `UPDATE businesses SET
-          name = ?, address = ?, city = ?, state = ?, phone = ?, website = ?,
-          category = ?, rating = ?, review_count = ?, lead_score = ?, lead_category = ?,
-          updated_at = datetime('now')
-          WHERE id = ? AND user_id = ?`,
-        args: [
-          name,
-          lead.address || null,
-          lead.city || null,
-          lead.state || null,
-          lead.phone || null,
-          lead.website || null,
-          lead.category || null,
-          lead.rating || null,
-          lead.review_count || null,
-          score,
-          tier?.slug || null,
-          businessId,
-          userId
-        ]
+        sql: `UPDATE businesses SET ${assignments.join(', ')} WHERE id = ? AND user_id = ?`,
+        args
       })
     } else {
       businessId = generateId()
       await db.execute({
         sql: `INSERT INTO businesses (
-          id, user_id, search_id, name, address, city, state, phone, website,
+          id, user_id, search_id, name, address, city, state, phone, website, email,
           category, rating, review_count, place_id, lead_score, lead_category,
+          contacts_data, photo_count, gbp_photos,
           status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', datetime('now'), datetime('now'))`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', datetime('now'), datetime('now'))`,
         args: [
           businessId, userId, searchId, name,
           lead.address || null,
@@ -239,12 +255,16 @@ export default defineEventHandler(async (event) => {
           lead.state || null,
           lead.phone || null,
           lead.website || null,
+          fields.email,
           lead.category || null,
           lead.rating || null,
           lead.review_count || null,
           placeId,
           score,
-          tier?.slug || null
+          tier?.slug || null,
+          fields.contactsData,
+          fields.photoCount,
+          fields.gbpPhotos
         ]
       })
     }
@@ -252,8 +272,8 @@ export default defineEventHandler(async (event) => {
     await db.execute({
       sql: `INSERT INTO digest_leads (
         id, digest_id, business_id, place_id, rank, score, tier_slug, tier_label,
-        angle, note, signals, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        angle, note, signals, lead_group, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       args: [
         generateId(),
         finalDigestId,
@@ -265,7 +285,8 @@ export default defineEventHandler(async (event) => {
         tier?.label || null,
         lead.angle || null,
         lead.note || null,
-        lead.signals ? JSON.stringify(lead.signals) : null
+        lead.signals ? JSON.stringify(lead.signals) : null,
+        fields.leadGroup
       ]
     })
 
@@ -287,7 +308,8 @@ export default defineEventHandler(async (event) => {
       rank: typeof lead.rank === 'number' ? lead.rank : null,
       angle: lead.angle || null,
       note: lead.note || null,
-      signals: lead.signals && typeof lead.signals === 'object' ? lead.signals : null
+      signals: lead.signals && typeof lead.signals === 'object' ? lead.signals : null,
+      leadGroup: fields.leadGroup
     })
     if (stored) savedLeads.push(stored)
   }

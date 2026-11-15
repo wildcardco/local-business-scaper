@@ -1,4 +1,5 @@
 import { db } from '~~/server/utils/db'
+import { ensureSchemaColumns } from '~~/server/utils/schema-columns'
 import { githubRepoForMockup, mockupGithubUrl } from '~~/shared/mockup-repo'
 
 export type LinkState = 'live' | 'missing' | 'unknown'
@@ -11,6 +12,7 @@ let columnsReady: Promise<void> | null = null
 export function ensureMockupLinkColumns() {
   if (!columnsReady) {
     columnsReady = (async () => {
+      await ensureSchemaColumns()
       for (const sql of [
         `ALTER TABLE mockups ADD COLUMN deployment_missing INTEGER DEFAULT 0`,
         `ALTER TABLE mockups ADD COLUMN github_missing INTEGER DEFAULT 0`,
