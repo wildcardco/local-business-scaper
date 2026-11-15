@@ -1,5 +1,6 @@
 import { db } from '~~/server/utils/db'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
+import { settledWebStackStatus } from '~~/shared/web-stack'
 
 function countOf(value: unknown) {
   const parsed = Number(value)
@@ -47,7 +48,7 @@ export default defineEventHandler(async (event) => {
     },
     {
       sql: `SELECT m.id, m.status, COALESCE(m.deployment_missing, 0) AS deployment_missing,
-          COALESCE(m.build_mode, 'html') AS build_mode,
+          COALESCE(m.build_mode, 'html') AS build_mode, m.preview_url, m.build_status,
           COALESCE(b.name, 'Mockup') AS name
         FROM mockups m
         LEFT JOIN businesses b ON b.id = m.business_id
@@ -73,8 +74,16 @@ export default defineEventHandler(async (event) => {
       createdAt: row.created_at ? String(row.created_at) : null
     })),
     mockups: mockupResult.rows.map((row) => {
-      const status = String(row.status || 'draft')
-      const activity = activityOf(status, Number(row.deployment_missing || 0), String(row.build_mode || 'html'))
+      const rawStatus = String(row.status || 'draft')
+      const buildMode = String(row.build_mode || 'html')
+      const status = buildMode === 'web_stack'
+        ? settledWebStackStatus({
+            status: rawStatus,
+            buildStatus: typeof row.build_status === 'string' ? row.build_status : null,
+            previewUrl: typeof row.preview_url === 'string' ? row.preview_url : null
+          })
+        : rawStatus
+      const activity = activityOf(status, Number(row.deployment_missing || 0), buildMode)
       return {
         id: String(row.id),
         name: String(row.name || 'Mockup'),

@@ -51,7 +51,37 @@ The webhook should answer when the agent starts, not when the site is finished. 
 
 An empty `200` means the job was accepted and is still building. `ok: false` with none of the fields above is a failure. A non-2xx response is a failure. Neither one starts plain HTML.
 
-A later update can `POST` the same fields to the `callback_url` on the lead payload (`/api/mockups/webhook`) with header `X-Studio-Secret`. Include `build_mode: "web_stack"` or `agent_id` / `preview_url` so the app stores them on that mockup. Plain HTML callbacks are unchanged.
+When the build finishes, n8n `POST`s the result to the `callback_url` on the lead payload. That URL is `{app origin}/api/mockups/webhook` (production: `https://wc-scaper.vercel.app/api/mockups/webhook`).
+
+| | |
+|---|---|
+| Method | `POST` |
+| Header `Content-Type` | `application/json` |
+| Header `Accept` | `application/json` |
+| Header `X-Studio-Secret` | The same value as `N8N_STUDIO_SECRET`. `Authorization: Bearer <secret>` is also accepted. A missing or wrong secret is `401` JSON `{ "ok": false, "error": "Unauthorized" }`. The secret is never written into the body or the logs. |
+
+Ready body:
+
+```json
+{
+  "build_mode": "web_stack",
+  "mockup_id": "<studio mockup id>",
+  "place_id": "<google place id>",
+  "status": "ready",
+  "preview_url": "https://<project>.vercel.app",
+  "agent_id": "<cursor agent id>",
+  "agent_url": "https://cursor.com/agents/<cursor agent id>",
+  "ok": true
+}
+```
+
+Failed body: the same fields, with `"status": "failed"`, `"ok": false`, `"preview_url": ""`, and `"error": "<reason>"`.
+
+`status: ready` (or `success` / `completed`) becomes `mockup_ready` and stores `preview_url`. `status: failed` stores the error. Every response is JSON, including `400`, `401`, `404`, `405`, and `500`. A success body is `{ "ok": true, "success": true, "id": "<mockup id>", "status": "mockup_ready" }`.
+
+WF-17 Callback Ready and Callback Failure must attach the Studio secret credential on those HTTP nodes. The node is set to header auth, and with no credential attached the request goes out without `X-Studio-Secret`. n8n's default `Accept` includes `text/html`. A `401` from that request used to be rendered as the login page (`/login?redirect=/api/mockups/webhook`) instead of JSON, so the mockup stayed on `generating`.
+
+Plain HTML callbacks to the same URL are unchanged. They still send `mockup_url` and do not send `build_mode`, `agent_id`, or `preview_url`.
 
 ## What the dashboard shows
 

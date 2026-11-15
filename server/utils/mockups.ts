@@ -20,13 +20,16 @@ import {
   applyN8nLeadToMockup,
   findRunningFactoryJob,
   writeN8nLeadFeedback,
-  type StudioAction
+  type StudioAction,
+  type StudioLeadPayload
 } from '~~/server/utils/n8n'
 import {
   BUILD_MODE_WEB_STACK,
   cursorAgentUrl,
   httpsUrl,
   parseBuildMode,
+  pitchPageUrl,
+  studioRowBusy,
   WEB_STACK_AGENT_MODEL,
   type BuildMode
 } from '~~/shared/web-stack'
@@ -384,7 +387,24 @@ export async function fireMockupAction(opts: {
   }
 
   const buildMode = opts.action === 'generate_mockup' ? parseBuildMode(opts.buildMode) : 'html'
-  const busyLocal = ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.status)
+  const pageUrl = opts.action === 'write_pitch'
+    ? pitchPageUrl({
+        buildMode: mockup.buildMode,
+        mockupUrl: mockup.vercelUrl || mockup.mockupUrl,
+        previewUrl: mockup.previewUrl
+      })
+    : null
+  if (opts.action === 'write_pitch' && !pageUrl) {
+    throw createError({
+      statusCode: 400,
+      message: 'Write pitch needs a one-page mockup URL or a Web Stack preview URL.'
+    })
+  }
+  const busyLocal = studioRowBusy({
+    status: mockup.status,
+    buildStatus: mockup.buildStatus,
+    previewUrl: mockup.previewUrl
+  })
 
   if (buildMode === BUILD_MODE_WEB_STACK) {
     if (!opts.force && busyLocal && mockup.buildMode === BUILD_MODE_WEB_STACK) {
@@ -493,7 +513,7 @@ export async function fireMockupAction(opts: {
     stored: business?.siteDiscovery
   })
 
-  const leadPayload = {
+  const leadPayload: StudioLeadPayload = {
     action: opts.action,
     place_id: placeId,
     owner,
@@ -515,6 +535,9 @@ export async function fireMockupAction(opts: {
     research_model: model.includes('haiku') ? model : ai.researchModel,
     callback_url: callbackUrlFromEvent(opts.event),
     user_email: opts.user.email,
+    ...(opts.action === 'write_pitch'
+      ? { mockup_url: pageUrl, preview_url: mockup.previewUrl }
+      : {}),
     mockup_id: mockup.id,
     business_id: mockup.businessId,
     mockup_version: mockup.mockupVersion
