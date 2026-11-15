@@ -135,11 +135,70 @@ export function readWebStackWebhook(body: unknown): WebStackWebhookFields {
 }
 
 export function normalizeWebStackStatus(raw: string | null, error: string | null): 'generating' | 'mockup_ready' | 'failed' {
-  const key = (raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const key = statusKey(raw)
   if (FAILED_STATUS.has(key)) return 'failed'
   if (READY_STATUS.has(key)) return 'mockup_ready'
   if (error && !RUNNING_STATUS.has(key)) return 'failed'
   return 'generating'
+}
+
+const USER_BUSY = new Set(['writing_pitch', 'enhancing', 'revising'])
+const BUILD_BUSY = new Set([
+  'generating',
+  'building',
+  'queued',
+  'pending',
+  'running',
+  'started',
+  'in_progress',
+  'accepted',
+  'working',
+  'created'
+])
+
+/**
+ * A Web Stack build is busy while it is still running and has no preview.
+ * A preview URL means the build already produced a page, so the row is not
+ * left on Building after a missed or partial ready callback. Pitch, photo,
+ * and revision work stay busy until those actions finish.
+ */
+export function studioRowBusy(input: {
+  status?: string | null
+  buildStatus?: string | null
+  previewUrl?: string | null
+}): boolean {
+  const key = statusKey(input.status)
+  if (USER_BUSY.has(key)) return true
+  if (!BUILD_BUSY.has(key)) return false
+  return settledWebStackStatus(input) === 'generating'
+}
+
+/** Status the Studio UI should show. Does not write the database. */
+export function settledWebStackStatus(input: {
+  status?: string | null
+  buildStatus?: string | null
+  previewUrl?: string | null
+}): string {
+  const status = typeof input.status === 'string' ? input.status : ''
+  const key = statusKey(status)
+  if (USER_BUSY.has(key) || !BUILD_BUSY.has(key)) return status
+  if (httpsUrl(input.previewUrl) || READY_STATUS.has(statusKey(input.buildStatus))) return 'mockup_ready'
+  return 'generating'
+}
+
+/**
+ * Page the pitch writer should read. Web Stack uses the preview.
+ * One-page HTML keeps its own URL, and a preview fills in when that URL is missing.
+ */
+export function pitchPageUrl(input: {
+  buildMode?: string | null
+  mockupUrl?: string | null
+  previewUrl?: string | null
+}): string | null {
+  const preview = httpsUrl(input.previewUrl)
+  const mockup = httpsUrl(input.mockupUrl)
+  if (parseBuildMode(input.buildMode) === BUILD_MODE_WEB_STACK && preview) return preview
+  return mockup || preview
 }
 
 export function webStackStatusLabel(status: string, raw?: string | null): string {
@@ -189,6 +248,10 @@ export function webStackJobView(input: {
     }
   }
   return { phase: 'idle', label: '', detail: '' }
+}
+
+function statusKey(value: string | null | undefined) {
+  return (value || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
 }
 
 function present(value: unknown) {

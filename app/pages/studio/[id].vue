@@ -9,7 +9,7 @@ import {
   pitchJobView,
   type JobPhase
 } from '~~/shared/studio-job'
-import { webStackJobView, webStackStatusLabel } from '~~/shared/web-stack'
+import { settledWebStackStatus, studioRowBusy, webStackJobView, webStackStatusLabel } from '~~/shared/web-stack'
 import { newestStudioBuild, studioBuilds, type StudioBuildKind } from '~~/shared/studio-builds'
 
 definePageMeta({ hidePhoneTabs: true })
@@ -60,9 +60,20 @@ const toolbarOpen = ref(false)
 const slotListOpen = ref(false)
 const stockPhotos = ref<{ sendAssigned: () => void } | null>(null)
 
-const busy = computed(() =>
-  ['generating', 'writing_pitch', 'enhancing', 'revising'].includes(mockup.value?.status || '')
-)
+const busy = computed(() => studioRowBusy({
+  status: mockup.value?.status,
+  buildStatus: mockup.value?.buildStatus,
+  previewUrl: mockup.value?.previewUrl
+}))
+const shownStatus = computed(() => {
+  if (mockup.value?.buildMode !== 'web_stack') return mockup.value?.status || ''
+  return settledWebStackStatus({
+    status: mockup.value?.status,
+    buildStatus: mockup.value?.buildStatus,
+    previewUrl: mockup.value?.previewUrl
+  })
+})
+const canWritePitch = computed(() => Boolean(mockup.value?.mockupUrl || mockup.value?.previewUrl))
 
 const pageSteps: { id: JobPhase, label: string }[] = [
   { id: 'sending', label: 'Sending to n8n' },
@@ -104,7 +115,7 @@ const headerJob = computed(() => {
   if (mockup.value?.buildMode === 'web_stack') {
     return webStackJobView({
       posting: isGenerating.value,
-      status: mockup.value?.status || '',
+      status: shownStatus.value,
       error: failedText.value
     })
   }
@@ -193,7 +204,7 @@ watch(() => mockup.value?.status, (status, previous) => {
   ) {
     toast.add({
       title: 'Mockup ready',
-      description: mockup.value?.mockupUrl || 'Open the live preview',
+      description: mockup.value?.previewUrl || mockup.value?.mockupUrl || 'Open the live preview',
       color: 'success'
     })
   }
@@ -612,11 +623,11 @@ function statusColor(status: string) {
           Web stack
         </UBadge>
         <UBadge
-          :color="statusColor(mockup.status)"
+          :color="statusColor(mockup.buildMode === 'web_stack' ? shownStatus : mockup.status)"
           variant="subtle"
           class="capitalize"
         >
-          {{ mockup.buildMode === 'web_stack' ? webStackStatusLabel(mockup.status, mockup.buildStatus) : studioStatusLabel(mockup.status) }}
+          {{ mockup.buildMode === 'web_stack' ? webStackStatusLabel(shownStatus, mockup.buildStatus) : studioStatusLabel(mockup.status) }}
         </UBadge>
         <span class="text-xs text-muted">v{{ mockup.mockupVersion }}</span>
         <span
@@ -904,14 +915,14 @@ function statusColor(status: string) {
           v-else
           class="mb-3 text-sm text-muted"
         >
-          Writes through n8n WF-3 when a mockup exists. Groq templates stay for bulk outreach without a mockup.
+          Writes through n8n WF-3 when a one-page mockup or a Web Stack preview exists. Groq templates stay for bulk outreach without either.
         </p>
         <UButton
           class="min-h-11 w-full justify-center sm:w-auto"
           icon="i-lucide-mail"
           variant="outline"
           :loading="isPitching"
-          :disabled="busy || !mockup.mockupUrl"
+          :disabled="busy || !canWritePitch"
           @click="writePitch"
         >
           Write pitch

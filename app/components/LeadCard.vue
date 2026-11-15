@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { webStackStatusLabel } from '~~/shared/web-stack'
+import { settledWebStackStatus, webStackStatusLabel } from '~~/shared/web-stack'
 
 const props = defineProps<{
   lead: {
@@ -196,7 +196,7 @@ function signalLabel(key: string, value: unknown): string {
             </p>
             <p class="text-xs text-muted capitalize">
               {{ lead.mockup.buildMode === 'web_stack'
-                ? webStackStatusLabel(String(lead.mockup.status || ''), lead.mockup.buildStatus)
+                ? webStackStatusLabel(settledWebStackStatus(lead.mockup), lead.mockup.buildStatus)
                 : String(lead.mockup.status || '').replace(/_/g, ' ') }}
             </p>
           </div>

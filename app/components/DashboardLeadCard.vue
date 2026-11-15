@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { webStackStatusLabel } from '~~/shared/web-stack'
+import { settledWebStackStatus, webStackStatusLabel } from '~~/shared/web-stack'
 
 const props = defineProps<{
   lead: {
@@ -144,7 +144,7 @@ const place = computed(() => {
     <WebStackStatus
       v-if="lead.mockup?.buildMode === 'web_stack'"
       class="mt-3"
-      :status-label="webStackStatusLabel(String(lead.mockup?.status || ''), lead.mockup?.buildStatus)"
+      :status-label="webStackStatusLabel(settledWebStackStatus(lead.mockup || {}), lead.mockup?.buildStatus)"
       :preview-url="lead.mockup?.previewUrl"
       :agent-url="lead.mockup?.agentUrl"
       :error="lead.mockup?.buildError"

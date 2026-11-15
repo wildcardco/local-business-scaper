@@ -8,7 +8,10 @@ import {
   isWebStackCallback,
   leadPayloadForBuild,
   parseBuildMode,
+  pitchPageUrl,
   readWebStackWebhook,
+  settledWebStackStatus,
+  studioRowBusy,
   webStackJobView,
   webStackSecretHeader,
   webStackStatusLabel,
@@ -159,6 +162,36 @@ test('an error without a running status fails, and a ready status keeps the prev
   assert.equal(ready.previewUrl, 'https://preview.example/ok')
   assert.equal(readWebStackWebhook({ status: 'in progress' }).status, 'generating')
   assert.equal(webStackStatusLabel('generating', 'in_progress'), 'In progress')
+})
+
+test('a web stack pitch uses the preview, and one-page keeps its own URL', () => {
+  assert.equal(pitchPageUrl({
+    buildMode: 'web_stack',
+    mockupUrl: 'https://one.example/page',
+    previewUrl: 'https://preview.example/app'
+  }), 'https://preview.example/app')
+  assert.equal(pitchPageUrl({
+    buildMode: 'html',
+    mockupUrl: 'https://one.example/page',
+    previewUrl: 'https://preview.example/app'
+  }), 'https://one.example/page')
+  assert.equal(pitchPageUrl({
+    buildMode: 'html',
+    mockupUrl: null,
+    previewUrl: 'https://preview.example/app'
+  }), 'https://preview.example/app')
+  assert.equal(pitchPageUrl({ buildMode: 'web_stack', previewUrl: 'javascript:alert(1)' }), null)
+})
+
+test('a preview URL leaves a web stack build, and pitch work stays busy', () => {
+  assert.equal(studioRowBusy({ status: 'generating' }), true)
+  assert.equal(studioRowBusy({ status: 'queued' }), true)
+  assert.equal(studioRowBusy({ status: 'building', previewUrl: 'https://preview.example/app' }), false)
+  assert.equal(settledWebStackStatus({ status: 'generating', previewUrl: 'https://preview.example/app' }), 'mockup_ready')
+  assert.equal(studioRowBusy({ status: 'generating', buildStatus: 'ready' }), false)
+  assert.equal(studioRowBusy({ status: 'writing_pitch', previewUrl: 'https://preview.example/app' }), true)
+  assert.equal(studioRowBusy({ status: 'mockup_ready', previewUrl: 'https://preview.example/app' }), false)
+  assert.equal(settledWebStackStatus({ status: 'queued' }), 'generating')
 })
 
 test('web stack job copy names the cloud agent and does not describe the HTML factory', () => {

@@ -58,6 +58,10 @@ export interface StudioLeadPayload {
   callback_url: string
   user_email: string
   mockup_id: string
+  /** Page the pitch writer should open. Web Stack sends the preview URL here. */
+  mockup_url?: string | null
+  /** Web Stack preview. Omitted on generate and revise. */
+  preview_url?: string | null
   business_id?: string | null
   mockup_version?: number
   photo_count?: number
@@ -611,21 +615,35 @@ export async function writeN8nLeadFeedback(placeId: string, owner: string, feedb
   }
 }
 
-export function verifyStudioSecret(event: Parameters<typeof getHeader>[0]) {
+export function readStudioSecret(event: Parameters<typeof getHeader>[0]):
+  | { ok: true }
+  | { ok: false, statusCode: 401 | 500, message: string, reason: string } {
   const config = n8nConfig()
   if (!config.studioSecret) {
-    throw createError({
+    return {
+      ok: false,
       statusCode: 500,
-      message: 'N8N_STUDIO_SECRET is not configured'
-    })
+      message: 'N8N_STUDIO_SECRET is not configured',
+      reason: 'server secret missing'
+    }
   }
 
-  const header = getHeader(event, 'x-studio-secret') || getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '')
-  if (!header || header !== config.studioSecret) {
-    throw createError({
-      statusCode: 401,
-      message: 'Unauthorized'
-    })
+  const header = getHeader(event, 'x-studio-secret') || ''
+  const bearer = getHeader(event, 'authorization')?.replace(/^Bearer\s+/i, '') || ''
+  const presented = header || bearer
+  if (!presented) {
+    return { ok: false, statusCode: 401, message: 'Unauthorized', reason: 'missing X-Studio-Secret' }
+  }
+  if (presented !== config.studioSecret) {
+    return { ok: false, statusCode: 401, message: 'Unauthorized', reason: 'X-Studio-Secret does not match' }
+  }
+  return { ok: true }
+}
+
+export function verifyStudioSecret(event: Parameters<typeof getHeader>[0]) {
+  const result = readStudioSecret(event)
+  if (!result.ok) {
+    throw createError({ statusCode: result.statusCode, message: result.message })
   }
 }
 
