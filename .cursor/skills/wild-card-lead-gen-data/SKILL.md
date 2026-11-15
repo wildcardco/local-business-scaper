@@ -18,7 +18,7 @@ authToken: isProduction ? TURSO_KEY : undefined
 generateId() // `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`
 ```
 
-Schema: `initializeSchema()` on Nitro start. `CREATE TABLE IF NOT EXISTS` + try/catch `ALTER TABLE`. Research and preview columns (`businesses.research_status`, `research_requested_at`, `research_completed_at`, and the same three on `mockups`, plus `mockups.preview_url` and `preview_made_at`) are also added on the request path by `ensureSchemaColumns()` after `PRAGMA table_info`. `web_stack_url` stays an n8n field stored in `preview_url`.
+Schema: `initializeSchema()` on Nitro start. `CREATE TABLE IF NOT EXISTS` + try/catch `ALTER TABLE`. Research and preview columns (`businesses.research_status`, `research_requested_at`, `research_completed_at`, and the same three on `mockups`, plus `mockups.preview_url` and `preview_made_at`) and `digest_leads.lead_group` are also added on the request path by `ensureSchemaColumns()` after `PRAGMA table_info`. `web_stack_url` stays an n8n field stored in `preview_url`.
 
 ## Local database (dev.db)
 
@@ -93,7 +93,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | POST | `/api/search` `/api/businesses/manual` |
 | GET | `/api/autocomplete` `/api/businesses` `/api/businesses/[id]` `/api/mockups` `/api/mockups/[id]` |
 | PATCH | `/api/businesses/[id]` |
-| POST | `/api/businesses/delete` `[id]/audit` `[id]/scrape-contacts` `/api/audit/batch` |
+| POST | `/api/businesses/delete` `[id]/audit` `[id]/scrape-contacts` `[id]/fetch-details` `/api/audit/batch` |
 | POST | `/api/mockups/generate` `/api/mockups/sync` `/api/mockups/[id]/revise` `pitch` `photos` `[id]/research` `/api/businesses/[id]/research` |
 | GET | `/api/studio/stock-photos` `q` — Pixabay, Pexels, Unsplash. A provider with no key is skipped. |
 | POST | `/api/studio/stock-photos/download` — Unsplash download ping for photos the user added |
@@ -110,7 +110,7 @@ Seed templates: `no_website`, `poor_performance`, `poor_seo`.
 | POST | `/api/export/n8n` `/api/report/batch` `email` `n8n` |
 | GET | `/api/imagekit/auth` |
 
-Studio webhook `/api/mockups/webhook` and research callback `/api/research-report/webhook` are public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated. Research report POSTs `{action: research_report, owner, place_id, callback_url?, notes?}` to `N8N_STUDIO_WEBHOOK_URL` (`/webhook/studio`) with `X-Studio-Secret`. WF-7 routes that action to WF-19 and returns `{ok:true}` immediately. It does not call `N8N_WEB_STACK_WEBHOOK_URL`. WF-19 emails Ryan for every request for now. Its callback does not send `X-Studio-Secret` yet, so the app keeps rejecting unsigned callbacks. After 15 minutes a requested lead shows `Sent - check email` and can be requested again. A later signed callback still marks it complete.
+Studio webhook `/api/mockups/webhook` and research callback `/api/research-report/webhook` are public except `X-Studio-Secret`. Resend `/api/emails/webhook` is still session-gated. Research report POSTs `{action: research_report, owner, place_id, callback_url?, notes?}` to `N8N_STUDIO_WEBHOOK_URL` (`/webhook/studio`) with `X-Studio-Secret`. Studio Fetch past details POSTs `{action: lead_details, owner?, place_id}` to that same webhook and merges email, photos, and digest context. It does not start a mockup, a Web Stack build, or a research report. See `docs/lead-details-api.md`. WF-7 routes that action to WF-19 and returns `{ok:true}` immediately. It does not call `N8N_WEB_STACK_WEBHOOK_URL`. WF-19 emails Ryan for every request for now. Its callback does not send `X-Studio-Secret` yet, so the app keeps rejecting unsigned callbacks. After 15 minutes a requested lead shows `Sent - check email` and can be requested again. A later signed callback still marks it complete.
 
 ## Categories
 

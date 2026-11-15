@@ -799,6 +799,25 @@ function statusColor(status: string) {
                 <dd>{{ mockup.locationLabel }}</dd>
               </div>
             </dl>
+            <FetchPastDetails
+              v-if="mockup.businessId"
+              class="mt-4"
+              :business-id="mockup.businessId"
+              :place-id="mockup.business?.placeId"
+              :email="mockup.business?.email"
+              :emails="mockup.business?.emails"
+              :phone="mockup.business?.phone"
+              :photo-count="mockup.business?.photoCount"
+              :photos="mockup.business?.gbpPhotos"
+              :category="mockup.business?.category"
+              :website="mockup.business?.website"
+              :rating="mockup.business?.rating"
+              :review-count="mockup.business?.reviewCount"
+              :address="mockup.business?.address"
+              :city="mockup.business?.city"
+              :state="mockup.business?.state"
+              @updated="refresh()"
+            />
             <UButton
               v-if="mockup.businessId"
               class="mt-4"
