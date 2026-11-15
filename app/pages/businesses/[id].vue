@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { displayPhotoCount, formatLeadPhone, leadEmails, leadScoreBadge, leadScoreBlurb, siteCheckText } from '~~/shared/lead-context'
+
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
@@ -123,6 +125,28 @@ async function scrapeContacts() {
   }
 }
 
+const digestLead = computed(() => business.value?.digestLead || null)
+const contextEmails = computed(() => leadEmails(business.value?.email, business.value?.contactsData))
+const contextPhotoCount = computed(() => displayPhotoCount(business.value?.photoCount, business.value?.gbpPhotos))
+const showLeadContext = computed(() => Boolean(
+  digestLead.value
+  || contextEmails.value.length
+  || contextPhotoCount.value > 0
+))
+const contextScore = computed(() => {
+  const digestScore = digestLead.value?.score
+  if (typeof digestScore === 'number') return digestScore
+  return business.value?.leadScore ?? null
+})
+const scoreBlurb = computed(() => leadScoreBlurb(business.value?.leadCategory))
+const scoreRingClass = computed(() => {
+  const tone = leadScoreBadge(business.value?.leadCategory).tone
+  if (tone === 'hot') return 'stroke-red-500'
+  if (tone === 'warm') return 'stroke-amber-500'
+  if (tone === 'cold') return 'stroke-sky-500'
+  return 'stroke-neutral-400'
+})
+
 function hasSocialMedia(contactsData: any): boolean {
   return !!(
     contactsData.facebook ||
@@ -175,6 +199,26 @@ function hasSocialMedia(contactsData: any): boolean {
             </div>
           </template>
 
+          <LeadContextBlock
+            v-if="showLeadContext"
+            class="mb-4 border-b border-default pb-4"
+            :score="contextScore"
+            :category="business.category"
+            :lead-group="digestLead?.leadGroup"
+            :website="business.website"
+            :site-check="siteCheckText(digestLead?.signals)"
+            :rating="business.rating"
+            :review-count="business.reviewCount"
+            :phone="business.phone"
+            :address="business.address"
+            :city="business.city"
+            :state="business.state"
+            :angle="digestLead?.angle"
+            :photo-count="business.photoCount"
+            :photos="business.gbpPhotos"
+            :emails="contextEmails"
+          />
+
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-3">
               <div>
@@ -195,7 +239,7 @@ function hasSocialMedia(contactsData: any): boolean {
                     :href="`tel:${business.phone}`"
                     class="text-primary hover:underline"
                   >
-                    {{ business.phone }}
+                    {{ formatLeadPhone(business.phone) || business.phone }}
                   </a>
                   <span v-else class="text-dimmed">—</span>
                 </p>
@@ -373,12 +417,7 @@ function hasSocialMedia(contactsData: any): boolean {
                   fill="none"
                   stroke-width="12"
                   stroke-linecap="round"
-                  :class="{
-                    'stroke-red-500': business.leadCategory === 'hot',
-                    'stroke-amber-500': business.leadCategory === 'warm',
-                    'stroke-sky-500': business.leadCategory === 'cold',
-                    'stroke-neutral-400': business.leadCategory === 'skip' || !business.leadCategory
-                  }"
+                  :class="scoreRingClass"
                   :stroke-dasharray="251.2"
                   :stroke-dashoffset="251.2 - (business.leadScore / 100) * 251.2"
                   style="transition: stroke-dashoffset 0.5s ease"
@@ -397,6 +436,9 @@ function hasSocialMedia(contactsData: any): boolean {
             <p class="text-sm text-muted text-center mt-4">
               <template v-if="!business.website">
                 No website - excellent opportunity for new site pitch
+              </template>
+              <template v-else-if="scoreBlurb">
+                {{ scoreBlurb }}
               </template>
               <template v-else-if="business.leadCategory === 'hot'">
                 Website has significant issues - great opportunity

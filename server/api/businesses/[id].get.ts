@@ -1,4 +1,6 @@
 import { db } from '~~/server/utils/db'
+import { ensureDigestTables } from '~~/server/utils/digest-schema'
+import { normalizeGbpPhotos, normalizePhotoCount } from '~~/shared/digest-ingest'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -62,6 +64,61 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    let digestLead: {
+      angle: string | null
+      note: string | null
+      signals: unknown
+      score: number | null
+      tier: { slug: string | null, label: string | null }
+      leadGroup: string | null
+    } | null = null
+    try {
+      await ensureDigestTables()
+      const placeId = typeof row.place_id === 'string' ? row.place_id : ''
+      const digestResult = await db.execute({
+        sql: `
+          SELECT dl.angle, dl.note, dl.signals, dl.score, dl.tier_slug, dl.tier_label, dl.lead_group
+          FROM digest_leads dl
+          INNER JOIN digests d ON d.id = dl.digest_id
+          WHERE d.user_id = ?
+            AND (dl.business_id = ? OR (? != '' AND dl.place_id = ?))
+          ORDER BY d.digest_date DESC, dl.created_at DESC
+          LIMIT 1
+        `,
+        args: [user.id, id, placeId, placeId]
+      })
+      const digestRow = digestResult.rows[0]
+      if (digestRow) {
+        let signals = null
+        if (digestRow.signals) {
+          try {
+            signals = JSON.parse(String(digestRow.signals))
+          } catch (error) {
+            console.error('Failed to parse digest signals:', error)
+          }
+        }
+        const score = typeof digestRow.score === 'number'
+          ? digestRow.score
+          : typeof digestRow.score === 'bigint'
+            ? Number(digestRow.score)
+            : null
+        const text = (value: unknown) => typeof value === 'string' && value.trim() ? value : null
+        digestLead = {
+          angle: text(digestRow.angle),
+          note: text(digestRow.note),
+          signals,
+          score,
+          tier: {
+            slug: text(digestRow.tier_slug),
+            label: text(digestRow.tier_label)
+          },
+          leadGroup: text(digestRow.lead_group)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load digest lead:', error)
+    }
+
     const business = {
       id: row.id,
       userId: row.user_id,
@@ -90,6 +147,9 @@ export default defineEventHandler(async (event) => {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       contactsData,
+      photoCount: normalizePhotoCount(row.photo_count),
+      gbpPhotos: normalizeGbpPhotos(row.gbp_photos),
+      digestLead,
       facebook: row.facebook,
       instagram: row.instagram,
       twitter: row.twitter,

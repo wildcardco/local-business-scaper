@@ -1,44 +1,14 @@
 <script setup lang="ts">
+import { leadScoreBadge, scoreOutOf100 } from '~~/shared/lead-context'
+
 const props = defineProps<{
-  score: number
-  category: 'hot' | 'warm' | 'cold' | 'skip' | null
+  score: number | null
+  category: string | null
   showScore?: boolean
 }>()
 
-const badgeConfig = computed(() => {
-  switch (props.category) {
-    case 'hot':
-      return {
-        color: 'error' as const,
-        icon: 'i-lucide-flame',
-        label: 'Hot'
-      }
-    case 'warm':
-      return {
-        color: 'warning' as const,
-        icon: 'i-lucide-sun',
-        label: 'Warm'
-      }
-    case 'cold':
-      return {
-        color: 'info' as const,
-        icon: 'i-lucide-snowflake',
-        label: 'Cold'
-      }
-    case 'skip':
-      return {
-        color: 'neutral' as const,
-        icon: 'i-lucide-minus-circle',
-        label: 'Skip'
-      }
-    default:
-      return {
-        color: 'neutral' as const,
-        icon: 'i-lucide-help-circle',
-        label: 'Unknown'
-      }
-  }
-})
+const badgeConfig = computed(() => leadScoreBadge(props.category))
+const scoreText = computed(() => scoreOutOf100(props.score))
 </script>
 
 <template>
@@ -51,9 +21,11 @@ const badgeConfig = computed(() => {
     >
       {{ badgeConfig.label }}
     </UBadge>
-    <span v-if="showScore" class="text-sm font-medium text-muted">
-      {{ score }}
+    <span
+      v-if="showScore && scoreText"
+      class="text-sm font-medium text-muted"
+    >
+      {{ scoreText }}
     </span>
   </div>
 </template>
-

@@ -48,9 +48,27 @@ The secret must match the `DIGEST_INGEST_SECRET` environment variable. Uses cons
       "note": "short note",
       "signals": {
         "no_website": false,
+        "web_presence": "own_site",
+        "site_check": "Basic site",
+        "site_quality": 3,
+        "web_why": "q3+1page",
+        "email_on_file": true,
         "agency_credit": "SomeAgency",
-        "copyright_year": 2017
-      }
+        "copyright_year": 2017,
+        "score_parts": { "web": 12, "reviews": 8, "type": 6, "commerce": 0, "established": 4 }
+      },
+      "lead_group": "industrial",
+      "email": "owner@acme.example",
+      "emails": ["owner@acme.example"],
+      "photo_count": 6,
+      "gbp_photos": [
+        {
+          "id": "p1",
+          "url": "https://lh3.googleusercontent.com/p/example-1",
+          "type": "owner",
+          "ts": "1710000000"
+        }
+      ]
     }
   ]
 }
@@ -71,11 +89,25 @@ Each lead requires:
 - `address`, `city`, `state`, `phone`, `website`, `category`: Contact and business info
 - `rating` (number), `review_count` (integer): Google ratings
 - `score` (integer): Lead score (used for sorting when rank is missing)
-- `tier` (string): One of `Call First | Good | Worth a look | Long shot | Skip` (case-insensitive)
 - `rank` (integer): Position within tier (for sorting)
 - `angle` (string): AI-generated outreach angle
 - `note` (string): Additional notes
-- `signals` (object): Free-form metadata (e.g., `no_website`, `agency_credit`, `copyright_year`)
+- `signals` (object): Free-form metadata. The lead card prints `signals.site_check` next to the website only when that value is a non-empty string (for example `"Basic site"`). A missing, null, or blank `site_check` is skipped. Other keys such as `no_website`, `web_presence`, `site_quality`, `web_why`, `email_on_file`, `agency_credit`, `copyright_year`, and `score_parts` are stored.
+- `phone` (string): E.164, for example `"+19185551234"`. The card prints it as `(918) 555-1234` and keeps the E.164 value on the `tel:` link.
+- `email` (string): Stored on `businesses.email`. Trimmed. Must look like `local@domain.tld` (no spaces, 254 characters max). An empty string, a non-string, or a string that is not an email is dropped. A dropped or missing email does **not** clear a non-empty email already saved on that business. When `email` is missing or dropped and `emails` has a valid address, `emails[0]` is used for `businesses.email`. When both are present, `email` wins for that column.
+- `emails` (string[]): Merged into `businesses.contacts_data.emails`. Past-lead `lead_details` sends a one-item array copied from the single stored email, `["owner@acme.example"]`. Each item is trimmed and checked with the same email rule; invalid items are removed. Comparison is case-insensitive and the first spelling is kept. Existing `contacts_data` keys other than `emails` are left in place, and existing addresses stay in the list. The field must be an array. A string, object, or JSON string is dropped and `contacts_data` is left unchanged. `[]` is valid and does not add addresses.
+- `photo_count` (integer): Stored on `businesses.photo_count`. A JSON integer from `0` through `1000000`, or a string of digits such as `"6"`. Floats, negatives, booleans, and other types are dropped. A dropped or missing value does not clear a count already saved on that business. When `gbp_photos` has no usable URLs, the card still prints this count (`6 Google photos we can use in the mockup`) and does not render an image.
+- `gbp_photos` (array of up to 10 objects, or a JSON string of that array): Stored as JSON on `businesses.gbp_photos`, objects unchanged. The live shape is `{ "id": "p1", "url": "https://...", "type": "owner", "ts": "1710000000" }`. `type` and `ts` may be null. An `http` or `https` URL string is also accepted. Other items are removed. At most 10 items are stored. The card renders an image only for an item whose `url` is `http` or `https`; a missing or empty `url` is skipped, and a URL that fails to load is removed so a broken image is not left on screen. `[]` clears stored photos. A non-array, a JSON string that is not an array, or an array whose every item is invalid is dropped and does not clear stored photos.
+- `lead_group` (string): Stored on the new `digest_leads.lead_group` column for this digest row only. Trimmed, lowercased, and spaces become underscores. Must match `^[a-z][a-z0-9_-]{0,31}$`. `industrial`, `nonprofit`, and `random` are the groups the card labels as Industrial, Nonprofit, and Random. Any other slug in that pattern is stored as-is. Numbers, objects, and blank strings are dropped (`null`). This does not rewrite older digest rows.
+- `tier` (string): `Call First | Good | Worth a look | Long shot | Skip` (case-insensitive). The daily digest can still send `Call First`. The past-lead `lead_details` response on `POST /webhook/studio` does not: its tier is only `Good`, `Worth a look`, `Long shot`, or `Skip`. Those labels are stored as `good`, `worth_a_look`, `long_shot`, and `skip`, and the score badge shows that text. It does not show Unknown for those tiers.
+
+Unknown lead keys are ignored. A bad optional value drops that field only. The lead and the rest of the batch still save. These fields are optional: a payload that omits them behaves as before.
+
+`gbp_photos` may also be sent as a string containing a JSON array:
+
+```json
+"gbp_photos": "[\"https://lh3.googleusercontent.com/p/example-1\",{\"id\":\"p2\",\"url\":\"https://lh3.googleusercontent.com/p/example-2\"}]"
+```
 
 ## Behavior
 
