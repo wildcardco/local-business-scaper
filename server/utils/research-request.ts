@@ -12,6 +12,7 @@ import {
 } from '~~/shared/research-report'
 import { ownerSlugFromEmail } from '~~/server/utils/allowlist'
 import { fireResearchReport, researchCallbackUrlFromEvent } from '~~/server/utils/n8n'
+import { ensureSchemaColumns } from '~~/server/utils/schema-columns'
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -65,6 +66,7 @@ async function restoreResearch(table: 'businesses' | 'mockups', id: string, stat
 }
 
 export async function requestBusinessResearch(event: H3Event, user: { id: string, email: string }, businessId: string, notes: unknown) {
+  await ensureSchemaColumns()
   const result = await db.execute({
     sql: `SELECT id, user_id, place_id, research_status, research_requested_at, research_completed_at
           FROM businesses WHERE id = ? AND user_id = ?`,
@@ -120,6 +122,7 @@ export async function requestBusinessResearch(event: H3Event, user: { id: string
 }
 
 export async function requestMockupResearch(event: H3Event, user: { id: string, email: string }, mockupId: string, notes: unknown) {
+  await ensureSchemaColumns()
   const result = await db.execute({
     sql: `SELECT m.id, m.user_id, m.business_id, m.place_id, m.owner, m.research_status,
             m.research_requested_at, m.research_completed_at,
