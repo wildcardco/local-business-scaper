@@ -139,12 +139,16 @@ function hasSocialMedia(contactsData: any): boolean {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="min-w-0">
-        <h1 class="font-display text-2xl font-semibold tracking-tight truncate">{{ business?.name || 'Loading...' }}</h1>
-        <p class="text-muted">{{ business?.category || '' }}</p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 flex-1 space-y-3">
+        <RerollLeadNav />
+        <div>
+          <h1 class="font-display text-2xl font-semibold tracking-tight truncate">{{ business?.name || 'Loading...' }}</h1>
+          <p class="text-muted">{{ business?.category || '' }}</p>
+        </div>
       </div>
       <UButton
+        v-if="!route.query.reroll"
         icon="i-lucide-arrow-left"
         variant="ghost"
         @click="router.back()"

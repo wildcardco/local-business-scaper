@@ -1,6 +1,7 @@
 import { db } from '~~/server/utils/db'
 import { ensureDigestTables } from '~~/server/utils/digest-schema'
 import { ensureMockupLinkColumns } from '~~/server/utils/mockup-links'
+import { loadRerollForDate, type RerollLeadView } from '~~/server/utils/reroll-results'
 import { cursorAgentUrl, httpsUrl } from '~~/shared/web-stack'
 
 export default defineEventHandler(async (event) => {
@@ -35,9 +36,18 @@ export default defineEventHandler(async (event) => {
 
   const digest = digestResult.rows[0]
   if (!digest) {
+    const rerollState = await loadRerollForDate({
+      userId: String(user.id),
+      date,
+      digestUpdatedAt: null,
+      digestLeads: []
+    })
     return {
       digest: null,
       leads: [],
+      reroll: rerollState.reroll,
+      rerollLeads: rerollState.rerollLeads,
+      rerollPending: rerollState.pending,
       rerollCount
     }
   }
@@ -101,6 +111,56 @@ export default defineEventHandler(async (event) => {
     args: [String(user.id), String(digest.id)]
   })
 
+  const leads = leadsResult.rows.map(row => ({
+    id: row.id,
+    place_id: row.place_id,
+    rank: row.rank,
+    score: row.score,
+    tier: {
+      slug: row.tier_slug,
+      label: row.tier_label
+    },
+    angle: row.angle,
+    note: row.note,
+    signals: row.signals ? JSON.parse(String(row.signals)) : null,
+    business: {
+      id: row.business_id,
+      name: row.name || '',
+      address: row.address || null,
+      city: row.city || null,
+      state: row.state || null,
+      phone: row.phone || null,
+      website: row.website || null,
+      placeId: row.business_place_id || row.place_id || null,
+      researchStatus: row.research_status === 'requested' || row.research_status === 'complete' ? row.research_status : null,
+      researchRequestedAt: row.research_requested_at || null,
+      category: row.category || null,
+      rating: row.rating || null,
+      review_count: row.review_count || null,
+      lead_category: row.lead_category || null,
+      status: row.status || 'new'
+    },
+    mockup: row.mockup_id
+      ? {
+          id: row.mockup_id,
+          status: row.mockup_status,
+          url: row.mockup_url,
+          buildMode: row.build_mode === 'web_stack' ? 'web_stack' : 'html',
+          previewUrl: httpsUrl(row.preview_url),
+          agentUrl: cursorAgentUrl(row.agent_id),
+          buildStatus: typeof row.build_status === 'string' && row.build_status ? row.build_status : null,
+          buildError: typeof row.build_error === 'string' && row.build_error ? row.build_error : null
+        }
+      : null
+  }))
+
+  const rerollState = await loadRerollForDate({
+    userId: String(user.id),
+    date,
+    digestUpdatedAt: digest.updated_at ? String(digest.updated_at) : null,
+    digestLeads: leads as RerollLeadView[]
+  })
+
   return {
     digest: {
       id: digest.id,
@@ -113,48 +173,10 @@ export default defineEventHandler(async (event) => {
       received_at: digest.received_at,
       updated_at: digest.updated_at
     },
-    leads: leadsResult.rows.map(row => ({
-      id: row.id,
-      place_id: row.place_id,
-      rank: row.rank,
-      score: row.score,
-      tier: {
-        slug: row.tier_slug,
-        label: row.tier_label
-      },
-      angle: row.angle,
-      note: row.note,
-      signals: row.signals ? JSON.parse(String(row.signals)) : null,
-      business: {
-        id: row.business_id,
-        name: row.name || '',
-        address: row.address || null,
-        city: row.city || null,
-        state: row.state || null,
-        phone: row.phone || null,
-        website: row.website || null,
-        placeId: row.business_place_id || row.place_id || null,
-        researchStatus: row.research_status === 'requested' || row.research_status === 'complete' ? row.research_status : null,
-        researchRequestedAt: row.research_requested_at || null,
-        category: row.category || null,
-        rating: row.rating || null,
-        review_count: row.review_count || null,
-        lead_category: row.lead_category || null,
-        status: row.status || 'new'
-      },
-      mockup: row.mockup_id
-        ? {
-            id: row.mockup_id,
-            status: row.mockup_status,
-            url: row.mockup_url,
-            buildMode: row.build_mode === 'web_stack' ? 'web_stack' : 'html',
-            previewUrl: httpsUrl(row.preview_url),
-            agentUrl: cursorAgentUrl(row.agent_id),
-            buildStatus: typeof row.build_status === 'string' && row.build_status ? row.build_status : null,
-            buildError: typeof row.build_error === 'string' && row.build_error ? row.build_error : null
-          }
-        : null
-    })),
+    leads,
+    reroll: rerollState.reroll,
+    rerollLeads: rerollState.rerollLeads,
+    rerollPending: rerollState.pending,
     rerollCount
   }
 })

@@ -35,6 +35,7 @@ const props = defineProps<{
     } | null
   }
   tierSlug: string
+  detailsTo?: string
 }>()
 
 const emit = defineEmits<{
@@ -150,7 +151,8 @@ function signalLabel(key: string, value: unknown): string {
           Website
         </UButton>
         <UButton
-          :to="`/businesses/${lead.business.id}`"
+          v-if="detailsTo || lead.business.id"
+          :to="detailsTo || `/businesses/${lead.business.id}`"
           size="sm"
           variant="outline"
           icon="i-lucide-info"

@@ -31,6 +31,7 @@ const props = defineProps<{
     } | null
   }
   skipping?: boolean
+  detailsTo?: string
 }>()
 
 const emit = defineEmits<{
@@ -99,7 +100,8 @@ const place = computed(() => {
 
     <div class="mt-3 grid grid-cols-3 gap-1.5">
       <UButton
-        :to="`/businesses/${lead.business.id}`"
+        v-if="detailsTo || lead.business.id"
+        :to="detailsTo || `/businesses/${lead.business.id}`"
         size="sm"
         variant="soft"
         class="min-h-11 min-w-0 justify-center px-1"

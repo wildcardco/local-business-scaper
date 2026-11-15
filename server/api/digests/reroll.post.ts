@@ -59,22 +59,33 @@ export default defineEventHandler(async (event) => {
 
   const webhookUrl = rerollWebhookUrl()
   const owner = ownerSlugFromEmail(user.email)
+  const rerollId = generateId()
   const payload = {
     owner,
     date,
     category: choice.category,
-    random: choice.random
+    random: choice.random,
+    reroll_id: rerollId
   }
-
-  await postRerollWebhook(webhookUrl, payload)
 
   await db.execute({
     sql: `INSERT INTO digest_rerolls (id, user_id, digest_date, category, random) VALUES (?, ?, ?, ?, ?)`,
-    args: [generateId(), String(user.id), date, choice.category, choice.random ? 1 : 0]
+    args: [rerollId, String(user.id), date, choice.category, choice.random ? 1 : 0]
   })
+
+  try {
+    await postRerollWebhook(webhookUrl, payload)
+  } catch (error) {
+    await db.execute({
+      sql: `DELETE FROM digest_rerolls WHERE id = ? AND user_id = ?`,
+      args: [rerollId, String(user.id)]
+    })
+    throw error
+  }
 
   return {
     ok: true,
+    id: rerollId,
     date,
     owner,
     category: choice.category,
@@ -111,7 +122,7 @@ function rerollWebhookUrl() {
   return url.toString()
 }
 
-async function postRerollWebhook(url: string, payload: { owner: string, date: string, category: string, random: boolean }) {
+async function postRerollWebhook(url: string, payload: { owner: string, date: string, category: string, random: boolean, reroll_id: string }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const secret = rerollSecretHeader(useRuntimeConfig().n8nRerollSecret)
   if (secret) {

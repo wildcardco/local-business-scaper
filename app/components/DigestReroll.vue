@@ -8,17 +8,21 @@ import {
   CLOSE_CATEGORY_MATCH_SCORE,
   resolveCategoryQuery
 } from '~/data/business-categories'
-import { getTodayCentralTime } from '~~/shared/date-utils'
+import { formatCentralTime, getTodayCentralTime } from '~~/shared/date-utils'
 import {
   digestStampChanged,
   digestStampFrom,
   nextRerollPollDelay,
+  rerollConfirmMessage,
   type DigestStamp
 } from '~~/shared/digest-reroll'
 import { suggestGoogleCategories } from '~~/shared/utils/google-categories'
 
 const props = defineProps<{
   rerollCount?: number
+  lastRanAt?: string | null
+  resultCount?: number | null
+  pending?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +43,16 @@ const refreshing = ref(false)
 const refreshError = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let pollBaseline: DigestStamp = { id: null, updatedAt: null }
+
+watch(() => props.pending, (value) => {
+  if (!import.meta.client || !value) return
+  if (rebuilding.value || pollTimer) return
+  readDigestStamp()
+    .then((stamp) => {
+      if (props.pending) startPolling(stamp)
+    })
+    .catch(() => {})
+}, { immediate: true })
 
 onUnmounted(stopPoll)
 
@@ -98,6 +112,8 @@ const categoryLabel = computed(() => {
 })
 
 const needsCostWarning = computed(() => shownCount.value >= 1)
+
+const confirmMessage = computed(() => rerollConfirmMessage(shownCount.value))
 
 const canConfirm = computed(() => !needsCostWarning.value || acknowledgeCost.value)
 
@@ -296,6 +312,15 @@ async function confirmReroll() {
     >
       Re-roll today's leads
     </UButton>
+    <p
+      v-if="lastRanAt"
+      class="text-xs text-muted"
+    >
+      Last re-roll {{ formatCentralTime(lastRanAt) }}
+      <template v-if="resultCount != null">
+        · {{ resultCount }} results
+      </template>
+    </p>
 
     <div
       v-if="rebuilding"
@@ -342,9 +367,9 @@ async function confirmReroll() {
       <template #body>
         <div class="min-w-0 space-y-3">
           <p class="text-sm text-muted">
-            This replaces today's list for you with a new search for
+            New search for
             <span class="font-medium text-highlighted">{{ categoryLabel }}</span>.
-            The morning digest email is not sent again.
+            {{ confirmMessage }}
           </p>
           <div
             v-if="needsCostWarning"
